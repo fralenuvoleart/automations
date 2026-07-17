@@ -14,6 +14,19 @@ const bot = new Telegraf(BOT_TOKEN);
 const repliedUsers = new Set();
 
 bot.on("text", async (ctx) => {
+  const text = ctx.message.text;
+
+  // /start — welcome message, no forward
+  if (text === "/start" || text.startsWith("/start ")) {
+    await ctx.reply(
+      "Welcome to PBS Services! 👋\n\nA member of our team will personally respond to your inquiry. Please type your message below and we'll get back to you as soon as possible.",
+    );
+    return;
+  }
+
+  // Ignore other bot commands
+  if (text.startsWith("/")) return;
+
   const user = ctx.from;
   const userId = user.id;
   const name = user.first_name || "User";
@@ -33,13 +46,6 @@ bot.on("text", async (ctx) => {
   } catch (err) {
     console.error("Error handling message:", err.message);
   }
-});
-
-// Start command — always replies
-bot.command("start", (ctx) => {
-  ctx.reply(
-    "Welcome to PBS Services! 👋\n\nA member of our team will personally respond to your inquiry. Please type your message below and we'll get back to you as soon as possible.",
-  );
 });
 
 // Graceful shutdown
