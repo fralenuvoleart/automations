@@ -1,0 +1,10 @@
+{
+  "welcome": {
+    "default": "Welcome to PBS Services! 👋\n\nA member of our team will personally respond to your inquiry. Please type your message below and we'll get back to you as soon as possible.",
+    "ru": "Добро пожаловать в PBS Services! 👋\n\nСотрудник нашей команды лично ответит на ваш запрос. Пожалуйста, напишите ваше сообщение ниже, и мы свяжемся с вами как можно скорее."
+  },
+  "autoreply": {
+    "default": "Hi {name}, your message has been forwarded to our team. A human support member will get back to you shortly — this is not an automated conversation.",
+    "ru": "Здравствуйте, {name}, ваше сообщение было передано нашей команде. Сотрудник поддержки свяжется с вами в ближайшее время — это не автоматический ответ."
+  }
+}

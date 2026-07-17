@@ -9,6 +9,19 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
+// Load messages from file; env vars override for emergencies
+const MSG = require("./messages.json");
+if (process.env.MSG_WELCOME) MSG.welcome.default = process.env.MSG_WELCOME;
+if (process.env.MSG_WELCOME_RU) MSG.welcome.ru = process.env.MSG_WELCOME_RU;
+if (process.env.MSG_AUTOREPLY) MSG.autoreply.default = process.env.MSG_AUTOREPLY;
+if (process.env.MSG_AUTOREPLY_RU) MSG.autoreply.ru = process.env.MSG_AUTOREPLY_RU;
+
+// Pick message by user language, fallback to default
+const t = (key, lang, name) => {
+  const msg = MSG[key][lang] || MSG[key].default;
+  return msg.replace("{name}", name);
+};
+
 const bot = new Telegraf(BOT_TOKEN);
 
 // Track users who already received the auto-reply
@@ -18,6 +31,7 @@ const startPayloads = new Map();
 
 bot.on("text", async (ctx) => {
   const text = ctx.message.text;
+  const lang = ctx.from?.language_code;
 
   // /start — welcome message, no forward
   if (text === "/start" || text.startsWith("/start ")) {
@@ -25,9 +39,7 @@ bot.on("text", async (ctx) => {
     const payload = text.slice("/start".length).trim();
     if (payload) startPayloads.set(ctx.from.id, payload);
 
-    await ctx.reply(
-      "Welcome to PBS Services! 👋\n\nA member of our team will personally respond to your inquiry. Please type your message below and we'll get back to you as soon as possible.",
-    );
+    await ctx.reply(t("welcome", lang));
     return;
   }
 
@@ -53,15 +65,14 @@ bot.on("text", async (ctx) => {
           firstName: user.first_name,
           lastName: user.last_name,
           username: user.username,
+          language: lang,
           message: text,
           startPayload: startPayloads.get(userId) || null,
           timestamp: new Date().toISOString(),
         }),
       }).catch((err) => console.error("Integrately webhook failed:", err.message));
 
-      await ctx.reply(
-        `Hi ${name}, your message has been forwarded to our team. A human support member will get back to you shortly — this is not an automated conversation.`,
-      );
+      await ctx.reply(t("autoreply", lang, name));
     }
 
     // Always forward to admin
