@@ -18,7 +18,8 @@
 				"sevalla.deployments.get",
 				"sevalla.processes.list",
 				"sevalla.applications.logs.runtime",
-				"sevalla.deployments.start"
+				"sevalla.deployments.start",
+				"sevalla.resources.process-resource-types"
 			]
 		}
 	}
