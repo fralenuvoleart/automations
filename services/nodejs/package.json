@@ -1,0 +1,19 @@
+{
+  "name": "automations-nodejs",
+  "version": "1.0.0",
+  "description": "Node.js automation services — Telegram bot, cache warmer, WhatsApp bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "warmer": "node -e \"require('./src/cache-warmer').runWarmer()\""
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "node-cron": "^3.0.3",
+    "fast-xml-parser": "^4.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

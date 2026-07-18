@@ -1,52 +1,48 @@
 # Cache-Warmer Production Readiness Plan
 
-## Verdict: Not production-ready. 8 issues. All fixable self-contained.
+> **Status: ✅ IMPLEMENTED** — Rewritten in JS at [`services/nodejs/src/warmer.js`](../services/nodejs/src/warmer.js). All P0/P1/P2 fixes incorporated. P3 N/A (fast-xml-parser not vulnerable to billion laughs).
+
+## Verdict: ~~Not production-ready~~ → Production-ready (JS rewrite complete).
 
 ## Architecture
 
-The cache-warmer runs as a **self-contained long-lived process** with its own `while True` / 24h sleep loop. No changes needed to the Telegram bot. No additional Sevalla cost.
+The cache-warmer runs via `node-cron` inside the Telegram bot process (`services/nodejs/index.js`), scheduled daily at 03:00 UTC. No separate process needed.
 
-On Sevalla: deploy as a **second process** in the same app (`cron` type is ideal, but `web` type works too if you keep the loop). Or deploy as a separate app.
+On Sevalla: single `web` process in `automations-nodejs` app. No additional cost.
 
-RAM: ~30 MB idle, ~30-50 MB during warming. Fits easily in h1 tier (300 MB).
+RAM: ~30-50 MB during warming within the bot's existing h1 tier (300 MB).
 
-## Issues & Fixes (cache-warmer.py only)
+## Issues & Fixes (originally for cache-warmer.py, now in warmer.js)
 
-### P0 — Crash Recovery
-**Problem:** `main()` line 88 calls `run_warmer()` without try/except. Any exception kills the process.
-**Fix:** Wrap in try/except with error logging and continue the loop.
+### P0 — Crash Recovery ✅
+**Fix:** `index.js:96` wraps `runWarmer()` in `.catch()`.
 
-### P0 — Sitemap Discovery Concurrency  
-**Problem:** `fetch_and_parse_sitemap()` line 30-31 uses `asyncio.gather(*tasks)` with no concurrency limit. 50 sub-sitemaps = 50 simultaneous HTTP requests.
-**Fix:** Add `asyncio.Semaphore(3)` around the HTTP call inside `fetch_and_parse_sitemap`.
+### P0 — Sitemap Discovery Concurrency ✅
+**Fix:** `warmer.js:13-36` — `Semaphore` class with `DISCOVERY_CONCURRENCY = 3`.
 
-### P1 — Graceful Shutdown
-**Problem:** No SIGTERM/SIGINT handling. Sevalla sends SIGTERM on deploy; in-flight requests abandoned.
-**Fix:** Add signal handler that cancels pending tasks and closes httpx client.
+### P1 — Graceful Shutdown ✅
+**Fix:** `index.js:87-88` — SIGINT/SIGTERM handlers call `bot.stop()`.
 
-### P2 — No Retry on Failed URLs
-**Problem:** Transient 503/timeout = page misses cache warm.
-**Fix:** 2 retries with exponential backoff in `warm_url()`.
+### P2 — Retry on Failed URLs ✅
+**Fix:** `warmer.js:99-121` — `RETRY_COUNT = 2` with exponential backoff.
 
-### P2 — Timestamped Logging
-**Problem:** Print statements have no timestamps.
-**Fix:** Prefix all output with ISO timestamp.
+### P2 — Timestamped Logging ✅
+**Fix:** `warmer.js:38-40` — `log()` prefixes ISO timestamp.
 
-### P2 — Redundant Semaphore
-**Problem:** `Semaphore(1)` + `asyncio.sleep(2)` inside critical section is redundant when CONCURRENT_REQUESTS=1.
-**Fix:** Remove semaphore. Keep the sleep.
+### P2 — Redundant Semaphore ✅ (N/A in JS)
+JS version uses sequential warming loop — no semaphore needed.
 
-### P3 — XML Bomb Protection
-**Problem:** `ET.fromstring()` vulnerable to billion laughs (low risk: trusted source).
-**Fix:** Replace `xml.etree.ElementTree` with `defusedxml.ElementTree`.
+### P3 — XML Bomb Protection ✅ (N/A)
+`fast-xml-parser` is not vulnerable to billion laughs attacks.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `cache-warmer/cache-warmer.py` | All fixes above |
-| `cache-warmer/requirements.txt` | Add `defusedxml` |
+| `services/nodejs/src/warmer.js` | Full JS rewrite with all fixes |
+| `services/nodejs/index.js` | Cron schedule + error handling |
+| `services/nodejs/package.json` | Added `fast-xml-parser`, `node-cron` |
 
 ## Cost
 
-$0 additional. Self-contained script. Deploy however you want.
+$0 additional. Runs within existing `automations-nodejs` Sevalla app ($5.83/mo).
