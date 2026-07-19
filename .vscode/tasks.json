@@ -2,9 +2,9 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "🔥 Run Cache Warmer on Sevalla",
+            "label": "Run Cache Warmer on Sevalla",
             "type": "shell",
-            "command": "bash ${workspaceFolder}/services/nodejs/scripts/sevalla-warmer.sh",
+            "command": "bash /mnt/backup/BACKUP/WWW/AUTOMATIONS/services/nodejs/scripts/sevalla-warmer.sh",
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",
@@ -12,29 +12,9 @@
             }
         },
         {
-            "label": "📋 View Warmer Summary on Sevalla",
+            "label": "View Warmer Summary on Sevalla",
             "type": "shell",
-            "command": "bash ${workspaceFolder}/services/nodejs/scripts/sevalla-summary.sh",
-            "problemMatcher": [],
-            "presentation": {
-                "reveal": "always",
-                "panel": "new"
-            }
-        },
-        {
-            "label": "💻 Run Cache Warmer (Local)",
-            "type": "shell",
-            "command": "cd ${workspaceFolder}/services/nodejs && npm run warmer",
-            "problemMatcher": [],
-            "presentation": {
-                "reveal": "always",
-                "panel": "new"
-            }
-        },
-        {
-            "label": "💻 View Warmer Summary (Local)",
-            "type": "shell",
-            "command": "cd ${workspaceFolder}/services/nodejs && npm run logs",
+            "command": "bash /mnt/backup/BACKUP/WWW/AUTOMATIONS/services/nodejs/scripts/sevalla-summary.sh",
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",

@@ -1,0 +1,34 @@
+{
+  "buttons": [
+    {
+      "name": "Warmer Sevalla",
+      "command": "bash services/nodejs/scripts/sevalla-warmer.sh",
+      "color": "#FF5722",
+      "insertOnly": false,
+      "useVsCodeApi": false
+    },
+    {
+      "name": "Summary Sevalla",
+      "command": "bash services/nodejs/scripts/sevalla-summary.sh",
+      "color": "#2196F3",
+      "insertOnly": false,
+      "useVsCodeApi": false
+    },
+    {
+      "name": "Warmer Local",
+      "command": "cd services/nodejs && npm run warmer",
+      "color": "#4CAF50",
+      "insertOnly": false,
+      "useVsCodeApi": false
+    },
+    {
+      "name": "Summary Local",
+      "command": "cd services/nodejs && npm run logs",
+      "color": "#FF9800",
+      "insertOnly": false,
+      "useVsCodeApi": false
+    }
+  ],
+  "exportedAt": "2026-07-19T13:09:15.569Z",
+  "version": "1.0"
+}

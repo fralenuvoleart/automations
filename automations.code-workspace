@@ -1,0 +1,32 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"quickCommandButtons.configurationTarget": "workspace",
+		"quickCommandButtons.buttons": [
+			{
+				"name": "$(rocket) Warmer Sevalla",
+				"command": "bash services/nodejs/scripts/sevalla-warmer.sh",
+				"color": "#FF5722"
+			},
+			{
+				"name": "$(notebook) Summary Sevalla",
+				"command": "bash services/nodejs/scripts/sevalla-summary.sh",
+				"color": "#2196F3"
+			},
+			{
+				"name": "$(terminal) Warmer Local",
+				"command": "cd services/nodejs && npm run warmer",
+				"color": "#4CAF50"
+			},
+			{
+				"name": "$(info) Summary Local",
+				"command": "cd services/nodejs && npm run logs",
+				"color": "#FF9800"
+			}
+		]
+	}
+}

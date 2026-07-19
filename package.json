@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "warmer:sevalla": "bash services/nodejs/scripts/sevalla-warmer.sh",
+    "logs:sevalla": "bash services/nodejs/scripts/sevalla-summary.sh",
+    "warmer:local": "cd services/nodejs && npm run warmer",
+    "logs:local": "cd services/nodejs && npm run logs"
+  },
   "dependencies": {
     "@sevalla/cli": "^1.10.0"
   }
