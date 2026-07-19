@@ -15,6 +15,11 @@ Project is `automations` — two service runtimes:
   4. `forwardMessage` and auto-reply now retry on failure (2 retries, exponential backoff)
   5. Integrately webhook `fetch` now retries on failure
   6. Per-user rate limiting added: max 3 messages per 10-second window
+- **2026-07-19**: Enhanced [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) — 4 features added:
+  1. Concurrency guard (`isRunning` lock) prevents overlapping manual + cron runs
+  2. Cache stats tracking: Kinsta (`X-Kinsta-Cache`), CDN (`CF-Cache-Status`), Edge (`Ki-Cf-Cache-Status`) — each tallied HIT/MISS/BYPASS/UNKNOWN
+  3. Failed URLs tracked with error reasons, printed in summary
+  4. Summary persisted to `cache-warmer-last-run.json`; readable via `npm run logs`
 - Extracted bot logic from `index.js` → [`src/telegram-bot.js`](../services/nodejs/src/telegram-bot.js) for self-documenting structure
 - Renamed `src/warmer.js` → [`src/cache-warmer.js`](../services/nodejs/src/cache-warmer.js)
 - [`index.js`](../services/nodejs/index.js) is now a thin wiring layer: imports bot + warmer, starts cron

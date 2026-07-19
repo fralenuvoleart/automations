@@ -1,4 +1,6 @@
 const { XMLParser } = require("fast-xml-parser");
+const fs = require("fs");
+const path = require("path");
 
 // CONFIGURATION
 const SITEMAP_URL = "https://pbservices.ge/sitemap-index.xml";
@@ -6,8 +8,12 @@ const REQUEST_DELAY_MS = 2000; // 2s between requests
 const DISCOVERY_CONCURRENCY = 3;
 const RETRY_COUNT = 2;
 const USER_AGENT = "SevallaCacheWarmerSafe-SecureToken-99x";
+const SUMMARY_FILE = path.join(__dirname, "..", "cache-warmer-last-run.json");
 
 const parser = new XMLParser({ ignoreAttributes: false });
+
+// ── Concurrency guard: prevent overlapping runs ──
+let isRunning = false;
 
 // Concurrency limiter for sitemap discovery
 class Semaphore {
@@ -69,7 +75,6 @@ async function fetchSitemap(url, urlsSet) {
     const text = await res.text();
     const parsed = parser.parse(text);
 
-    // Determine root tag: sitemapindex or urlset
     const rootKey = Object.keys(parsed).find(
       (k) => k.includes("sitemapindex") || k.includes("urlset")
     );
@@ -95,6 +100,9 @@ async function fetchSitemap(url, urlsSet) {
   }
 }
 
+/**
+ * Warms a single URL. Returns { ok, status, error, kinsta, cdn, edge }.
+ */
 async function warmUrl(url) {
   for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
     try {
@@ -105,9 +113,10 @@ async function warmUrl(url) {
       });
       const duration = ((Date.now() - start) / 1000).toFixed(2);
       const kinsta = res.headers.get("X-Kinsta-Cache") || "UNKNOWN";
+      const cdn = res.headers.get("CF-Cache-Status") || "UNKNOWN";
       const edge = res.headers.get("Ki-Cf-Cache-Status") || "UNKNOWN";
-      log(`[${res.status}] Kinsta: ${kinsta} | Edge: ${edge} | Time: ${duration}s -> ${url}`);
-      return;
+      log(`[${res.status}] Kinsta: ${kinsta} | CDN: ${cdn} | Edge: ${edge} | Time: ${duration}s -> ${url}`);
+      return { ok: true, status: res.status, kinsta, cdn, edge };
     } catch (e) {
       if (attempt < RETRY_COUNT) {
         const backoff = 2 ** attempt;
@@ -115,6 +124,7 @@ async function warmUrl(url) {
         await sleep(backoff * 1000);
       } else {
         log(`[ERROR] Failed to warm page ${url}: ${e.message}`);
+        return { ok: false, status: null, error: e.message, url };
       }
     }
   }
@@ -124,26 +134,124 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runWarmer() {
-  log("--- Starting Sitemap Discovery Phase ---");
-  const urlsSet = new Set();
-  await fetchSitemap(SITEMAP_URL, urlsSet);
+// ── Stats helpers ──
 
-  const allPages = [...urlsSet];
-  if (!allPages.length) {
-    log("[Warning] No page URLs discovered.");
+function initStats() {
+  return { hit: 0, miss: 0, bypass: 0, unknown: 0 };
+}
+
+function tallyStats(stats, value) {
+  const v = (value || "").toLowerCase();
+  if (v === "hit") stats.hit++;
+  else if (v === "miss") stats.miss++;
+  else if (v === "bypass") stats.bypass++;
+  else stats.unknown++;
+}
+
+function formatStats(label, stats, total) {
+  const pct = (n) => total > 0 ? ` (${((n / total) * 100).toFixed(1)}%)` : "";
+  return `${label}: ${stats.hit} HIT${pct(stats.hit)}, ${stats.miss} MISS${pct(stats.miss)}, ${stats.bypass} BYPASS${pct(stats.bypass)}` +
+    (stats.unknown ? `, ${stats.unknown} UNKNOWN` : "");
+}
+
+async function runWarmer() {
+  if (isRunning) {
+    log("[SKIP] Warmer is already running — concurrent run prevented.");
     return;
   }
+  isRunning = true;
 
-  log(`--- Discovery Finished: Unique Pages Found: ${allPages.length} ---`);
-  log("--- Beginning Safe Sequential Warming Loop ---");
+  const startTime = new Date().toISOString();
+  // Stats accumulators
+  const kinstaStats = initStats();
+  const cdnStats = initStats();
+  const edgeStats = initStats();
+  const failedUrls = [];
 
-  for (const url of allPages) {
-    await warmUrl(url);
-    await sleep(REQUEST_DELAY_MS);
+  try {
+    log("--- Starting Sitemap Discovery Phase ---");
+    const urlsSet = new Set();
+    await fetchSitemap(SITEMAP_URL, urlsSet);
+
+    const allPages = [...urlsSet];
+    if (!allPages.length) {
+      log("[Warning] No page URLs discovered.");
+      return;
+    }
+
+    log(`--- Discovery Finished: Unique Pages Found: ${allPages.length} ---`);
+    log("--- Beginning Safe Sequential Warming Loop ---");
+
+    for (const url of allPages) {
+      const result = await warmUrl(url);
+      if (result.ok) {
+        tallyStats(kinstaStats, result.kinsta);
+        tallyStats(cdnStats, result.cdn);
+        tallyStats(edgeStats, result.edge);
+      } else {
+        failedUrls.push({ url, error: result.error });
+      }
+      await sleep(REQUEST_DELAY_MS);
+    }
+
+    // ── Summary ──
+    const endTime = new Date().toISOString();
+    const total = allPages.length;
+    const ok = total - failedUrls.length;
+    const fail = failedUrls.length;
+
+    const summaryLines = [
+      "",
+      "═══════════════════════════════════════════",
+      "           CACHE WARMER — SUMMARY           ",
+      "═══════════════════════════════════════════",
+      `Started:     ${startTime}`,
+      `Finished:    ${endTime}`,
+      `Total URLs:  ${total}`,
+      `Successful:  ${ok}`,
+      `Failed:      ${fail}`,
+      "",
+      "── Cache Status ──",
+      formatStats("Kinsta", kinstaStats, ok),
+      formatStats("CDN   ", cdnStats, ok),
+      formatStats("Edge  ", edgeStats, ok),
+    ];
+
+    if (failedUrls.length > 0) {
+      summaryLines.push("", "── Failed URLs ──");
+      failedUrls.forEach((f) =>
+        summaryLines.push(`  ✗ ${f.url}\n    Reason: ${f.error}`)
+      );
+    }
+
+    summaryLines.push(
+      "",
+      "═══════════════════════════════════════════",
+      ""
+    );
+
+    const summaryText = summaryLines.join("\n");
+    console.log(summaryText);
+
+    // Persist summary to disk for `npm run logs`
+    const summaryJson = {
+      started: startTime,
+      finished: endTime,
+      total,
+      successful: ok,
+      failed: fail,
+      kinsta: kinstaStats,
+      cdn: cdnStats,
+      edge: edgeStats,
+      failedUrls,
+    };
+    fs.writeFileSync(SUMMARY_FILE, JSON.stringify(summaryJson, null, 2));
+    log(`Summary saved to ${SUMMARY_FILE}`);
+
+    log("Cache warming cycle completed cleanly.");
+  } finally {
+    isRunning = false;
   }
-
-  log("Cache warming cycle completed cleanly.");
 }
 
 module.exports = { runWarmer };

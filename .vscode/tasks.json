@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🔥 Cache Warmer: Run",
+            "type": "shell",
+            "command": "npm run warmer",
+            "options": { "cwd": "${workspaceFolder}/services/nodejs" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        },
+        {
+            "label": "📋 Cache Warmer: Last Summary",
+            "type": "shell",
+            "command": "npm run logs",
+            "options": { "cwd": "${workspaceFolder}/services/nodejs" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        }
+    ]
+}
