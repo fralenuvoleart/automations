@@ -2,7 +2,23 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "🔥 Cache Warmer: Run",
+            "label": "🖥️ Sevalla: Run Cache Warmer",
+            "type": "shell",
+            "command": "curl -s -X POST 'https://api.sevalla.com/v3/applications/73d65fa7-eff3-4382-ab89-aa95f795ffa5/processes/527976bf-8fc1-4c4f-90e6-d1b81a3fa6d2/exec' -H 'Authorization: Bearer svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26' -H 'Content-Type: application/json' -d '{\"command\":[\"npm\",\"run\",\"warmer\"],\"timeout\":300}' | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('stdout','')); print(d.get('stderr',''), end='')\"",
+            "options": { "cwd": "${workspaceFolder}/services/nodejs" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        },
+        {
+            "label": "🖥️ Sevalla: View Warmer Summary",
+            "type": "shell",
+            "command": "curl -s -X POST 'https://api.sevalla.com/v3/applications/73d65fa7-eff3-4382-ab89-aa95f795ffa5/processes/527976bf-8fc1-4c4f-90e6-d1b81a3fa6d2/exec' -H 'Authorization: Bearer svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26' -H 'Content-Type: application/json' -d '{\"command\":[\"npm\",\"run\",\"logs\"],\"timeout\":15}' | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('stdout','')); print(d.get('stderr',''), end='')\"",
+            "options": { "cwd": "${workspaceFolder}/services/nodejs" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        },
+        {
+            "label": "💻 Local: Run Cache Warmer",
             "type": "shell",
             "command": "npm run warmer",
             "options": { "cwd": "${workspaceFolder}/services/nodejs" },
@@ -10,7 +26,7 @@
             "presentation": { "reveal": "always", "panel": "dedicated" }
         },
         {
-            "label": "📋 Cache Warmer: Last Summary",
+            "label": "💻 Local: View Last Summary",
             "type": "shell",
             "command": "npm run logs",
             "options": { "cwd": "${workspaceFolder}/services/nodejs" },
