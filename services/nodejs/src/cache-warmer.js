@@ -9,6 +9,8 @@ const DISCOVERY_CONCURRENCY = 3;
 const RETRY_COUNT = 2;
 const USER_AGENT = "SevallaCacheWarmerSafe-SecureToken-99x";
 const SUMMARY_FILE = path.join(__dirname, "..", "cache-warmer-last-run.json");
+const PROGRESS_FILE = path.join(__dirname, "..", "cache-warmer-progress.json");
+const PROGRESS_INTERVAL = 10; // Write progress every N URLs
 
 const parser = new XMLParser({ ignoreAttributes: false });
 
@@ -43,6 +45,25 @@ const discoverySem = new Semaphore(DISCOVERY_CONCURRENCY);
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
+}
+
+/** Write live progress to disk so status scripts can read it. */
+function writeProgress(current, total, started, lastUrl) {
+  try {
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify({
+      running: true,
+      started,
+      current,
+      total,
+      lastUrl,
+      updated: new Date().toISOString(),
+    }));
+  } catch (_) { /* non-critical, ignore */ }
+}
+
+/** Clear progress file when warmer finishes. */
+function clearProgress() {
+  try { fs.unlinkSync(PROGRESS_FILE); } catch (_) {}
 }
 
 function extractLocs(root) {
@@ -213,6 +234,8 @@ async function runWarmer() {
     log(`--- Discovery Finished: Unique Pages Found: ${allPages.length} ---`);
     log("--- Beginning Safe Sequential Warming Loop ---");
 
+    let idx = 0;
+    const totalUrls = allPages.length;
     for (const url of allPages) {
       const result = await warmUrl(url);
       if (result.ok) {
@@ -248,6 +271,11 @@ async function runWarmer() {
         }
       } else {
         failedUrls.push({ url, error: result.error });
+      }
+      // Write progress every N URLs for status command
+      idx++;
+      if (idx % PROGRESS_INTERVAL === 0) {
+        writeProgress(idx, totalUrls, startTime, url);
       }
       await sleep(REQUEST_DELAY_MS);
     }
@@ -377,8 +405,10 @@ async function runWarmer() {
     log(`Summary saved to ${SUMMARY_FILE}`);
 
     log("Cache warming cycle completed cleanly.");
+    clearProgress();
   } finally {
     isRunning = false;
+    clearProgress();
   }
 }
 
