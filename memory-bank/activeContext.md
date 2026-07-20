@@ -8,6 +8,9 @@ Project is `automations` — two service runtimes:
 
 ## Recent Changes
 
+- **2026-07-20**: Deleted root `package.json` — confirmed unreferenced by any shell script, JS file, Sevalla action, or quick command. Deploys use `services/nodejs/package.json` exclusively.
+- **2026-07-20**: Fixed [`index.js`](../services/nodejs/index.js) — `bot.launch()` now wrapped in retry logic (5 attempts, 3s delay) for 409 Conflict errors. Added global `unhandledRejection` handler to prevent unexpected promise rejections from crashing the entire process (logs them instead).
+- **2026-07-20**: Fixed [`sevalla-warmer.sh`](../services/nodejs/scripts/sevalla-warmer.sh) and [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) — both scripts now show HTTP status code and ✓/✗ feedback instead of silent output. Uses `curl -w` to capture status, checks 2xx range, and falls back to `output`/`error` fields if `stdout`/`stderr` are absent.
 - **2026-07-20**: Enhanced [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) — nested stats architecture:
   - Stats grouped per HTTP status code with independent cache counters (Kinsta/CDN/Edge)
   - Top-level rollup computed from nested data; summary shows both totals and per-status drill-down

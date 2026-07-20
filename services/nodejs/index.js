@@ -11,14 +11,41 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
+// Global safety net: log unhandled rejections instead of crashing
+process.on("unhandledRejection", (reason) => {
+  console.error("[fatal] Unhandled rejection:", reason);
+});
+
 // ── Telegram Bot ──
 const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
-bot.launch();
-console.log("Bot started — polling for messages");
+// Launch with retry on 409 conflict (race with old pod during deploy)
+async function launchBot(retries = 5, delayMs = 3000) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      await bot.launch();
+      console.log("Bot started — polling for messages");
+      return;
+    } catch (err) {
+      if (err?.response?.error_code === 409 && i < retries) {
+        console.warn(
+          `[bot] 409 conflict (old instance still running) — retrying in ${delayMs / 1000}s (${i + 1}/${retries})...`
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        throw err; // Not a 409 or out of retries — fatal
+      }
+    }
+  }
+}
+
+launchBot().catch((err) => {
+  console.error("Bot failed to start:", err.message);
+  process.exit(1);
+});
 
 // ── Cache Warmer (daily at 01:00 UTC) ──
 cron.schedule("0 1 * * *", () => {
