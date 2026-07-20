@@ -11,7 +11,8 @@
 - [x] Old `pbs-telegram/` directory cleaned up
 - [x] Cache warmer documentation created: `docs/WARMER.md` — covers logic, cache headers, analytics discrepancy explanation
 - [x] Cache warmer granular stats: HTTP status code breakdown, redirect tracking, uppercase cache labels
-- [x] Forwarded message deep link in Integrately webhook (captures `message_id` from `forwardMessage`, constructs `https://t.me/c/` link, added `forwardedMessageLink` field)
+- [x] Forwarded message deep link in Integrately webhook (captures `message_id` from `forwardMessage`, constructs `https://t.me/c/` link, added `forwardedMessageLink` + `userChatLink` fields)
+- [x] Delayed second auto-reply: configurable delay (default 20s), resets on new user messages, `secondAutoreply` message template with env var overrides
 
 ## In Progress
 
