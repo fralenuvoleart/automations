@@ -1,7 +1,7 @@
 {
   "welcome": {
-    "default": "Welcome to PBS Services! 👋\nSend your message below to connect with our support team.",
-    "ru": "Добро пожаловать в PBS Services! 👋\nНапишите ваше сообщение ниже, чтобы связаться с нашей поддержкой."
+    "default": "Welcome to PB Services! 👋\nSend your message below to connect with our support team.",
+    "ru": "Добро пожаловать в PB Services! 👋\nНапишите ваше сообщение ниже, чтобы связаться с нашей поддержкой."
   },
   "autoreply": {
     "default": "Thank you, {name}. 🟢\nYour message has been received. A human representative from our team will personally contact you shortly.",
