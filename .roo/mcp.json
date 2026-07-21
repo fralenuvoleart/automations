@@ -1,27 +1,37 @@
 {
-	"mcpServers": {
-		"sevalla": {
-			"command": "npx",
-			"args": [
-				"-y",
-				"sevalla-mcp"
-			],
-			"env": {
-				"SEVALLA_API_KEY": "svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26",
-				"SEVALLA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
-			},
-			"alwaysAllow": [
-				"sevalla.applications.list",
-				"sevalla.applications.get",
-				"sevalla.applications.env-vars.list",
-				"sevalla.applications.logs.deployment",
-				"sevalla.deployments.get",
-				"sevalla.processes.list",
-				"sevalla.applications.logs.runtime",
-				"sevalla.deployments.start",
-				"sevalla.resources.process-resource-types",
-				"sevalla.deployments.list"
-			]
-		}
-	}
+  "mcpServers": {
+    "sevalla": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "sevalla-mcp"
+      ],
+      "env": {
+        "SEVALLA_API_KEY": "svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26",
+        "SEVALLA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
+      },
+      "alwaysAllow": [
+        "sevalla.applications.list",
+        "sevalla.applications.get",
+        "sevalla.applications.env-vars.list",
+        "sevalla.applications.logs.deployment",
+        "sevalla.deployments.get",
+        "sevalla.processes.list",
+        "sevalla.applications.logs.runtime",
+        "sevalla.deployments.start",
+        "sevalla.resources.process-resource-types",
+        "sevalla.deployments.list"
+      ]
+    },
+    "tavily": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tavily-mcp@0.2.3"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      }
+    }
+  }
 }
