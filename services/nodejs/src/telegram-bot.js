@@ -77,7 +77,7 @@ function createBot(token, adminChatId, messages) {
     if (text === "/start" || text.startsWith("/start ")) {
       const payload = text.slice("/start".length).trim();
       if (payload) startPayloads.set(ctx.from.id, payload);
-      await ctx.reply(t("welcome", lang), { parse_mode: "MarkdownV2" });
+      await ctx.reply(t("welcome", lang));
       return;
     }
 
@@ -85,7 +85,7 @@ function createBot(token, adminChatId, messages) {
     if (text === "/reset") {
       repliedUsers.delete(ctx.from.id);
       startPayloads.delete(ctx.from.id);
-      await ctx.reply("State reset. Your next message will be treated as first contact.", { parse_mode: "MarkdownV2" });
+      await ctx.reply("State reset. Your next message will be treated as first contact.");
       return;
     }
 
@@ -170,7 +170,7 @@ function createBot(token, adminChatId, messages) {
       const timerId = setTimeout(async () => {
         autoreplyTimers.delete(userId);
         await withRetry(
-          () => ctx.telegram.sendMessage(userId, t("autoreply", lang, name), { parse_mode: "MarkdownV2" }),
+          () => ctx.telegram.sendMessage(userId, t("autoreply", lang, name)),
           2,
           `autoreply to ${userId}`
         );
