@@ -109,7 +109,7 @@ function createBot(token, adminChatId, messages) {
       clearTimeout(autoreplyTimers.get(userId));
       
       // Re-schedule the timer
-      const autoReplyDelay = parseInt(process.env.AUTOREPLY_DELAY_MS || "20000", 10);
+      const autoReplyDelay = parseInt(process.env.AUTOREPLY_DELAY_MS || "10000", 10);
       const timerId = setTimeout(async () => {
         autoreplyTimers.delete(userId);
         await withRetry(
@@ -178,7 +178,7 @@ function createBot(token, adminChatId, messages) {
       );
 
       // Schedule delayed auto-reply (configurable, resets on new messages)
-      const autoReplyDelay = parseInt(process.env.AUTOREPLY_DELAY_MS || "20000", 10);
+      const autoReplyDelay = parseInt(process.env.AUTOREPLY_DELAY_MS || "10000", 10);
       const timerId = setTimeout(async () => {
         autoreplyTimers.delete(userId);
         await withRetry(
