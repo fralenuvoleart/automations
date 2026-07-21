@@ -107,7 +107,18 @@ function createBot(token, adminChatId, messages) {
     // Reset delayed auto-reply timer on every new message (restarts the delay)
     if (autoreplyTimers.has(userId)) {
       clearTimeout(autoreplyTimers.get(userId));
-      autoreplyTimers.delete(userId);
+      
+      // Re-schedule the timer
+      const autoReplyDelay = parseInt(process.env.AUTOREPLY_DELAY_MS || "20000", 10);
+      const timerId = setTimeout(async () => {
+        autoreplyTimers.delete(userId);
+        await withRetry(
+          () => ctx.telegram.sendMessage(userId, t("autoreply", lang, name)),
+          2,
+          `autoreply to ${userId}`
+        );
+      }, autoReplyDelay);
+      autoreplyTimers.set(userId, timerId);
     }
 
     // ── Forward to admin (critical — retry) ──
@@ -160,6 +171,7 @@ function createBot(token, adminChatId, messages) {
             body: webhookBody,
           }).then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            console.log(`[success] Integrately webhook for user ${userId}`);
           }),
         2,
         `Integrately webhook for user ${userId}`
@@ -177,6 +189,11 @@ function createBot(token, adminChatId, messages) {
       }, autoReplyDelay);
       autoreplyTimers.set(userId, timerId);
     }
+  });
+
+  // Global error handler to prevent unhandled rejections from crashing the bot
+  bot.catch((err, ctx) => {
+    console.error(`[bot.catch] Error for ${ctx.updateType}:`, err);
   });
 
   return bot;
