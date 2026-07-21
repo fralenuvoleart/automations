@@ -4,7 +4,7 @@
     "ru": "Добро пожаловать в PBS Services! 👋\nНапишите ваше сообщение ниже, чтобы связаться с нашей поддержкой."
   },
   "autoreply": {
-    "default": "Thank you, {name}. 🟢\nYour message has been received. A human representative from our team will personally reply to you shortly.",
-    "ru": "Спасибо, {name}. 🟢\nВаше сообщение получено. Наш специалист ответит вам лично в ближайшее время."
+    "default": "Thank you, {name}. 🟢\nYour message has been received. A human representative from our team will personally contact you shortly.",
+    "ru": "Спасибо, {name}. 🟢\nВаше сообщение получено. Наш специалист лично свяжется с вами в ближайшее время."
   }
 }
