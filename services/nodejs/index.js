@@ -1,4 +1,5 @@
 const cron = require("node-cron");
+const fs = require("fs");
 const { createBot } = require("./src/telegram-bot");
 const { runWarmer } = require("./src/cache-warmer");
 
@@ -9,6 +10,19 @@ const MSG = require("./config/messages.json");
 if (!BOT_TOKEN) {
   console.error("Missing BOT_TOKEN environment variable");
   process.exit(1);
+}
+
+// Check for interrupted warmer run from previous crash
+const PROGRESS_FILE = "cache-warmer-progress.json";
+if (fs.existsSync(PROGRESS_FILE)) {
+  try {
+    const p = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+    if (p.running) {
+      console.warn(
+        `[warmer] Interrupted run detected: was at ${p.current}/${p.total} URLs when process crashed`
+      );
+    }
+  } catch (_) { /* ignore malformed JSON */ }
 }
 
 // Global safety net: log unhandled rejections instead of crashing
