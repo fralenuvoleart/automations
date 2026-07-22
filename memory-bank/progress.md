@@ -13,6 +13,7 @@
 - [x] Cache warmer granular stats: HTTP status code breakdown, redirect tracking, uppercase cache labels
 - [x] Forwarded message deep link in Integrately webhook (captures `message_id` from `forwardMessage`, constructs `https://t.me/c/` link, added `forwardedMessageLink` + `userChatLink` fields)
 - [x] Delayed second auto-reply: configurable delay (default 20s), resets on new user messages, `secondAutoreply` message template with env var overrides
+- [x] CDN/Edge cache tracking clarified as diagnostic-only — `npm run status` now shows UNKNOWN counts; WARMER.md documents why CDN/Edge can't be warmed from Sevalla
 
 ## In Progress
 

@@ -125,15 +125,47 @@ Any cache header value that isn't `HIT`, `MISS`, or `BYPASS` (e.g., `DYNAMIC`, `
 
 Cache header values are normalized to uppercase (`HIT`, `MISS`, `BYPASS`, `UNKNOWN`) in both per-URL log lines and the summary. Tally comparison remains case-insensitive.
 
+## CDN/Edge Tracking: Diagnostic Only
+
+The warmer reads three cache headers but can only actively **warm** one layer — the Kinsta origin cache. CDN and Edge tracking is diagnostic, not actionable.
+
+### Why CDN/Edge Can't Be Warmed from Sevalla
+
+Cloudflare's CDN operates **300+ distributed edge nodes** worldwide. Each maintains its own independent cache:
+
+```
+User in Tokyo  → Cloudflare Tokyo Edge  ──→ Kinsta Origin
+User in London → Cloudflare London Edge ──→ Kinsta Origin
+User in NYC    → Cloudflare NYC Edge    ──→ Kinsta Origin
+```
+
+The Sevalla warmer runs from a **single location** inside Kinsta's infrastructure. Even if its traffic went through Cloudflare, it would only warm the one edge node closest to the data center — users hitting other edge nodes would still get MISS.
+
+By contrast, the Kinsta origin cache is **centralized** — warming it once benefits ALL edge nodes and ALL users globally.
+
+### What CDN/Edge Headers Tell You
+
+| Observation | Meaning |
+|---|---|
+| Most CDN/Edge = UNKNOWN/MISSING | **Normal.** Warmer traffic bypasses Cloudflare through internal Kinsta routing. |
+| CDN/Edge show HIT/MISS counts closer to Kinsta | Unusual — would indicate warmer traffic IS traversing Cloudflare (routing change, proxy config) |
+| CDN/Edge show high MISS | If traffic does go through Cloudflare, cache may be cold at that specific edge node |
+
+### Where to Monitor CDN/Edge Cache Health
+
+Use **Kinsta Analytics** (dashboard) instead of the warmer. Kinsta Analytics measures real user traffic from all geographic regions through the full cache hierarchy. The warmer only measures its own requests from one location.
+
 ## Interpreting the Numbers
 
 ### Healthy Pattern
-- Warmer: 100% Kinsta HIT → sitemap pages are fully warmed
-- Analytics: High CDN + Edge counts → edge layers absorbing traffic
+- Warmer: 100% Kinsta HIT → sitemap pages are fully warmed at origin
+- Warmer: CDN/Edge mostly UNKNOWN → expected; warmer bypasses Cloudflare (diagnostic only)
+- Analytics: High CDN + Edge counts → edge layers absorbing real user traffic
 - Analytics: Low server-cache MISS/BYPASS relative to total → origin not overloaded
 
 ### Warning Signs
-- Warmer shows MISS on sitemap pages → cache was purged or expired; check if warmer schedule lapsed
+- Warmer shows MISS on sitemap pages → origin cache was purged or expired; check if warmer schedule lapsed
+- Warmer CDN/Edge suddenly show HIT/MISS instead of UNKNOWN → routing change occurred; investigate
 - Analytics shows high server-cache MISS on known static pages → cache TTL may be too short
 - Analytics shows high BYPASS → investigate cookie/query-string bypass rules
 

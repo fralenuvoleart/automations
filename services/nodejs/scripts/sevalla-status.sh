@@ -92,12 +92,20 @@ try:
     kinsta = s.get('kinsta', {})
     cdn = s.get('cdn', {})
     edge = s.get('edge', {})
+    def fmt_layer(name, st):
+        line = f'  {name.ljust(11)}{st.get(\"hit\",0)} HIT, {st.get(\"miss\",0)} MISS, {st.get(\"bypass\",0)} BYPASS'
+        unknown = st.get('unknown', 0)
+        if unknown > 0:
+            line += f' | {unknown} UNKNOWN'
+        print(line)
     if kinsta:
-        print(f'  Kinsta:     {kinsta.get(\"hit\",0)} HIT, {kinsta.get(\"miss\",0)} MISS, {kinsta.get(\"bypass\",0)} BYPASS')
+        fmt_layer('Kinsta:', kinsta)
     if cdn:
-        print(f'  CDN:        {cdn.get(\"hit\",0)} HIT, {cdn.get(\"miss\",0)} MISS, {cdn.get(\"bypass\",0)} BYPASS')
+        fmt_layer('CDN:', cdn)
     if edge:
-        print(f'  Edge:       {edge.get(\"hit\",0)} HIT, {edge.get(\"miss\",0)} MISS, {edge.get(\"bypass\",0)} BYPASS')
+        fmt_layer('Edge:', edge)
+    if (cdn.get('unknown', 0) > 0) or (edge.get('unknown', 0) > 0):
+        print('  [!] CDN/Edge UNKNOWN = requests bypassed Cloudflare (normal from Sevalla)')
 except:
     print('  ⚠ Could not parse last-run data')
 "
