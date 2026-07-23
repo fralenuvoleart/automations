@@ -39,13 +39,16 @@ The tally logic in `tallyStats()` (line 143 of `cache-warmer.js`) normalizes val
 
 ## Configuration
 
-| Constant | Default | Description |
+All warmer settings are defined in [`config/warmer-config.js`](../services/nodejs/config/warmer-config.js) — the single source of truth. Each value reads from an environment variable with a sensible default, so no code changes are needed to tune the warmer. See also [`.env.example`](../services/nodejs/.env.example) for the full list.
+
+| Env Variable | Default | Description |
 |---|---|---|
-| `SITEMAP_URL` | `https://pbservices.ge/sitemap-index.xml` | Sitemap index entry point |
-| `REQUEST_DELAY_MS` | `2000` | Delay between individual URL requests (2s) |
-| `DISCOVERY_CONCURRENCY` | `3` | Max parallel sitemap fetches during discovery |
-| `RETRY_COUNT` | `2` | Retry attempts per URL on failure |
-| `USER_AGENT` | `SevallaCacheWarmerSafe-SecureToken-99x` | Custom User-Agent header |
+| `WARMER_SITEMAP_URL` | `https://pbservices.ge/sitemap-index.xml` | Sitemap index entry point |
+| `WARMER_REQUEST_DELAY_MS` | `2000` | Delay between individual URL requests (ms) |
+| `WARMER_DISCOVERY_CONCURRENCY` | `3` | Max parallel sitemap fetches during discovery |
+| `WARMER_RETRY_COUNT` | `2` | Retry attempts per URL on failure |
+| `WARMER_USER_AGENT` | `SevallaCacheWarmer/1.0 (+https://pbservices.ge; token:cache-warmer)` | Custom User-Agent header |
+| `WARMER_PROGRESS_INTERVAL` | `10` | Write progress file every N URLs |
 
 ## Why Warmer Stats Differ from Kinsta Analytics
 

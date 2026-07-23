@@ -1,16 +1,15 @@
 const { XMLParser } = require("fast-xml-parser");
 const fs = require("fs");
-const path = require("path");
-
-// CONFIGURATION
-const SITEMAP_URL = "https://pbservices.ge/sitemap-index.xml";
-const REQUEST_DELAY_MS = 2000; // 2s between requests
-const DISCOVERY_CONCURRENCY = 3;
-const RETRY_COUNT = 2;
-const USER_AGENT = "SevallaCacheWarmerSafe-SecureToken-99x";
-const SUMMARY_FILE = path.join(__dirname, "..", "cache-warmer-last-run.json");
-const PROGRESS_FILE = path.join(__dirname, "..", "cache-warmer-progress.json");
-const PROGRESS_INTERVAL = 10; // Write progress every N URLs
+const {
+  SITEMAP_URL,
+  REQUEST_DELAY_MS,
+  DISCOVERY_CONCURRENCY,
+  RETRY_COUNT,
+  USER_AGENT,
+  SUMMARY_FILE,
+  PROGRESS_FILE,
+  PROGRESS_INTERVAL,
+} = require("../config/warmer-config");
 
 const parser = new XMLParser({ ignoreAttributes: false });
 
