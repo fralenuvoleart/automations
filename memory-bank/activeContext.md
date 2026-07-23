@@ -8,6 +8,7 @@ Project is `automations` — two service runtimes:
 
 ## Recent Changes
 
+- **2026-07-23**: Fixed script naming — [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) now shows formatted last-run summary (was raw URL dump), [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now shows live progress only. Raw URL dump still available via `npm run logs`.
 - **2026-07-22**: Clarified CDN/Edge cache tracking in warmer — these layers are diagnostic-only (cannot be warmed from a single Sevalla location because Cloudflare has 300+ distributed edge nodes). `npm run status` and [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now show UNKNOWN counts alongside HIT/MISS/BYPASS with a contextual note. Updated [`WARMER.md`](../docs/WARMER.md) with a dedicated "CDN/Edge Tracking: Diagnostic Only" section.
 - **2026-07-20**: Added forwarded message deep link + user chat link to Integrately webhook in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js):
   - `forwardMessage` return value captured → `forwardedMessageLink` (strips `-100` prefix)

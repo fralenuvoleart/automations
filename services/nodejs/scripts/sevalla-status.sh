@@ -1,30 +1,20 @@
 #!/bin/bash
-# Show cache warmer live status + last run summary from Sevalla via API exec
+# Show cache warmer live status from Sevalla via API exec
 
 APP_ID="73d65fa7-eff3-4382-ab89-aa95f795ffa5"
 PROCESS_ID="527976bf-8fc1-4c4f-90e6-d1b81a3fa6d2"
 API_KEY="svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26"
 
-# Fetch progress and last-run in parallel
+# Fetch live progress
 PROGRESS=$(curl -s -X POST \
   "https://api.sevalla.com/v3/applications/${APP_ID}/processes/${PROCESS_ID}/exec" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"command":["cat","cache-warmer-progress.json"],"timeout":5}')
 
-SUMMARY=$(curl -s -X POST \
-  "https://api.sevalla.com/v3/applications/${APP_ID}/processes/${PROCESS_ID}/exec" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"command":["cat","cache-warmer-last-run.json"],"timeout":5}')
-
 # Parse progress
 PROGRESS_STDOUT=$(echo "$PROGRESS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('stdout',''))" 2>/dev/null)
 PROGRESS_EXIT=$(echo "$PROGRESS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('exit_code',1))" 2>/dev/null)
-
-# Parse summary
-SUMMARY_STDOUT=$(echo "$SUMMARY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('stdout',''))" 2>/dev/null)
-SUMMARY_EXIT=$(echo "$SUMMARY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('exit_code',1))" 2>/dev/null)
 
 echo ""
 echo "═══════════════════════════════════════════"
@@ -78,41 +68,5 @@ else
   echo "  Status:     ○ IDLE (no warmer running)"
 fi
 
-# ── Last completed run ──
-echo ""
-if [ "$SUMMARY_EXIT" = "0" ] && [ -n "$SUMMARY_STDOUT" ]; then
-  echo "$SUMMARY_STDOUT" | python3 -c "
-import sys, json
-try:
-    s = json.load(sys.stdin)
-    print(f'  Last run:   {s.get(\"started\",\"?\")} → {s.get(\"finished\",\"?\")}')
-    print(f'  Total:      {s.get(\"total\",\"?\")} URLs')
-    print(f'  Successful: {s.get(\"successful\",\"?\")}')
-    print(f'  Failed:     {s.get(\"failed\",\"?\")}')
-    kinsta = s.get('kinsta', {})
-    cdn = s.get('cdn', {})
-    edge = s.get('edge', {})
-    def fmt_layer(name, st):
-        line = f'  {name.ljust(11)}{st.get(\"hit\",0)} HIT, {st.get(\"miss\",0)} MISS, {st.get(\"bypass\",0)} BYPASS'
-        unknown = st.get('unknown', 0)
-        if unknown > 0:
-            line += f' | {unknown} UNKNOWN'
-        print(line)
-    if kinsta:
-        fmt_layer('Kinsta:', kinsta)
-    if cdn:
-        fmt_layer('CDN:', cdn)
-    if edge:
-        fmt_layer('Edge:', edge)
-    if (cdn.get('unknown', 0) > 0) or (edge.get('unknown', 0) > 0):
-        print('  [!] CDN/Edge UNKNOWN = requests bypassed Cloudflare (normal from Sevalla)')
-except:
-    print('  ⚠ Could not parse last-run data')
-"
-else
-  echo "  Last run:   No completed runs yet"
-fi
-
-echo ""
 echo "═══════════════════════════════════════════"
 echo ""
