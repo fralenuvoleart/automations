@@ -69,7 +69,33 @@ function createBot(token, adminChatId, messages) {
   const startPayloads = new Map();
   const autoreplyTimers = new Map(); // userId → timeoutId for delayed auto-reply
 
+  // Relay-mode state: hidden users (no @username) and active consultant sessions
+  const relayUsers = new Set(); // Set<userId> — users flagged for relay mode
+  const relaySessions = new Map(); // Map<consultantId, { targetUserId }> — active 1-1 relays
+
   bot.on("text", async (ctx) => {
+    // ── Guard 1: only handle private chats ──
+    if (ctx.chat.type !== "private") return;
+
+    // ── Guard 2: consultant in active relay session → relay message to user ──
+    const relaySession = relaySessions.get(ctx.from.id);
+    if (relaySession) {
+      if (ctx.message.text === "/close") {
+        relaySessions.delete(ctx.from.id);
+        await ctx.reply(MSG.relay.closed);
+        return;
+      }
+      // Ignore other bot commands — only relay plain text
+      if (ctx.message.text.startsWith("/")) return;
+      const sent = await withRetry(
+        () => ctx.telegram.sendMessage(relaySession.targetUserId, ctx.message.text),
+        2,
+        `relay consultant→user ${relaySession.targetUserId}`
+      );
+      await ctx.reply(sent ? MSG.relay.sent : "⚠️ Failed to send. The user may have blocked the bot.");
+      return;
+    }
+
     const text = ctx.message.text;
     const lang = ctx.from?.language_code;
 
@@ -81,10 +107,12 @@ function createBot(token, adminChatId, messages) {
       return;
     }
 
-    // /reset — clear first-message flag for re-testing
+    // /reset — clear first-message flag and relay state for re-testing
     if (text === "/reset") {
       repliedUsers.delete(ctx.from.id);
       startPayloads.delete(ctx.from.id);
+      relayUsers.delete(ctx.from.id);
+      relaySessions.delete(ctx.from.id);
       await ctx.reply("State reset. Your next message will be treated as first contact.");
       return;
     }
@@ -121,12 +149,45 @@ function createBot(token, adminChatId, messages) {
       autoreplyTimers.set(userId, timerId);
     }
 
-    // ── Forward to admin (critical — retry) ──
-    const fwdMsg = await withRetry(
-      () => ctx.forwardMessage(adminChatId),
-      2,
-      `forward to admin from ${userId}`
-    );
+    // ── Forward/copy to admin (critical — retry) ──
+    const isHidden = !user.username;
+    let fwdMsg;
+
+    if (!isHidden) {
+      // Normal user: forwardMessage with native header (existing behavior)
+      fwdMsg = await withRetry(
+        () => ctx.forwardMessage(adminChatId),
+        2,
+        `forward to admin from ${userId}`
+      );
+    } else {
+      // Hidden user (no @username): copyMessage + inline "💬 Reply" button
+      relayUsers.add(userId);
+
+      fwdMsg = await withRetry(
+        () =>
+          ctx.telegram.copyMessage(adminChatId, ctx.chat.id, ctx.message.message_id, {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "💬 Reply", callback_data: `relay:${userId}` }
+              ]]
+            }
+          }),
+        2,
+        `copyMessage to admin from ${userId}`
+      );
+
+      // Fire-and-forget: also relay to consultant DM if session targets this user
+      for (const [consultantId, session] of relaySessions) {
+        if (session.targetUserId === userId) {
+          withRetry(
+            () => ctx.telegram.sendMessage(consultantId, `📩 ${user.first_name || "User"}:\n${ctx.message.text}`),
+            1,
+            `relay user→consultant ${consultantId}`
+          );
+        }
+      }
+    }
 
     // Deep link to forwarded message in Staff Group Chat
     const cleanGroupId = adminChatId.startsWith("-100")
@@ -159,6 +220,7 @@ function createBot(token, adminChatId, messages) {
         startPayload: payload || null,
         forwardedMessageLink,
         userChatLink,
+        relayMode: isHidden || relayUsers.has(userId),
         timestamp: new Date().toISOString(),
       });
 
@@ -190,6 +252,38 @@ function createBot(token, adminChatId, messages) {
       autoreplyTimers.set(userId, timerId);
     }
   });
+
+  // ── Callback handler: "💬 Reply" button for hidden users ──
+  bot.action(/^relay:(.+)$/, async (ctx) => {
+    const targetUserId = Number(ctx.match[1]);
+    const consultantId = ctx.from.id;
+
+    await ctx.answerCbQuery();
+
+    // One session per consultant — overwrite any previous
+    relaySessions.delete(consultantId);
+    relaySessions.set(consultantId, { targetUserId });
+
+    // Edit group button to show who claimed the conversation
+    const consultantName = ctx.from.first_name || "A consultant";
+    try {
+      await ctx.editMessageReplyMarkup({
+        inline_keyboard: [[
+          { text: `🔄 ${consultantName} is replying`, callback_data: "relay:claimed" }
+        ]]
+      });
+    } catch (_) { /* message may have been deleted */ }
+
+    // DM the consultant to start the relay
+    await ctx.telegram.sendMessage(
+      consultantId,
+      MSG.relay.sessionOpen.replace("{userId}", targetUserId),
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // Ignore taps on already-claimed buttons
+  bot.action("relay:claimed", (ctx) => ctx.answerCbQuery("Already being handled"));
 
   // Global error handler to prevent unhandled rejections from crashing the bot
   bot.catch((err, ctx) => {

@@ -8,17 +8,12 @@ Project is `automations` — two service runtimes:
 
 ## Recent Changes
 
-- **2026-07-27**: Designed relay mode for hidden-profile users — plan saved to [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md). When a user has no `@username`, the bot switches from `forwardMessage` to `copyMessage` with a "💬 Reply" inline button. Consultant taps → private 1-1 relay via bot DM. No DB, all in-memory state. Existing normal-user flow untouched.
+- **2026-07-27**: Implemented relay mode for hidden-profile users in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js). Detection via `!user.username` — no-username users get `copyMessage` with "💬 Reply" button instead of `forwardMessage`. Consultant taps button → private 1-1 relay via bot DM with `/close` to end. All in-memory state (`relayUsers` Set, `relaySessions` Map). Normal users with `@username` completely untouched. Webhook payload now includes `relayMode` boolean.
 - **2026-07-23**: Fixed script naming — [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) now shows formatted last-run summary (was raw URL dump), [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now shows live progress only. Raw URL dump still available via `npm run logs`.
 - **2026-07-22**: Clarified CDN/Edge cache tracking in warmer — these layers are diagnostic-only (cannot be warmed from a single Sevalla location because Cloudflare has 300+ distributed edge nodes). `npm run status` and [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now show UNKNOWN counts alongside HIT/MISS/BYPASS with a contextual note. Updated [`WARMER.md`](../docs/WARMER.md) with a dedicated "CDN/Edge Tracking: Diagnostic Only" section.
 - **2026-07-20**: Added forwarded message deep link + user chat link to Integrately webhook in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js):
   - `forwardMessage` return value captured → `forwardedMessageLink` (strips `-100` prefix)
   - `userChatLink`: `https://t.me/{username}` preferred, `tg://user?id={id}` fallback
-- **2026-07-20**: Added delayed second auto-reply with configurable delay in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js):
-  - `secondAutoreply` message in [`messages.json`](../services/nodejs/config/messages.json) + env var overrides
-  - `SECOND_MESSAGE_DELAY_MS` env var (default 20000ms)
-  - Timer resets on new user messages (clears and restarts delay)
-  - Uses `ctx.telegram.sendMessage()` for async safety; tracked in `secondMessageTimers` Map
 - **2026-07-20**: Fixed [`sevalla-warmer.sh`](../services/nodejs/scripts/sevalla-warmer.sh) — now uses `sh -c "nohup npm run warmer &"` to background the warmer. Sevalla exec API has max 60s timeout; the warmer takes ~18min. Also corrected `timeout` field (API max is 60, was sending 300).
 - **2026-07-20**: Deleted root `package.json` — confirmed unreferenced by any shell script, JS file, Sevalla action, or quick command. Deploys use `services/nodejs/package.json` exclusively.
 - **2026-07-20**: Fixed [`index.js`](../services/nodejs/index.js) — `bot.launch()` now wrapped in retry logic (5 attempts, 3s delay) for 409 Conflict errors. Added global `unhandledRejection` handler to prevent unexpected promise rejections from crashing the entire process (logs them instead).

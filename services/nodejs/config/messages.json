@@ -6,5 +6,10 @@
   "autoreply": {
     "default": "Thank you, {name}. 🟢\nYour message has been received. A human representative from our team will personally contact you shortly.",
     "ru": "Спасибо, {name}. 🟢\nВаше сообщение получено. Наш специалист лично свяжется с вами в ближайшее время."
+  },
+  "relay": {
+    "sessionOpen": "🔄 *Relay session open*\nReplying to user `{userId}`.\nType your messages here — they will be sent to the user.\nSend /close to end the session.",
+    "sent": "✅ Sent",
+    "closed": "🔒 Relay session closed."
   }
 }

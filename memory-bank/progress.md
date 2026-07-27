@@ -15,10 +15,11 @@
 - [x] Delayed second auto-reply: configurable delay (default 20s), resets on new user messages, `secondAutoreply` message template with env var overrides
 - [x] CDN/Edge cache tracking clarified as diagnostic-only — `npm run status` now shows UNKNOWN counts; WARMER.md documents why CDN/Edge can't be warmed from Sevalla
 - [x] Fixed script naming: `sevalla-summary.sh` → formatted summary, `sevalla-status.sh` → live progress only
+- [x] Relay mode for hidden-profile users — implemented in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js), plan at [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
 
 ## In Progress
 
-- [ ] Relay mode for hidden-profile users — [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
+_None_
 
 ## Upcoming
 
