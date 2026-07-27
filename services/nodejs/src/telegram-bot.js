@@ -160,6 +160,23 @@ function createBot(token, adminChatId, messages) {
         2,
         `forward to admin from ${userId}`
       );
+
+      // If Telegram hid the user's identity in the forward (privacy "Nobody"),
+      // annotate with a clickable @username so admins can still identify them.
+      if (fwdMsg?.forward_origin?.type === 'hidden_user' && user.username) {
+        await withRetry(
+          () =>
+            ctx.telegram.sendMessage(adminChatId, `This user has forwarding privacy enabled`, {
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: `@${user.username}`, url: `https://t.me/${user.username}` }
+                ]]
+              }
+            }),
+          2,
+          `hidden-user annotation for ${userId}`
+        );
+      }
     } else {
       // Hidden user (no @username): copyMessage + inline "💬 Reply" button
       relayUsers.add(userId);
