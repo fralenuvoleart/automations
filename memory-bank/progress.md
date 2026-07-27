@@ -18,7 +18,7 @@
 
 ## In Progress
 
-_None_
+- [ ] Relay mode for hidden-profile users — [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
 
 ## Upcoming
 
