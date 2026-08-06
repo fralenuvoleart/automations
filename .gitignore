@@ -3,8 +3,8 @@ node_modules/
 *.log
 
 # Runtime artifacts
-cache-warmer-last-run.json
-cache-warmer-progress.json
+services/nodejs/cache-warmer-last-run.json
+services/nodejs/cache-warmer-progress.json
 
 # Python
 __pycache__/
@@ -12,4 +12,3 @@ __pycache__/
 *.egg-info/
 venv/
 .venv/
-.directory
