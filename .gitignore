@@ -2,6 +2,10 @@ node_modules/
 .env
 *.log
 
+# Runtime artifacts
+cache-warmer-last-run.json
+cache-warmer-progress.json
+
 # Python
 __pycache__/
 *.py[cod]

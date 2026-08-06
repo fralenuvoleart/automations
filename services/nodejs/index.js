@@ -3,14 +3,9 @@ const fs = require("fs");
 const { createBot } = require("./src/telegram-bot");
 const { runWarmer } = require("./src/cache-warmer");
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "546485204";
+const BOT_TOKEN = process.env.BOT_TOKEN || "8499822740:AAGCZtY9TK_B9AHk0nFrkRcEnpt1uOL8bWw";
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "-1003837689636";
 const MSG = require("./config/messages.json");
-
-if (!BOT_TOKEN) {
-  console.error("Missing BOT_TOKEN environment variable");
-  process.exit(1);
-}
 
 // Check for interrupted warmer run from previous crash
 const PROGRESS_FILE = "cache-warmer-progress.json";

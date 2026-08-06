@@ -1,6 +1,7 @@
 const { Telegraf } = require("telegraf");
 
 const INTEGRATELY_WEBHOOK =
+  process.env.INTEGRATELY_WEBHOOK_URL ||
   "https://webhooks.integrately.com/a/webhooks/11e1f7e4cb3e4517abcea0d9cd833383";
 
 // ── Helpers ──

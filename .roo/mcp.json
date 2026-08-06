@@ -34,8 +34,21 @@
 			},
 			"alwaysAllow": [
 				"tavily-search",
-				"tavily-extract"
+				"tavily-extract",
+				"tavily-crawl",
+				"tavily-map"
 			]
+		},
+		"kinsta": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"kinsta-mcp@1.0.3"
+			],
+			"env": {
+				"KINSTA_API_KEY": "a5599e8851f4fd69a1920c488c06bb2d1f0417d0031a7c80b08e515e1f6b0c72",
+				"KINSTA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
+			}
 		}
 	}
 }
