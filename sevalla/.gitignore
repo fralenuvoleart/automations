@@ -1,0 +1,14 @@
+node_modules/
+.env
+*.log
+
+# Runtime artifacts
+services/nodejs/cache-warmer-last-run.json
+services/nodejs/cache-warmer-progress.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/

@@ -1,0 +1,28 @@
+# Dependencies — never needed for context
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Git internals
+.git/
+
+# Logs
+*.log
+
+# Auto-generated / lock files
+package-lock.json
+
+# Runtime artifacts (generated at runtime, not source)
+cache-warmer-last-run.json
+cache-warmer-progress.json
+
+# Large reference data (site-specific CSV)
+.agents/skills/kinsta-logs/references/redirects-pbservices.ge.csv
+
+# Test fixtures (not needed for skill execution)
+.agents/skills/*/scripts/tests/

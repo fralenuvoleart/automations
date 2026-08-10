@@ -25,36 +25,40 @@ process.on("unhandledRejection", (reason) => {
   console.error("[fatal] Unhandled rejection:", reason);
 });
 
-// ── Telegram Bot ──
-const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
+// ── Telegram Bot (skip if DISABLE_TELEGRAM_BOT=true) ──
+if (process.env.DISABLE_TELEGRAM_BOT !== "true") {
+  const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+  process.once("SIGINT", () => bot.stop("SIGINT"));
+  process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
-// Launch with retry on 409 conflict (race with old pod during deploy)
-async function launchBot(retries = 5, delayMs = 3000) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      await bot.launch();
-      console.log("Bot started — polling for messages");
-      return;
-    } catch (err) {
-      if (err?.response?.error_code === 409 && i < retries) {
-        console.warn(
-          `[bot] 409 conflict (old instance still running) — retrying in ${delayMs / 1000}s (${i + 1}/${retries})...`
-        );
-        await new Promise((r) => setTimeout(r, delayMs));
-      } else {
-        throw err; // Not a 409 or out of retries — fatal
+  // Launch with retry on 409 conflict (race with old pod during deploy)
+  async function launchBot(retries = 5, delayMs = 3000) {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        await bot.launch();
+        console.log("Bot started — polling for messages");
+        return;
+      } catch (err) {
+        if (err?.response?.error_code === 409 && i < retries) {
+          console.warn(
+            `[bot] 409 conflict (old instance still running) — retrying in ${delayMs / 1000}s (${i + 1}/${retries})...`
+          );
+          await new Promise((r) => setTimeout(r, delayMs));
+        } else {
+          throw err; // Not a 409 or out of retries — fatal
+        }
       }
     }
   }
-}
 
-launchBot().catch((err) => {
-  console.error("Bot failed to start:", err.message);
-  process.exit(1);
-});
+  launchBot().catch((err) => {
+    console.error("Bot failed to start:", err.message);
+    process.exit(1);
+  });
+} else {
+  console.log("Bot disabled via DISABLE_TELEGRAM_BOT env var — warmer-only mode");
+}
 
 // ── Cache Warmer (daily at 01:00 UTC) ──
 cron.schedule("0 1 * * *", () => {

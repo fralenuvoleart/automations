@@ -1,0 +1,27 @@
+# Project Progress
+
+## Completed
+
+- [x] Repo restructuring to `automations/` layout
+- [x] Cache warmer rewritten from Python to JavaScript
+- [x] All production-readiness fixes applied (P0/P1/P2)
+- [x] Telegram bot operational (auto-reply, forwarding, Integrately webhook)
+- [x] Descriptive file naming: `telegram-bot.js`, `cache-warmer.js`
+- [x] `index.js` simplified to wiring layer (imports + cron)
+- [x] Old `pbs-telegram/` directory cleaned up
+- [x] Cache warmer documentation created: `docs/WARMER.md` — covers logic, cache headers, analytics discrepancy explanation
+- [x] Cache warmer granular stats: HTTP status code breakdown, redirect tracking, uppercase cache labels
+- [x] Forwarded message deep link in Integrately webhook (captures `message_id` from `forwardMessage`, constructs `https://t.me/c/` link, added `forwardedMessageLink` + `userChatLink` fields)
+- [x] Delayed second auto-reply: configurable delay (default 20s), resets on new user messages, `secondAutoreply` message template with env var overrides
+- [x] CDN/Edge cache tracking clarified as diagnostic-only — `npm run status` now shows UNKNOWN counts; WARMER.md documents why CDN/Edge can't be warmed from Sevalla
+- [x] Fixed script naming: `sevalla-summary.sh` → formatted summary, `sevalla-status.sh` → live progress only
+- [x] Relay mode for hidden-profile users — implemented in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js), plan at [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
+
+## In Progress
+
+_None_
+
+## Upcoming
+
+- WhatsApp bot integration (future)
+- Python AI/NLP services (future)
