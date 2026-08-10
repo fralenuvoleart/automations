@@ -3,8 +3,12 @@ node_modules/
 *.log
 
 # Runtime artifacts
-services/nodejs/cache-warmer-last-run.json
-services/nodejs/cache-warmer-progress.json
+sevalla/services/nodejs/cache-warmer-last-run.json
+sevalla/services/nodejs/cache-warmer-progress.json
+
+# Kinsta logs skill runtime state
+.agents/skills/kinsta-logs/.run_state.json
+.agents/skills/kinsta-logs/.run_state.lock
 
 # Python
 __pycache__/
