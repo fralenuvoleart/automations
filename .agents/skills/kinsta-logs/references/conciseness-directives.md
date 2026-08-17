@@ -1,6 +1,6 @@
 # Conciseness & Consistency Directives
 
-**Read this file in Step 6 before writing any report commentary.** These 14 rules generalize
+**Read this file in Step 6 before writing any report commentary.** These 16 rules generalize
 recurring review findings into permanent, self-auditable directives. Several are grep-auditable
 in the Directive Compliance Audit step.
 
@@ -93,13 +93,14 @@ yourself writing the same 2+ sentence explanation in a second card, delete it an
 
 **Grep check:** `grep -ci '__cf_bm.*cookie\|Cloudflare Bot Management.*cookie\|cf_bm.*bypass' "$REPORT_PATH"` (count must be ≤1).
 
-### D10 — Cache Cold-Start: Explain Once, Cite Everywhere Else
+### D10 — Cache Cold-Start: MAX 2 LINES TOTAL
 
-The midnight-UTC cache purge and its effect on HIT rates is a single root cause. Describe it in full
-ONLY in the Cache Root Cause Analysis card (Primary Root Cause). Every other section that references
-the cache HIT rate (Overall Assessment, At a Glance, Traffic Anomalies) must cite it by a short
-reference — `"(see Cache Root Cause Analysis for the cold-start window explanation)"` or `"as noted
-in Cache Root Cause"` — and NEVER re-explain the purge mechanism, timing, or expected behavior.
+The midnight-UTC cache purge is a single root cause. **The entire Cache Root Cause card (all
+sub-bullets combined) must fit in 2 lines when rendered.** Cite `[Kinsta Tribal Knowledge: Midnight
+UTC Cache Purge]` by name — do NOT explain the purge mechanism, timing, TTL, or the
+SevallaCacheWarmer's behavior. Only state: the HIT rate, the time window, and whether this is
+expected (it always is for <6h windows). Every other section references it by name only. No
+"Evidence in this run" sub-bullet — the HIT rate and window ARE the evidence.
 This is a specific, high-frequency application of Directive 3 (explain once, cite thereafter).
 
 **Grep check:** `grep -ci 'purge.*cache\|cache.*purge\|cache.*emptied\|cache.*completely.cold\|every 24 hours.*midnight\|post-purge.cold' "$REPORT_PATH"` (count must be ≤1).
@@ -171,6 +172,12 @@ on.
 
 **Grep check:** `grep -n -i 'verify.*403.*rules.*current\|review.*error.log.*monthly.*new patterns\|verify.*spam-block.*still current' "$REPORT_PATH"` (must produce no output).
 
+### D16 — ws-form / REST API Endpoints: Check Raw Log Before Reporting GET 404
+
+The Kinsta-Log-Analyzer-Probe sends GET requests to discovered REST API endpoints (including form-submission endpoints like `/wp-json/ws-form/v1/submit`). A 404 on GET to a POST-only REST API form endpoint is **self-inflicted probe noise**, not a site behavior — the probe tool itself triggered it. **Before reporting any GET 404 on a REST API endpoint as a finding, grep the raw access log for that endpoint.** If the only GET request came from `Kinsta-Log-Analyzer-Probe` (or no external GET requests exist at all), exclude it from the findings entirely. All legitimate traffic to form-submission endpoints is POST — those are real form submissions from real visitors, not errors.
+
+**Grep check (before writing error_fixes):** `grep -F '/wp-json/ws-form/v1/submit' "$ACCESS_LOG" | grep -v 'Kinsta-Log-Analyzer-Probe' | grep 'GET'` — if empty, do not report.
+
 ---
 
 ## Operational Rules
@@ -220,6 +227,14 @@ fi
 # D13: "verify 403 rules are still current" or similar
 echo "=== D13: 403 rule 'verify current' recommendation ==="
 grep -n -i 'verify.*403.*rules.*current\|review.*error.log.*monthly.*new patterns\|verify.*spam-block.*still current' "$REPORT" || echo "PASS"
+
+# D16: ws-form GET 404 — must not appear in report if probe was the only source
+echo "=== D16: ws-form GET 404 misattribution check ==="
+if grep -n -i 'ws-form.*404\|404.*ws-form\|GET.*ws-form.*submit.*404' "$REPORT"; then
+  echo "WARNING: ws-form GET 404 mentioned — verify it was NOT self-inflicted probe noise before proceeding"
+else
+  echo "PASS"
+fi
 
 # D3: __cf_bm cookie explanation count must be ≤1
 echo "=== D3: __cf_bm explanation count (must be ≤1) ==="
