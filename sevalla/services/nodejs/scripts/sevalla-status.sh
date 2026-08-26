@@ -25,6 +25,16 @@ echo "════════════════════════�
 if [ "$PROGRESS_EXIT" = "0" ] && [ -n "$PROGRESS_STDOUT" ]; then
   echo "$PROGRESS_STDOUT" | python3 -c "
 import sys, json
+from datetime import datetime, timezone
+
+def fmt_time(v):
+    # Convert ISO-8601 UTC -> 'YYYY-MM-DD hh:mm AM/PM (UTC)'
+    try:
+        dt = datetime.fromisoformat(str(v).replace('Z', '+00:00')).astimezone(timezone.utc)
+        return dt.strftime('%Y-%m-%d %I:%M %p (UTC)')
+    except Exception:
+        return str(v)
+
 try:
     p = json.load(sys.stdin)
     if p.get('running'):
@@ -51,7 +61,7 @@ try:
             remaining_min = '?'
 
         print(f'  Status:     ● RUNNING')
-        print(f'  Started:    {p.get(\"started\",\"?\")}')
+        print(f'  Started:    {fmt_time(p.get(\"started\",\"?\"))}')
         print(f'  Progress:   {current}/{total} URLs ({pct:.0f}%)')
         print(f'  Elapsed:    {elapsed_min} min')
         print(f'  ETA:        ~{remaining_min} min remaining')

@@ -17,6 +17,7 @@
 - [x] Fixed script naming: `sevalla-summary.sh` → formatted summary, `sevalla-status.sh` → live progress only
 - [x] Relay mode for hidden-profile users — implemented in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js), plan at [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
 - [x] `sevalla-summary.sh` — AM/PM (UTC) time format + failed URLs list with reason
+- [x] Warmer status — `YYYY-MM-DD hh:mm AM/PM (UTC)` time format in [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) and `npm run status` ([`package.json`](../services/nodejs/package.json))
 
 ## In Progress
 
