@@ -127,16 +127,41 @@ async function warmUrl(url) {
   for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
     try {
       const start = Date.now();
-      const res = await fetch(url, {
+      // Follow redirects manually so the intermediate 3xx code can be captured
+      let res = await fetch(url, {
         headers: { "User-Agent": USER_AGENT },
+        redirect: "manual",
         signal: AbortSignal.timeout(10000),
       });
+
+      let redirectStatus = null; // first 3xx code actually followed
+      const seen = new Set([url]);
+      const MAX_REDIRECTS = 20; // match fetch() default redirect limit
+      while (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) break; // 3xx without Location — treat as final
+        if (redirectStatus === null) redirectStatus = res.status;
+        const next = new URL(location, res.url).toString();
+        if (seen.has(next)) throw new Error(`Redirect loop at ${next}`);
+        if (seen.size >= MAX_REDIRECTS) throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`);
+        seen.add(next);
+        res = await fetch(next, {
+          headers: { "User-Agent": USER_AGENT },
+          redirect: "manual",
+          signal: AbortSignal.timeout(10000),
+        });
+      }
+
       const duration = ((Date.now() - start) / 1000).toFixed(2);
       const kinsta = (res.headers.get("X-Kinsta-Cache") || "MISSING").toUpperCase();
       const cdn = (res.headers.get("CF-Cache-Status") || "MISSING").toUpperCase();
       const edge = (res.headers.get("Ki-Cf-Cache-Status") || "MISSING").toUpperCase();
       log(`[${res.status}] Kinsta: ${kinsta} | CDN: ${cdn} | Edge: ${edge} | Time: ${duration}s -> ${url}`);
-      return { ok: true, status: res.status, kinsta, cdn, edge, redirected: res.redirected, finalUrl: res.url };
+      // 4xx/5xx = client/server errors — treat as failures, not successful warms
+      if (res.status >= 400) {
+        return { ok: false, status: res.status, error: `HTTP ${res.status}`, url };
+      }
+      return { ok: true, status: res.status, kinsta, cdn, edge, redirected: redirectStatus !== null, redirectStatus, finalUrl: res.url };
     } catch (e) {
       if (attempt < RETRY_COUNT) {
         const backoff = 2 ** attempt;
@@ -217,7 +242,8 @@ async function runWarmer() {
 
   // ── Nested stats: { "200": { count, urls[], redirects[], unknowns[], kinsta, cdn, edge }, ... } ──
   const perStatus = {};
-  const failedUrls = [];     // [{ url, error }] — no HTTP response, sits outside perStatus
+  const failedUrls = [];     // [{ url, error, status? }] — network errors + HTTP 4xx/5xx
+  const redirectCodes = {};  // { "301": count } — redirect hops (not unique URLs)
 
   try {
     log("--- Starting Sitemap Discovery Phase ---");
@@ -266,10 +292,12 @@ async function runWarmer() {
 
         // Track redirects nested under this status code
         if (result.redirected) {
-          bucket.redirects.push({ from: url, to: result.finalUrl });
+          const rcode = result.redirectStatus ? String(result.redirectStatus) : "3xx";
+          redirectCodes[rcode] = (redirectCodes[rcode] || 0) + 1;
+          bucket.redirects.push({ from: url, to: result.finalUrl, status: result.redirectStatus });
         }
       } else {
-        failedUrls.push({ url, error: result.error });
+        failedUrls.push({ url, error: result.error, status: result.status });
       }
       // Write progress every N URLs for status command
       idx++;
@@ -360,7 +388,7 @@ async function runWarmer() {
     }
 
     if (failedUrls.length > 0) {
-      summaryLines.push("", "── Failed (no HTTP response) ──");
+      summaryLines.push("", "── Failed URLs ──");
       failedUrls.forEach((f) =>
         summaryLines.push(`  ✗ ${f.url}\n    Reason: ${f.error}`)
       );
@@ -392,6 +420,7 @@ async function runWarmer() {
       successful: ok,
       failed: fail,
       statusCodes,
+      redirectCodes,
       kinsta: rollup.kinsta,
       cdn: rollup.cdn,
       edge: rollup.edge,

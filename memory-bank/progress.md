@@ -16,6 +16,7 @@
 - [x] CDN/Edge cache tracking clarified as diagnostic-only — `npm run status` now shows UNKNOWN counts; WARMER.md documents why CDN/Edge can't be warmed from Sevalla
 - [x] Fixed script naming: `sevalla-summary.sh` → formatted summary, `sevalla-status.sh` → live progress only
 - [x] Relay mode for hidden-profile users — implemented in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js), plan at [`plans/relay-mode-hidden-users.md`](../plans/relay-mode-hidden-users.md)
+- [x] `sevalla-summary.sh` — AM/PM (UTC) time format + failed URLs list with reason
 
 ## In Progress
 
