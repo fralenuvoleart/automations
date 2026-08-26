@@ -60,12 +60,12 @@ if (process.env.DISABLE_TELEGRAM_BOT !== "true") {
   console.log("Bot disabled via DISABLE_TELEGRAM_BOT env var — warmer-only mode");
 }
 
-// ── Cache Warmer (daily at 01:00 UTC) ──
-cron.schedule("0 1 * * *", () => {
+// ── Cache Warmer (daily at 01:00 and 13:00 UTC) ──
+cron.schedule("0 1,13 * * *", () => {
   console.log("[cron] Starting cache warmer...");
   runWarmer()
     .then(() => console.log("[cron] Cache warmer finished."))
     .catch((err) => console.error("[cron] Cache warmer failed:", err.message));
-});
+}, { timezone: "UTC" });
 
-console.log("Cache warmer scheduled daily at 01:00 UTC");
+console.log("Cache warmer scheduled daily at 01:00 and 13:00 UTC");
