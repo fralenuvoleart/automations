@@ -33,7 +33,7 @@ def fmt_time(v):
 raw = sys.stdin.read()
 try:
     d = json.loads(raw)
-    # Exec wrapper: {"stdout": "<json>"} — otherwise treat as direct JSON
+    # Exec wrapper: {\"stdout\": \"<json>\"} — otherwise treat as direct JSON
     if isinstance(d, dict) and ('stdout' in d or 'output' in d):
         s = json.loads(d.get('stdout') or d.get('output') or '{}')
     else:
