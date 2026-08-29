@@ -585,7 +585,11 @@ def analyze_cache_log(logs):
     for m in re.finditer(r"\[([^\]]+)\] (HIT|MISS|BYPASS) KINSTAWP(?:_MOBILE)? (\S+) ([A-Z]+) \"([^\"]+)\"", logs):
         if m.group(3) == "::1": continue  # skip localhost
         ts = parse_apache_ts(m.group(1))
-        entries.append({"ts": ts, "status": m.group(2), "ip": m.group(3), "url": norm(m.group(5))})
+        # Keep the exact request path (trailing slash + query string) alongside the
+        # normalized form so the cache-MISS list can show redirect hops verbatim,
+        # while all other consumers keep the normalized URL for stable grouping.
+        entries.append({"ts": ts, "status": m.group(2), "ip": m.group(3),
+                        "url": norm(m.group(5)), "exact_url": m.group(5)})
     cache_ts = [e["ts"] for e in entries if e["ts"]]
     return {"HIT": hits, "MISS": misses, "BYPASS": bypasses, "total": total, "entries": entries,
             "first_ts": min(cache_ts) if cache_ts else None,
@@ -614,7 +618,7 @@ def cross_analyze(access_entries, cache_entries, error_entries, ip_counter, scan
         miss_query_params = Counter()
         for ce in cache_entries:
             if ce["status"] == "MISS" and ce["ts"]:
-                miss_by_url[ce["url"]].append(ce["ts"])
+                miss_by_url[ce.get("exact_url") or ce["url"]].append(ce["ts"])
                 # Extract query params from MISS URLs
                 m = re.search(r'\?([^ "]+)', ce["url"])
                 if m:
