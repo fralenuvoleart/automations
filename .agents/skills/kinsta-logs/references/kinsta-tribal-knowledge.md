@@ -111,10 +111,10 @@ Platform behaviors confirmed through direct Kinsta support interactions, not ful
 
 ## 📦 Cache Architecture Nuances
 
-### Midnight UTC Cache Purge (Cold-Start Window) — Permanent Kinsta Behavior
-- **Fact:** Kinsta's server cache expires every 24 hours by default. The cache purge occurs at midnight UTC (00:00). After the purge, all pages must be regenerated on first visit, producing a cold-start period with elevated MISS rates. The SevallaCacheWarmer mitigates this by pre-warming pages across all languages. A previous 7-day TTL test (2026-07-23) showed no meaningful improvement, so the default 24h TTL was restored.
+### Server Page Cache TTL: 24 Hours (Default)
+- **Fact:** Kinsta's server page cache TTL is 24 hours by default. A previous 7-day TTL test (2026-07-23) showed no meaningful improvement, so the default 24h TTL was restored.
 - **Source:** Kinsta Support Chat; user testing 2026-07-23.
-- **Skill impact:** This is a permanent, known behavior — NOT a per-report finding. In the Cache Root Cause Analysis card, cite this entry by name: `"🟡 Midnight UTC Cache Purge — see [Kinsta Tribal Knowledge: Midnight UTC Cache Purge] for the full mechanism."` Then add ONLY the report-specific evidence: current HIT rate, probe confirmation of Edge cache persistence, and any new observations. Never re-explain the purge mechanism, timing, or the 7-day TTL test result — those are documented here once and cited thereafter. This is a cross-report application of Directive D10 (Explain Once, Cite Everywhere Else).
+- **Skill impact:** When analyzing cache HIT/MISS ratios, note that pages expire from the server cache after 24 hours and must be regenerated. The SevallaCacheWarmer runs at 01:00 and 13:00 UTC to pre-warm pages across all languages, mitigating cold-cache gaps.
 
 ### Recommended Routine Cache Clearing
 - **Fact:** For routine cache clearing after content updates, Kinsta support recommends clearing Server cache, CDN, and Edge Caching individually while keeping Redis (Object Cache) intact.
@@ -221,10 +221,6 @@ Platform behaviors confirmed through direct Kinsta support interactions, not ful
 - **Source:** Kinsta Support Chat
 - **Skill impact:** When analyzing cache expiration patterns, reference these defaults. A MISS after 24h is expected TTL expiry, not a problem.
 
-### Server Cache Emptied Every 24 Hours at ≈Midnight UTC
-- **Fact:** The server page cache is emptied (full purge) every 24 hours at approximately Midnight UTC. This is a scheduled platform-level cache reset, not triggered by content changes or TTL expiry. After this event, all subsequent requests will be cache MISS until the cache is repopulated by actual traffic.
-- **Source:** Kinsta Support Chat
-- **Skill impact:** When analyzing cache HIT/MISS ratios, check whether the log window spans a Midnight UTC cache-purge event. A cache-perf log that starts after midnight UTC will show a cold cache with near-zero HIT rate for the first hours, which is expected behavior, not a configuration problem. When the cache-perf window is short and post-midnight, explicitly note this in the Cache Root Cause analysis: the low HIT rate may be primarily a cold-start artifact, not representative of steady-state daytime performance. Also note that a MISS observed in the access log within a few hours after midnight UTC is likely a post-purge cold-start MISS, not a TTL-expiry MISS.
 
 ### Kinsta MU Plugin Auto-Clears Page Cache on Edits
 - **Fact:** When editing a page in WordPress admin, Kinsta's MU plugin automatically clears the cache for: that specific page, the homepage, the blog page, and any paths added in Kinsta custom cache settings. It does NOT clear the entire site cache.

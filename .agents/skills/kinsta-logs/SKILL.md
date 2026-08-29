@@ -89,7 +89,6 @@ The entire data gathering pipeline (site discovery, log fetching, baseline probi
 
 3. **Apply Internal Framework:**
     - See `references/report-structure.md` for the Internal Framework (Analyst Checklist). Use this framework to REASON through each finding (What / Why / Who / How).
-    - **Cache cold-start:** The midnight-UTC cache purge is a permanent, known Kinsta behavior documented in `references/kinsta-tribal-knowledge.md` ("Midnight UTC Cache Purge"). In the Cache Root Cause Analysis card, cite it by name — `"see [Kinsta Tribal Knowledge: Midnight UTC Cache Purge]"` — and add ONLY report-specific evidence (current HIT rate, probe confirmation). Never re-explain the purge mechanism, timing, or the 7-day TTL test result. This is a cross-report application of Directive D10.
 
 4. **Write Findings to JSON:**
     Create a file named `{timestamp}_analyst_findings.json` in the run directory (alongside `context.json`, e.g. `.output/kinsta-logs/{site}/{env}/{timestamp}_analyst_findings.json`). It MUST contain the following keys, corresponding to the report sections. Use the **finding-card format** (Markdown) for the values, adhering strictly to the Tone Calibration and Severity Icon vocabulary in `references/conciseness-directives.md`.

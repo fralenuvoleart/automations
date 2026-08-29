@@ -65,7 +65,7 @@ At a Glance: bold only key words and numbers, never entire paragraphs. Bold form
 — when an entire paragraph is bold, nothing stands out and the visual hierarchy collapses. Use bold
 sparingly on the most critical words, numbers, and verdict terms within each sentence. The At a
 Glance section's purpose is scanability; a wall of bold text defeats that purpose. Example: "Cache
-HIT at **32%** in a **post-midnight cold-start window** — daytime rate not assessable. **No
+HIT at **32%** in a **3.5h window** — daytime steady-state rate not assessable. **No
 security incidents.**"
 
 **Grep check:** `grep -n '^\*\*.\{120,\}\*\*$' "$REPORT_PATH"` (must produce no output).
@@ -93,18 +93,6 @@ yourself writing the same 2+ sentence explanation in a second card, delete it an
 
 **Grep check:** `grep -ci '__cf_bm.*cookie\|Cloudflare Bot Management.*cookie\|cf_bm.*bypass' "$REPORT_PATH"` (count must be ≤1).
 
-### D10 — Cache Cold-Start: MAX 2 LINES TOTAL
-
-The midnight-UTC cache purge is a single root cause. **The entire Cache Root Cause card (all
-sub-bullets combined) must fit in 2 lines when rendered.** Cite `[Kinsta Tribal Knowledge: Midnight
-UTC Cache Purge]` by name — do NOT explain the purge mechanism, timing, TTL, or the
-SevallaCacheWarmer's behavior. Only state: the HIT rate, the time window, and whether this is
-expected (it always is for <6h windows). Every other section references it by name only. No
-"Evidence in this run" sub-bullet — the HIT rate and window ARE the evidence.
-This is a specific, high-frequency application of Directive 3 (explain once, cite thereafter).
-
-**Grep check:** `grep -ci 'purge.*cache\|cache.*purge\|cache.*emptied\|cache.*completely.cold\|every 24 hours.*midnight\|post-purge.cold' "$REPORT_PATH"` (count must be ≤1).
-
 ### D14 — Cache-Perf HIT Rate: Always State Time Window and Scope
 
 Cache-perf HIT rate: always state its time window and Nginx-page-cache scope. See the SKILL.md
@@ -129,17 +117,14 @@ Avoid both extremes, every time. This has been a repeated failure mode in both d
 
 ## Domain-Specific Rules
 
-### D9 — Cache Cold-Start Window in At a Glance
+### D9 — Cache-Perf Window: State Coverage Limitations
 
-At a Glance: never flag cache HIT rate as "below target" when the cache-perf window is a short
-post-midnight cold-start period. Kinsta purges the server page cache every 24 hours at approximately
-midnight UTC. A cache-perf log covering only the post-purge window (e.g., 22:33–01:00 UTC, ≈2.5
-hours) will always show a low HIT rate because the cache is cold — this is expected platform
-behavior, not a configuration defect. In such windows, describe the cache state factually (e.g.,
-"Cache HIT at **32%** — expected for this post-midnight cold-start window; daytime rate not
-assessable from this data") rather than as a "below target" finding. Only flag cache HIT as a
-genuine 🟡 concern when the cache-perf window spans ≥6 hours of daytime traffic (e.g., 09:00–21:00
-UTC) where a cold-start excuse no longer applies.
+At a Glance: when the cache-perf log covers a short window (<6 hours), state the coverage limitation
+explicitly. A cache-perf log covering only a few hours cannot represent full-day cache health. In
+such windows, describe the cache state factually (e.g., "Cache HIT at **32%** in a 3.5h window —
+daytime steady-state rate not assessable from this data") rather than as a "below target" finding.
+Only flag cache HIT as a genuine 🟡 concern when the cache-perf window spans ≥6 hours of daytime
+traffic (e.g., 09:00–21:00 UTC).
 
 **Grep check:** `grep -n -i 'cache.*below.target\|below.target.*cache' "$REPORT_PATH"` (must produce no output).
 
@@ -209,11 +194,6 @@ grep -n '^\*\*.\{120,\}\*\*$' "$REPORT" || echo "PASS"
 # D9: "below target" near "cache"
 echo "=== D9: 'below target' near 'cache' ==="
 grep -n -i 'cache.*below.target\|below.target.*cache' "$REPORT" || echo "PASS"
-
-# D10: Cache-purge explanation count must be ≤1
-echo "=== D10: Cache-purge explanation count (must be ≤1) ==="
-COUNT=$(grep -ci 'purge.*cache\|cache.*purge\|cache.*emptied\|cache.*completely.cold\|every 24 hours.*midnight\|post-purge.cold' "$REPORT")
-if [ "$COUNT" -le 1 ]; then echo "PASS (count=$COUNT)"; else echo "FAIL: $COUNT occurrences — explain once in Cache Root Cause, cite by name elsewhere"; fi
 
 # D12: Bytespider "Monitor" without ZH-content justification
 echo "=== D12: Bytespider Monitor without ZH justification ==="
