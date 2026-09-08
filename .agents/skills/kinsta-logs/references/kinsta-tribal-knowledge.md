@@ -150,7 +150,11 @@ Platform behaviors confirmed through direct Kinsta support interactions, not ful
 - **Source:** Kinsta Support Chat
 - **Skill impact:** When the Bot Strategy section recommends blocking or challenging a specific bot, phrase the action as: "Ask Kinsta support to add a [block/challenge/skip] rule for [bot name / IP range / country]."
 
----
+### ClaudeBot Crawl-Delay: 10 Seconds (robots.txt)
+- **Fact:** A `Crawl-delay: 10` directive has been added to `robots.txt` for ClaudeBot. ClaudeBot is documented to support `Crawl-delay` (per bot-taxonomy.md), so this directive is expected to be honored. This throttles ClaudeBot to one request per 10 seconds, reducing server load from Anthropic's crawler without blocking it entirely.
+- **Source:** User confirmation, 2026-09-07.
+- **Skill impact:** When analyzing ClaudeBot traffic in future reports, note that the 10-second crawl-delay is in effect. If ClaudeBot volume still appears high, verify the directive is present in the live robots.txt (probe it) before recommending further action — the delay may need time to take effect, or the bot may be mid-crawl when the directive was added.
+
 
 ## 🌐 Cloudflare & DNS
 
