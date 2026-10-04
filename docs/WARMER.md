@@ -2,7 +2,7 @@
 
 ## Overview
 
-The cache warmer (`services/nodejs/src/cache-warmer.js`) is a Node.js script deployed on [Sevalla](https://sevalla.com) that visits every URL listed in the site's XML sitemap on a schedule, ensuring pages stay cached at all three cache layers (Kinsta server cache, Cloudflare CDN, and Kinsta Edge). It runs daily via cron at 01:00 UTC.
+The cache warmer (`services/nodejs/src/cache-warmer.js`) is a Node.js script deployed on [Sevalla](https://sevalla.com) that visits every URL listed in the site's XML sitemap on a schedule, ensuring pages stay cached at all three cache layers (Kinsta server cache, Cloudflare CDN, and Kinsta Edge). It runs daily via cron at 01:00 and 13:00 UTC.
 
 ## How It Works
 
@@ -39,7 +39,7 @@ The tally logic in `tallyStats()` (line 143 of `cache-warmer.js`) normalizes val
 
 ## Configuration
 
-All warmer settings are defined in [`config/warmer-config.js`](../services/nodejs/config/warmer-config.js) — the single source of truth. Each value reads from an environment variable with a sensible default, so no code changes are needed to tune the warmer. See also [`.env.example`](../services/nodejs/.env.example) for the full list.
+All warmer settings are defined in [`config/warmer-config.js`](../sevalla/services/nodejs/config/warmer-config.js) — the single source of truth. Each value reads from an environment variable with a sensible default, so no code changes are needed to tune the warmer. See also [`.env.example`](../sevalla/services/nodejs/.env.example) for the full list.
 
 | Env Variable | Default | Description |
 |---|---|---|
@@ -49,6 +49,7 @@ All warmer settings are defined in [`config/warmer-config.js`](../services/nodej
 | `WARMER_RETRY_COUNT` | `2` | Retry attempts per URL on failure |
 | `WARMER_USER_AGENT` | `SevallaCacheWarmer/1.0 (+https://pbservices.ge; token:cache-warmer)` | Custom User-Agent header |
 | `WARMER_PROGRESS_INTERVAL` | `10` | Write progress file every N URLs |
+| `WARMER_TOKEN` | `change-me-to-a-secret-token` | Secret token for public URL trigger endpoint |
 
 ## Why Warmer Stats Differ from Kinsta Analytics
 
@@ -174,8 +175,25 @@ Use **Kinsta Analytics** (dashboard) instead of the warmer. Kinsta Analytics mea
 
 ## Running Manually
 
+### Via Public URL (recommended)
+
 ```bash
-# Via Sevalla cron or SSH
+# Trigger from anywhere — browser, curl, Integrately, iOS Shortcut, etc.
+curl -s "https://pbs-telegram-k3rlz.sevalla.app/warmer/trigger?token=YOUR_SECRET"
+# → {"status":"started"}
+
+# Check live progress
+curl -s "https://pbs-telegram-k3rlz.sevalla.app/warmer/status"
+# → {"running":true,"current":247,"total":548,...}
+```
+
+The token is configured in [`config/warmer-config.js`](../sevalla/services/nodejs/config/warmer-config.js) (`WARMER_TOKEN` field) and can be overridden via the `WARMER_TOKEN` environment variable in Sevalla. The endpoint responds immediately — the warmer runs in the background (~18 minutes).
+
+If the warmer is already running, the trigger returns `409 {"status":"already_running"}`.
+
+### Via Sevalla cron or SSH
+
+```bash
 node -e "const {runWarmer}=require('./src/cache-warmer'); runWarmer();"
 ```
 
@@ -192,6 +210,8 @@ node -e "const s=require('./cache-warmer-last-run.json'); console.log('Last run:
 | File | Purpose |
 |---|---|
 | `services/nodejs/src/cache-warmer.js` | Main warmer logic |
+| `services/nodejs/src/warmer-server.js` | HTTP server for public URL trigger |
+| `services/nodejs/config/warmer-config.js` | All warmer settings including `WARMER_TOKEN` |
 | `services/nodejs/cache-warmer-last-run.json` | Persisted last-run summary (auto-generated) |
-| `services/nodejs/scripts/sevalla-warmer.sh` | Sevalla cron wrapper script |
+| `services/nodejs/scripts/sevalla-warmer.sh` | Sevalla API exec wrapper script |
 | `services/nodejs/scripts/sevalla-summary.sh` | Shell script to display last-run summary |

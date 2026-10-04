@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const fs = require("fs");
 const { createBot } = require("./src/telegram-bot");
 const { runWarmer } = require("./src/cache-warmer");
+const { createServer } = require("./src/warmer-server");
 
 const BOT_TOKEN = process.env.BOT_TOKEN || "8499822740:AAGCZtY9TK_B9AHk0nFrkRcEnpt1uOL8bWw";
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "-1003837689636";
@@ -69,3 +70,8 @@ cron.schedule("0 1,13 * * *", () => {
 }, { timezone: "UTC" });
 
 console.log("Cache warmer scheduled daily at 01:00 and 13:00 UTC");
+
+// ── HTTP server for public warmer trigger (Sevalla ingress on port 8080) ──
+createServer().listen(8080, () => {
+  console.log("HTTP server listening on :8080 — warmer trigger enabled");
+});

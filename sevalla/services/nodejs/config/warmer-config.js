@@ -30,4 +30,9 @@ module.exports = {
   PROGRESS_FILE:
     process.env.WARMER_PROGRESS_FILE ||
     path.join(__dirname, "..", "cache-warmer-progress.json"),
+
+  // Secret token for public warmer trigger endpoint.
+  // Set here directly OR override via WARMER_TOKEN env var.
+  WARMER_TOKEN:
+    process.env.WARMER_TOKEN || "warmup",
 };
