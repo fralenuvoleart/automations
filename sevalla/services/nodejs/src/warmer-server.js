@@ -71,11 +71,37 @@ function createServer() {
             kinsta: lastRun.kinsta || null,
             cdn: lastRun.cdn || null,
             edge: lastRun.edge || null,
+            statusCodes: lastRun.statusCodes || null,
+            redirectUrls: lastRun.redirectUrls || null,
+            unknowns: lastRun.unknowns || null,
+            failedUrls: lastRun.failedUrls || null,
           },
         });
       }
 
       return jsonResponse(res, 200, { running: false, lastRun: null });
+    }
+
+    // ── GET /warmer/summary ──
+    if (req.method === "GET" && url.pathname === "/warmer/summary") {
+      const lastRun = readJSON(SUMMARY_FILE);
+      if (!lastRun) {
+        return jsonResponse(res, 200, { lastRun: null });
+      }
+      return jsonResponse(res, 200, {
+        started: lastRun.started,
+        finished: lastRun.finished,
+        total: lastRun.total,
+        successful: lastRun.successful,
+        failed: lastRun.failed,
+        kinsta: lastRun.kinsta || null,
+        cdn: lastRun.cdn || null,
+        edge: lastRun.edge || null,
+        statusCodes: lastRun.statusCodes || null,
+        redirectUrls: lastRun.redirectUrls || null,
+        unknowns: lastRun.unknowns || null,
+        failedUrls: lastRun.failedUrls || null,
+      });
     }
 
     // ── 404 ──
