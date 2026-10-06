@@ -334,6 +334,11 @@ Platform behaviors confirmed through direct Kinsta support interactions, not ful
 - **Source:** User correction during 2026-08-08 pbservices.ge analysis.
 - **Skill impact:** Never classify `@wordpress/interactivity` 404s as a code/theme/plugin issue. These are crawler noise — state this explicitly in the Error Fixes section and assign `✅ No action required`. Do NOT recommend updating themes, plugins, or core code.
 
+### Facebook Crawler `/null`-Suffix 404s (meta-externalagent)
+- **Fact:** Facebook's link-preview crawler (`meta-externalagent/1.1`, classified as `facebookexternalhit`) systematically requests `/null`-suffix URLs across all language versions of the site. Confirmed 2026-10-06: 354 requests to 206 unique `/null` URLs from 70 IPs in the `57.141.6.x` range (Meta crawler infrastructure), all returning 404. The mechanism by which the crawler discovers these URLs is not determined. This is crawler traffic hitting non-existent paths — not a site error, not a Polylang bug, not a misconfiguration.
+- **Source:** Raw access log analysis, 2026-10-06 pbservices.ge report.
+- **Skill impact:** When the report shows `/null`-suffix 404s, grep the raw access log to confirm the User-Agent before writing findings. If confirmed as `meta-externalagent/1.1`, classify as crawler noise — state the UA, IP range, and request count explicitly. Assign `✅ No action required`. Do NOT speculate about the mechanism (Polylang, language switcher, etc.) without direct evidence. Do NOT recommend blocking facebookexternalhit — it would break link previews across all Meta apps (Facebook, Instagram, WhatsApp, Messenger).
+
 ---
 
 ## 🗺️ Custom Nginx Configurations (pbservices.ge)
