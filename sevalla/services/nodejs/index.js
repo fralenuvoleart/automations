@@ -29,6 +29,7 @@ process.on("unhandledRejection", (reason) => {
 // ── Telegram Bot (skip if DISABLE_TELEGRAM_BOT=true) ──
 if (process.env.DISABLE_TELEGRAM_BOT !== "true") {
   const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
+  require("./src/business-bot").attachBusinessHandlers(bot); // Telegram Business lead capture
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
@@ -37,7 +38,7 @@ if (process.env.DISABLE_TELEGRAM_BOT !== "true") {
   async function launchBot(retries = 5, delayMs = 3000) {
     for (let i = 0; i <= retries; i++) {
       try {
-        await bot.launch();
+        await bot.launch({ allowedUpdates: require("./src/business-bot").ALLOWED_UPDATES });
         console.log("Bot started — polling for messages");
         return;
       } catch (err) {
