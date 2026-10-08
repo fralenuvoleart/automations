@@ -4,7 +4,8 @@ const { createBot } = require("./src/telegram-bot");
 const { runWarmer } = require("./src/cache-warmer");
 const { createServer } = require("./src/warmer-server");
 
-const BOT_TOKEN = process.env.BOT_TOKEN || "8499822740:AAGCZtY9TK_B9AHk0nFrkRcEnpt1uOL8bWw";
+const BOT_TOKEN = process.env.BOT_TOKEN; // set only on Sevalla, never in code
+if (!BOT_TOKEN) console.warn("[bot] BOT_TOKEN is not set, Telegram bot is disabled");
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "-1003837689636";
 const MSG = require("./config/messages.json");
 
@@ -27,7 +28,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 // ── Telegram Bot (skip if DISABLE_TELEGRAM_BOT=true) ──
-if (process.env.DISABLE_TELEGRAM_BOT !== "true") {
+if (process.env.DISABLE_TELEGRAM_BOT !== "true" && BOT_TOKEN) {
   const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
   require("./src/business-bot").attachBusinessHandlers(bot); // Telegram Business lead capture
 
