@@ -27,10 +27,31 @@ process.on("unhandledRejection", (reason) => {
   console.error("[fatal] Unhandled rejection:", reason);
 });
 
-// ── Telegram Bot (skip if DISABLE_TELEGRAM_BOT=true) ──
-if (process.env.DISABLE_TELEGRAM_BOT !== "true" && BOT_TOKEN) {
-  const bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
-  require("./src/business-bot").attachBusinessHandlers(bot); // Telegram Business lead capture
+// ── Telegram ──
+// DISABLE_TELEGRAM_BOT=true   keeps the previous bot (welcome / auto reply) off
+// ENABLE_BUSINESS_LEADS=true  runs the Telegram Business lead capture
+// Both are independent: with DISABLE_TELEGRAM_BOT=true and ENABLE_BUSINESS_LEADS=true
+// only the lead capture runs, on a clean bot instance without the previous handlers.
+const PREVIOUS_BOT_ON = process.env.DISABLE_TELEGRAM_BOT !== "true";
+const BUSINESS_LEADS_ON = process.env.ENABLE_BUSINESS_LEADS === "true";
+
+if (BOT_TOKEN && (PREVIOUS_BOT_ON || BUSINESS_LEADS_ON)) {
+  const business = require("./src/business-bot");
+  let bot;
+  let allowedUpdates;
+
+  if (PREVIOUS_BOT_ON) {
+    bot = createBot(BOT_TOKEN, ADMIN_CHAT_ID, MSG);
+    if (BUSINESS_LEADS_ON) allowedUpdates = business.ALLOWED_UPDATES;
+  } else {
+    const { Telegraf } = require("telegraf");
+    bot = new Telegraf(BOT_TOKEN);
+    bot.catch((err) => console.error("[business] handler error:", err.message));
+    allowedUpdates = business.ALLOWED_UPDATES.filter((u) => u.includes("business"));
+    console.log("Previous bot disabled via DISABLE_TELEGRAM_BOT, running business lead capture only");
+  }
+
+  if (BUSINESS_LEADS_ON) business.attachBusinessHandlers(bot);
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
@@ -39,8 +60,9 @@ if (process.env.DISABLE_TELEGRAM_BOT !== "true" && BOT_TOKEN) {
   async function launchBot(retries = 5, delayMs = 3000) {
     for (let i = 0; i <= retries; i++) {
       try {
-        await bot.launch({ allowedUpdates: require("./src/business-bot").ALLOWED_UPDATES });
-        console.log("Bot started — polling for messages");
+        await bot.launch(allowedUpdates ? { allowedUpdates } : {}, () =>
+          console.log("Bot started — polling for messages")
+        );
         return;
       } catch (err) {
         if (err?.response?.error_code === 409 && i < retries) {
