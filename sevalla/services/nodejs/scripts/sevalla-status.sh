@@ -41,6 +41,8 @@ try:
         current = p['current']
         total = p['total']
         pct = (current / total * 100) if total > 0 else 0
+        # Discovery phase: total=1 sentinel, no real URLs yet
+        is_discovery = (total <= 1 and current == 0)
         elapsed_min = '?'
         if p.get('started') and p.get('updated'):
             from datetime import datetime
@@ -62,13 +64,16 @@ try:
 
         print(f'  Status:     ● RUNNING')
         print(f'  Started:    {fmt_time(p.get(\"started\",\"?\"))}')
-        print(f'  Progress:   {current}/{total} URLs ({pct:.0f}%)')
-        print(f'  Elapsed:    {elapsed_min} min')
-        print(f'  ETA:        ~{remaining_min} min remaining')
-        if p.get('lastUrl'):
-            url = p['lastUrl']
-            short = url[:80] + ('...' if len(url) > 80 else '')
-            print(f'  Last URL:   {short}')
+        if is_discovery:
+            print('  Phase:      Discovering sitemap...')
+        else:
+            print(f'  Progress:   {current}/{total} URLs ({pct:.0f}%)')
+            print(f'  Elapsed:    {elapsed_min} min')
+            print(f'  ETA:        ~{remaining_min} min remaining')
+            if p.get('lastUrl'):
+                url = p['lastUrl']
+                short = url[:80] + ('...' if len(url) > 80 else '')
+                print(f'  Last URL:   {short}')
     else:
         print('  Status:     ○ IDLE (progress file says not running)')
 except:

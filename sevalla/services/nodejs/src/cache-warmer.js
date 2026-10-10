@@ -245,6 +245,9 @@ async function runWarmer() {
   const failedUrls = [];     // [{ url, error, status? }] — network errors + HTTP 4xx/5xx
   const redirectCodes = {};  // { "301": count } — redirect hops (not unique URLs)
 
+  // Write initial progress so status shows RUNNING during discovery
+  writeProgress(0, 1, startTime, null);
+
   try {
     log("--- Starting Sitemap Discovery Phase ---");
     const urlsSet = new Set();
