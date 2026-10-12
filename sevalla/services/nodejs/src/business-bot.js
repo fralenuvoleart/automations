@@ -14,7 +14,8 @@
  *      collected.
  *   3. When the window closes, one webhook is sent to Integrately with all
  *      collected messages, the PIN reference ID, name, username, language,
- *      lead source and a Telegram link.
+ *      lead source ("Internet" when a PIN is found, otherwise empty) and a
+ *      Telegram link.
  *   4. Further messages from the same customer do not trigger a new reply or
  *      lead for LEAD_COOLDOWN_HOURS (default 24 h).
  *
@@ -244,7 +245,7 @@ function attachBusinessHandlers(bot, opts = {}) {
     const refMatch = combined.match(REF_REGEX);
     const payload = {
       source: 'telegram_business',
-      lead_source: refMatch ? 'Internet' : 'Direct',
+      lead_source: refMatch ? 'Internet' : '',
       reference_id: refMatch ? refMatch[1].toUpperCase() : '',
       reference_full: refMatch ? refMatch[0] : '',
       telegram_user_id: s.from.id,
@@ -264,7 +265,7 @@ function attachBusinessHandlers(bot, opts = {}) {
     };
 
     const ok = await postWebhook(webhookUrl, payload, log);
-    log.info(`[business] lead chat=${chatId} msgs=${s.messages.length} source=${payload.lead_source} ref=${payload.reference_id || '-'} webhook=${ok}`);
+    log.info(`[business] lead chat=${chatId} msgs=${s.messages.length} source=${payload.lead_source || '-'} ref=${payload.reference_id || '-'} webhook=${ok}`);
   }
 
   bot.on('business_connection', (ctx) => {
