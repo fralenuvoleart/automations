@@ -7,12 +7,13 @@
  * Telegram Business > Chat Automation and is never visible to them.
  *
  * Per new conversation:
- *   1. On the customer's first message the auto reply is sent immediately
- *      from the business account (working hours or after hours text,
- *      Russian for Russian speakers, English for everyone else).
- *   2. Every customer message in the collection window (default 60 s) is
+ *   1. Every customer message in the collection window (default 60 s) is
  *      collected.
- *   3. When the window closes, one webhook is sent to Integrately with all
+ *   2. When the window closes, the auto reply is sent from the business
+ *      account, only if nobody from the team has replied in the meantime
+ *      (working hours or after hours text, Russian for Russian speakers,
+ *      English for everyone else).
+ *   3. One webhook is sent to Integrately with all
  *      collected messages, the PIN reference ID, name, username, language,
  *      lead source ("Internet" when a PIN is found, otherwise empty) and a
  *      Telegram link.
@@ -26,8 +27,8 @@
  *   INTEGRATELY_BUSINESS_WEBHOOK_URL  webhook of the Integrately flow (required)
  *   BUSINESS_WINDOW_MS                collection window, default 60000
  *   LEAD_COOLDOWN_HOURS               default 24
- *   BUSINESS_HOURS                    optional, e.g. "Mon-Fri 10:00-19:00; Sat 10:00-14:00"
- *                                     empty = always use the working hours text
+ *   BUSINESS_HOURS                    default "Mon-Fri 10:00-18:00",
+ *                                     e.g. "Mon-Fri 10:00-19:00; Sat 10:00-14:00"
  *   BUSINESS_TIMEZONE                 default Asia/Tbilisi
  *   MSG_AUTOREPLY / MSG_AUTOREPLY_RU  optional overrides of the texts
  *   MSG_AUTOREPLY_AFTER_HOURS / MSG_AUTOREPLY_AFTER_HOURS_RU
@@ -161,7 +162,8 @@ function attachBusinessHandlers(bot, opts = {}) {
   const windowMs = parseInt(env.BUSINESS_WINDOW_MS || '60000', 10);
   const cooldownMs = parseFloat(env.LEAD_COOLDOWN_HOURS || '24') * 3600 * 1000;
   const timeZone = env.BUSINESS_TIMEZONE || 'Asia/Tbilisi';
-  const hours = parseBusinessHours(env.BUSINESS_HOURS);
+  const hoursSpec = env.BUSINESS_HOURS || 'Mon-Fri 10:00-18:00';
+  const hours = parseBusinessHours(hoursSpec);
   const testIds = String(env.BUSINESS_TEST_CHAT_IDS || '')
     .split(',')
     .map((s) => s.trim())
@@ -171,7 +173,7 @@ function attachBusinessHandlers(bot, opts = {}) {
     log.warn('[business] INTEGRATELY_BUSINESS_WEBHOOK_URL not set, business lead capture disabled');
     return;
   }
-  if (env.BUSINESS_HOURS && !hours.length) {
+  if (!hours.length) {
     log.warn('[business] BUSINESS_HOURS could not be parsed, working hours text is always used');
   }
 
@@ -235,10 +237,12 @@ function attachBusinessHandlers(bot, opts = {}) {
     }
   }
 
-  async function closeWindow(chatId) {
+  async function closeWindow(telegram, chatId) {
     const s = sessions.get(chatId);
     if (!s) return;
     sessions.delete(chatId);
+
+    if (!s.teamReplied) await sendAutoReply(telegram, chatId, s);
 
     const combined = s.messages.join('\n');
     const lang = detectLanguage(combined, s.from.language_code);
@@ -315,10 +319,8 @@ function attachBusinessHandlers(bot, opts = {}) {
     sessions.set(chatId, s);
 
     setTimeout(() => {
-      closeWindow(chatId).catch((e) => log.error('[business] ' + e.message));
+      closeWindow(ctx.telegram, chatId).catch((e) => log.error('[business] ' + e.message));
     }, windowMs);
-
-    await sendAutoReply(ctx.telegram, chatId, s);
   });
 
   // Clean up the cooldown map once an hour.
@@ -328,7 +330,7 @@ function attachBusinessHandlers(bot, opts = {}) {
   }, 3600 * 1000).unref();
 
   log.info(
-    `[business] lead capture ready (window ${windowMs} ms, cooldown ${cooldownMs / 3600000} h, hours ${hours.length ? env.BUSINESS_HOURS + ' ' + timeZone : 'not set'}${testIds.length ? ', TEST MODE' : ''})`
+    `[business] lead capture ready (window ${windowMs} ms, cooldown ${cooldownMs / 3600000} h, hours ${hours.length ? hoursSpec + ' ' + timeZone : 'not set'}${testIds.length ? ', TEST MODE' : ''})`
   );
 }
 
