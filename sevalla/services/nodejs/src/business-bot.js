@@ -7,8 +7,8 @@
  * Telegram Business > Chat Automation and is never visible to them.
  *
  * Per new conversation:
- *   1. Every customer message in the collection window (default 60 s) is
- *      collected.
+ *   1. Every customer message is collected until the customer has been
+ *      quiet for BUSINESS_WINDOW_MS (default 45 s after the last message).
  *   2. When the window closes, the auto reply is sent from the business
  *      account, only if nobody from the team has replied in the meantime
  *      (working hours or after hours text, Russian for Russian speakers,
@@ -25,7 +25,8 @@
  *
  * Environment:
  *   INTEGRATELY_BUSINESS_WEBHOOK_URL  webhook of the Integrately flow (required)
- *   BUSINESS_WINDOW_MS                collection window, default 60000
+ *   BUSINESS_WINDOW_MS                wait after the last message, default 45000
+ *   BUSINESS_MAX_WINDOW_MS            max wait after the first message, default 180000
  *   LEAD_COOLDOWN_HOURS               default 24
  *   BUSINESS_HOURS                    default "Mon-Fri 10:00-18:00",
  *                                     e.g. "Mon-Fri 10:00-19:00; Sat 10:00-14:00"
@@ -159,7 +160,8 @@ function attachBusinessHandlers(bot, opts = {}) {
   const log = opts.logger || console;
   const env = process.env;
   const webhookUrl = env.INTEGRATELY_BUSINESS_WEBHOOK_URL;
-  const windowMs = parseInt(env.BUSINESS_WINDOW_MS || '60000', 10);
+  const windowMs = parseInt(env.BUSINESS_WINDOW_MS || '45000', 10);
+  const maxWindowMs = parseInt(env.BUSINESS_MAX_WINDOW_MS || '180000', 10);
   const cooldownMs = parseFloat(env.LEAD_COOLDOWN_HOURS || '24') * 3600 * 1000;
   const timeZone = env.BUSINESS_TIMEZONE || 'Asia/Tbilisi';
   const hoursSpec = env.BUSINESS_HOURS || 'Mon-Fri 10:00-18:00';
@@ -297,9 +299,20 @@ function attachBusinessHandlers(bot, opts = {}) {
     }
 
     // Customer message.
+    // The reply is sent windowMs after the customer's LAST message
+    // (never later than maxWindowMs after the first one).
+    const schedule = (sess) => {
+      clearTimeout(sess.timer);
+      const wait = Math.max(0, Math.min(windowMs, sess.firstAt + maxWindowMs - Date.now()));
+      sess.timer = setTimeout(() => {
+        closeWindow(ctx.telegram, chatId).catch((e) => log.error('[business] ' + e.message));
+      }, wait);
+    };
+
     let s = sessions.get(chatId);
     if (s) {
       s.messages.push(messageText(msg));
+      schedule(s);
       return;
     }
 
@@ -317,10 +330,7 @@ function attachBusinessHandlers(bot, opts = {}) {
       afterHours: false,
     };
     sessions.set(chatId, s);
-
-    setTimeout(() => {
-      closeWindow(ctx.telegram, chatId).catch((e) => log.error('[business] ' + e.message));
-    }, windowMs);
+    schedule(s);
   });
 
   // Clean up the cooldown map once an hour.
