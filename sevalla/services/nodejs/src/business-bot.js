@@ -28,6 +28,8 @@
  *   BUSINESS_WINDOW_MS                wait after the last message, default 45000
  *   BUSINESS_MAX_WINDOW_MS            max wait after the first message, default 180000
  *   LEAD_COOLDOWN_HOURS               default 24
+ *   BUSINESS_NO_COOLDOWN_IDS          team Telegram IDs without cooldown (testing),
+ *                                     default "636546162,7521179737" (Rati, Francesco)
  *   BUSINESS_HOURS                    default "Mon-Fri 10:00-18:00",
  *                                     e.g. "Mon-Fri 10:00-19:00; Sat 10:00-14:00"
  *   BUSINESS_TIMEZONE                 default Asia/Tbilisi
@@ -170,6 +172,13 @@ function attachBusinessHandlers(bot, opts = {}) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  // Team accounts that are never blocked by the cooldown (for testing).
+  const noCooldownIds = new Set(
+    String(env.BUSINESS_NO_COOLDOWN_IDS || '636546162,7521179737')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
 
   if (!webhookUrl) {
     log.warn('[business] INTEGRATELY_BUSINESS_WEBHOOK_URL not set, business lead capture disabled');
@@ -317,7 +326,7 @@ function attachBusinessHandlers(bot, opts = {}) {
     }
 
     const last = recent.get(chatId);
-    if (last && Date.now() - last < cooldownMs) return;
+    if (last && Date.now() - last < cooldownMs && !noCooldownIds.has(String(chatId))) return;
     recent.set(chatId, Date.now());
 
     s = {
