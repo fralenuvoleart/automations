@@ -103,6 +103,14 @@ window and that it represents the Nginx page-cache subset. If the window is <6h 
 dashboard number: cite both, explain the gap (time window + scope), and identify the dashboard as
 the authoritative full-day metric.
 
+### D17 — Cache Root Cause Analysis: Keep It Short
+
+Cache Root Cause Analysis is a findings section, not a tutorial. When cache is healthy (HIT rate above target), use ONE paragraph stating the HIT percentage, the window, and a one-sentence Edge Caching confirmation from the probe. Do not include a full table of HIT/MISS/BYPASS breakdowns, paragraph-long assessment narratives, separate Edge Caching verification subsections, or response-time comparisons. The Cache Root Cause card is the analyst's verdict, not a reprint of data tables already present elsewhere.
+
+**Correct (healthy cache):** `"#### ✅ Cache HIT at 83% (691/833, 7h7min evening/overnight window) — well above the >50% target. Edge Caching confirmed active: 11 of 14 baseline probe URLs returned x-kinsta-cache: HIT with ki-cache-type: Edge, ages ≈19.5h. No changes needed."`
+
+**Correct (unhealthy cache):** One paragraph stating the below-target rate, then 2-3 bullet points identifying specific root causes with probe evidence and KB citations. Still not a full data table.
+
 ### D15 — Tone Calibration
 
 Avoid both extremes, every time. This has been a repeated failure mode in both directions and must be checked explicitly before finalizing any Overall Assessment, At a Glance status line, or card verdict:

@@ -155,6 +155,24 @@ Platform behaviors confirmed through direct Kinsta support interactions, not ful
 - **Source:** User confirmation, 2026-09-07.
 - **Skill impact:** When analyzing ClaudeBot traffic in future reports, note that the 10-second crawl-delay is in effect. If ClaudeBot volume still appears high, verify the directive is present in the live robots.txt (probe it) before recommending further action — the delay may need time to take effect, or the bot may be mid-crawl when the directive was added.
 
+### robots.txt Bot Rules — Semrush, SiteAudit, ClaudeBot Allowed with Crawl-delay; Ahrefs, MJ12bot Disallowed
+- **Fact:** The following robots.txt rules are in effect on pbservices.ge:
+  ```
+  User-agent: SemrushBot
+  User-agent: SiteAuditBot
+  User-agent: ClaudeBot
+  Allow: /
+  Crawl-delay: 10
+
+  User-agent: AhrefsBot
+  User-agent: AhrefsSiteAudit
+  User-agent: MJ12bot
+  Disallow: /
+  ```
+  SemrushBot and SiteAuditBot are allowed but throttled at Crawl-delay: 10. AhrefsBot, AhrefsSiteAudit, and MJ12bot are fully blocked — any appearance in logs would indicate spoofing.
+- **Source:** User confirmation, 2026-10-15.
+- **Skill impact:** When analyzing bot traffic: (a) SemrushBot should appear in logs but at moderate volume (throttled). Do not recommend additional throttling for SemrushBot — Crawl-delay is already in place. (b) AhrefsBot and MJ12bot should NOT appear in access logs at all — if they do, it indicates User-Agent spoofing since robots.txt already blocks them. (c) ClaudeBot already covered by separate entry above.
+
 
 ## 🌐 Cloudflare & DNS
 

@@ -4,8 +4,8 @@
     "ru": "Добро пожаловать в PB Services! 👋\nНапишите ваше сообщение ниже, чтобы связаться с нашей поддержкой."
   },
   "autoreply": {
-    "default": "Hi {name}, thank you for reaching out to us! 🟢\nPlease note that October 14 is a non-working day. Feel free to leave your message here, and we’ll get back to you on the next business day.",
-    "ru": "Здравствуйте, {name}! Спасибо, что обратились к нам! 🟢\n14 октября — нерабочий день. Пожалуйста, оставьте Ваше сообщение здесь, и мы обязательно свяжемся с Вами в ближайший рабочий день."
+    "default": "Hi {name}, thank you for reaching out to us! 🟢\nWe've received your message, and one of our team members will contact you shortly.",
+    "ru": "Здравствуйте, {name}! Спасибо, что обратились к нам! 🟢\nМы получили ваше сообщение, и один из наших специалистов свяжется с вами в ближайшее время."
   },
   "autoreply_after_hours": {
     "default": "Welcome! 🟢\n\nWe're currently outside of our office hours (Mon–Fri, 10:00–18:00 Tbilisi time).\nFeel free to leave your message below, and our team will follow up with you as soon as business hours resume.\n\nThanks for reaching out!",
