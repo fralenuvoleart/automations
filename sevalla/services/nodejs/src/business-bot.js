@@ -25,6 +25,11 @@
  *
  * Environment:
  *   INTEGRATELY_BUSINESS_WEBHOOK_URL  webhook of the Integrately flow (required)
+ *   RESPOND_CUSTOM_CHANNEL_ID         optional, respond.io Custom Channel ID
+ *   RESPOND_CUSTOM_CHANNEL_TOKEN      optional, respond.io Custom Channel API token
+ *                                     when both are set, every customer message is
+ *                                     also posted to respond.io as an incoming message
+ *   RESPOND_CUSTOM_CHANNEL_URL        default https://webhook.respond.io/custom/channel/webhook/
  *   BUSINESS_WINDOW_MS                wait after the last message, default 45000
  *   BUSINESS_MAX_WINDOW_MS            max wait after the first message, default 180000
  *   LEAD_COOLDOWN_HOURS               default 24
@@ -135,6 +140,42 @@ function telegramLink(user) {
   return user.id ? 'tg://user?id=' + user.id : '';
 }
 
+/**
+ * Post one customer message to a respond.io Custom Channel as an incoming
+ * message, so the conversation shows the real message at the top of the inbox.
+ * The contact is identified by the Telegram user ID (Custom ID).
+ */
+async function pushToRespond(cfg, from, msg, text, log) {
+  if (!cfg.channelId || !cfg.token || !from || !from.id) return;
+  const body = {
+    channelId: cfg.channelId,
+    contactId: String(from.id),
+    events: [
+      {
+        type: 'message',
+        mId: ('tg' + msg.chat.id + '_' + msg.message_id).slice(0, 50),
+        timestamp: (msg.date ? msg.date * 1000 : Date.now()),
+        message: { type: 'text', text: String(text).slice(0, 7000) },
+      },
+    ],
+    contact: {
+      firstName: from.first_name || '',
+      lastName: from.last_name || '',
+      language: from.language_code || '',
+    },
+  };
+  try {
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) log.warn('[respond] HTTP ' + res.status + ' for contact ' + from.id);
+  } catch (err) {
+    log.warn('[respond] error for contact ' + from.id + ': ' + err.message);
+  }
+}
+
 async function postWebhook(url, payload, log, attempts = 3) {
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -172,6 +213,11 @@ function attachBusinessHandlers(bot, opts = {}) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  const respondCfg = {
+    url: env.RESPOND_CUSTOM_CHANNEL_URL || 'https://webhook.respond.io/custom/channel/webhook/',
+    channelId: env.RESPOND_CUSTOM_CHANNEL_ID || '',
+    token: env.RESPOND_CUSTOM_CHANNEL_TOKEN || '',
+  };
   // Team accounts that are never blocked by the cooldown (for testing).
   const noCooldownIds = new Set(
     String(env.BUSINESS_NO_COOLDOWN_IDS || '636546162,7521179737')
@@ -307,6 +353,9 @@ function attachBusinessHandlers(bot, opts = {}) {
       return;
     }
 
+    // Customer message: mirror it to respond.io (if configured).
+    pushToRespond(respondCfg, msg.from, msg, messageText(msg), log);
+
     // Customer message.
     // The reply is sent windowMs after the customer's LAST message
     // (never later than maxWindowMs after the first one).
@@ -349,7 +398,7 @@ function attachBusinessHandlers(bot, opts = {}) {
   }, 3600 * 1000).unref();
 
   log.info(
-    `[business] lead capture ready (window ${windowMs} ms, cooldown ${cooldownMs / 3600000} h, hours ${hours.length ? hoursSpec + ' ' + timeZone : 'not set'}${testIds.length ? ', TEST MODE' : ''})`
+    `[business] lead capture ready (window ${windowMs} ms, cooldown ${cooldownMs / 3600000} h, hours ${hours.length ? hoursSpec + ' ' + timeZone : 'not set'}${respondCfg.channelId && respondCfg.token ? ', respond.io ON' : ''}${testIds.length ? ', TEST MODE' : ''})`
   );
 }
 
