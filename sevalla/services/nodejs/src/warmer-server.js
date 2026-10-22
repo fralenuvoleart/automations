@@ -104,6 +104,28 @@ function createServer() {
       });
     }
 
+    // ── POST /respond/outgoing (replies written in respond.io → Telegram) ──
+    if (req.method === "POST" && url.pathname === "/respond/outgoing") {
+      const expected = process.env.RESPOND_CUSTOM_CHANNEL_TOKEN;
+      const auth = String(req.headers.authorization || "");
+      if (!expected || auth !== "Bearer " + expected) {
+        return jsonResponse(res, 401, { error: "Unauthorized" });
+      }
+      let raw = "";
+      req.on("data", (c) => { raw += c; if (raw.length > 1e6) req.destroy(); });
+      req.on("end", async () => {
+        try {
+          const body = JSON.parse(raw || "{}");
+          const mId = await require("./business-bot").sendFromRespond(body.contactId, body.message);
+          jsonResponse(res, 200, { mId });
+        } catch (err) {
+          console.error("[respond] outgoing failed:", err.message);
+          jsonResponse(res, 400, { error: err.message });
+        }
+      });
+      return;
+    }
+
     // ── 404 ──
     jsonResponse(res, 404, { error: "Not found" });
   });
