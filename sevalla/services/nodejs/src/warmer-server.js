@@ -104,6 +104,11 @@ function createServer() {
       });
     }
 
+    // ── GET /respond/outgoing (health check, e.g. when opened in a browser) ──
+    if (req.method === "GET" && url.pathname === "/respond/outgoing") {
+      return jsonResponse(res, 200, { status: "ok", accepts: "POST from respond.io" });
+    }
+
     // ── POST /respond/outgoing (replies written in respond.io → Telegram) ──
     if (req.method === "POST" && url.pathname === "/respond/outgoing") {
       const expected = process.env.RESPOND_CUSTOM_CHANNEL_TOKEN;
