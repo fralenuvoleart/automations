@@ -30,6 +30,9 @@
  *                                     when both are set, every customer message is
  *                                     also posted to respond.io as an incoming message
  *   RESPOND_CUSTOM_CHANNEL_URL        default https://webhook.respond.io/custom/channel/webhook/
+ *   BUSINESS_CONNECTION_ID            optional, business connection id used for replies sent
+ *                                     from respond.io right after a redeploy (it is also
+ *                                     saved to business-connection.json once seen)
  *   RESPOND_API_TOKEN                 optional, respond.io Developer API token: adds the
  *                                     "Telegram" tag and the telegram / contact_details fields
  *   BUSINESS_WINDOW_MS                wait after the last message, default 45000
@@ -182,6 +185,25 @@ async function pushToRespond(cfg, from, msg, text, log, type = 'message') {
 // State used to send replies written in respond.io back to Telegram.
 const outbound = { telegram: null, connectionId: null, log: console };
 
+// Keep the business connection id across restarts, so replies from respond.io
+// work before the next customer message arrives.
+const CONNECTION_FILE = require('path').join(process.cwd(), 'business-connection.json');
+try {
+  outbound.connectionId = JSON.parse(require('fs').readFileSync(CONNECTION_FILE, 'utf8')).id || null;
+} catch (_) { /* no saved id yet */ }
+if (!outbound.connectionId && process.env.BUSINESS_CONNECTION_ID) outbound.connectionId = process.env.BUSINESS_CONNECTION_ID;
+
+function setOutboundConnection(id) {
+  if (!id || id === outbound.connectionId) return;
+  outbound.connectionId = id;
+  outbound.log.info('[respond] business connection for replies: ' + id);
+  try {
+    require('fs').writeFileSync(CONNECTION_FILE, JSON.stringify({ id }));
+  } catch (err) {
+    outbound.log.warn('[respond] could not save business connection: ' + err.message);
+  }
+}
+
 async function respondApi(cfg, method, path, body, log) {
   const res = await fetch('https://api.respond.io/v2' + path, {
     method,
@@ -331,6 +353,7 @@ function attachBusinessHandlers(bot, opts = {}) {
       conn.can_reply === true ||
       (conn.rights && conn.rights.can_reply === true);
     connections.set(conn.id, { ownerId: conn.user && conn.user.id, canReply, enabled: conn.is_enabled !== false });
+    if (conn.is_enabled !== false && canReply) setOutboundConnection(conn.id);
     log.info(`[business] connection ${conn.id} enabled=${conn.is_enabled !== false} canReply=${canReply}`);
   }
 
@@ -408,7 +431,7 @@ function attachBusinessHandlers(bot, opts = {}) {
 
     const chatId = msg.chat.id;
     const connectionId = msg.business_connection_id;
-    if (connectionId) outbound.connectionId = connectionId;
+    if (connectionId) setOutboundConnection(connectionId);
 
     if (testIds.length && !testIds.includes(String(chatId))) return;
 
