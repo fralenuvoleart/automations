@@ -1,11 +1,11 @@
 {
   "welcome": {
-    "default": "Welcome to PB Services! 👋\nSend your message below to connect with our support team.",
-    "ru": "Добро пожаловать в PB Services! 👋\nНапишите ваше сообщение ниже, чтобы связаться с нашей поддержкой."
+    "default": "",
+    "ru": ""
   },
   "autoreply": {
-    "default": "Hi {name}, thank you for reaching out to us! 🟢\nWe've received your message, and one of our team members will contact you shortly.",
-    "ru": "Здравствуйте, {name}! Спасибо, что обратились к нам! 🟢\nМы получили ваше сообщение, и один из наших специалистов свяжется с вами в ближайшее время."
+    "default": "Hi {name}, thank you for reaching out to us! 🟢\n\nWe've received your message, and one of our team members will contact you shortly.",
+    "ru": "Здравствуйте, {name}! Спасибо, что обратились к нам! 🟢\n\nМы получили ваше сообщение, и один из наших специалистов свяжется с вами в ближайшее время."
   },
   "autoreply_after_hours": {
     "default": "Welcome! 🟢\n\nWe're currently outside of our office hours (Mon–Fri, 10:00–18:00 Tbilisi time).\nFeel free to leave your message below, and our team will follow up with you as soon as business hours resume.\n\nThanks for reaching out!",
