@@ -30,6 +30,8 @@
  *                                     when both are set, every customer message is
  *                                     also posted to respond.io as an incoming message
  *   RESPOND_CUSTOM_CHANNEL_URL        default https://webhook.respond.io/custom/channel/webhook/
+ *   RESPOND_API_TOKEN                 optional, respond.io Developer API token: adds the
+ *                                     "Telegram" tag and the telegram / contact_details fields
  *   BUSINESS_WINDOW_MS                wait after the last message, default 45000
  *   BUSINESS_MAX_WINDOW_MS            max wait after the first message, default 180000
  *   LEAD_COOLDOWN_HOURS               default 24
@@ -145,23 +147,24 @@ function telegramLink(user) {
  * message, so the conversation shows the real message at the top of the inbox.
  * The contact is identified by the Telegram user ID (Custom ID).
  */
-async function pushToRespond(cfg, from, msg, text, log) {
+async function pushToRespond(cfg, from, msg, text, log, type = 'message') {
   if (!cfg.channelId || !cfg.token || !from || !from.id) return;
   const body = {
     channelId: cfg.channelId,
     contactId: String(from.id),
     events: [
       {
-        type: 'message',
+        type,
         mId: ('tg' + msg.chat.id + '_' + msg.message_id).slice(0, 50),
         timestamp: (msg.date ? msg.date * 1000 : Date.now()),
         message: { type: 'text', text: String(text).slice(0, 7000) },
       },
     ],
-    contact: {
+    contact: type !== 'message' ? undefined : {
       firstName: from.first_name || '',
       lastName: from.last_name || '',
       language: from.language_code || '',
+      email: from.id + '@noemail.com',
     },
   };
   try {
@@ -174,6 +177,69 @@ async function pushToRespond(cfg, from, msg, text, log) {
   } catch (err) {
     log.warn('[respond] error for contact ' + from.id + ': ' + err.message);
   }
+}
+
+// State used to send replies written in respond.io back to Telegram.
+const outbound = { telegram: null, connectionId: null, log: console };
+
+async function respondApi(cfg, method, path, body, log) {
+  const res = await fetch('https://api.respond.io/v2' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + cfg.apiToken },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) log.warn('[respond] API ' + method + ' ' + path + ' HTTP ' + res.status);
+  return res.ok;
+}
+
+/**
+ * Add the "Telegram" tag and the telegram / contact_details fields to the
+ * respond.io contact (identified by ID@noemail.com). Runs once per contact.
+ */
+const enriched = new Set();
+async function enrichRespondContact(cfg, from, log) {
+  if (!cfg.apiToken || !from || !from.id || enriched.has(from.id)) return;
+  enriched.add(from.id);
+  const id = 'email:' + from.id + '@noemail.com';
+  const body = {
+    firstName: from.first_name || String(from.id),
+    lastName: from.last_name || '',
+    custom_fields: [
+      { name: 'telegram', value: from.username ? '@' + from.username : '' },
+      { name: 'contact_details', value: telegramLink(from) },
+    ],
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    for (const delay of [5000, 15000]) {
+      await wait(delay); // give respond.io time to create the contact
+      const ok = await respondApi(cfg, 'PUT', '/contact/' + id, body, log);
+      if (ok) {
+        await respondApi(cfg, 'POST', '/contact/' + id + '/tag', ['Telegram'], log);
+        return;
+      }
+    }
+    enriched.delete(from.id);
+  } catch (err) {
+    enriched.delete(from.id);
+    log.warn('[respond] enrich error for contact ' + from.id + ': ' + err.message);
+  }
+}
+
+/**
+ * Send a reply written in respond.io to the customer, from the business
+ * account. Called by the HTTP server (POST /respond/outgoing).
+ * Returns the Telegram message id.
+ */
+async function sendFromRespond(contactId, message) {
+  if (!outbound.telegram || !outbound.connectionId) throw new Error('business connection not ready');
+  let text = '';
+  if (message && message.type === 'text') text = message.text || '';
+  else if (message && message.type === 'attachment' && message.attachment) text = message.attachment.url || '';
+  else if (message && message.text) text = message.text;
+  if (!text) throw new Error('unsupported message type');
+  const sent = await outbound.telegram.sendMessage(contactId, text, { business_connection_id: outbound.connectionId });
+  return 'tg' + contactId + '_' + sent.message_id;
 }
 
 async function postWebhook(url, payload, log, attempts = 3) {
@@ -217,7 +283,10 @@ function attachBusinessHandlers(bot, opts = {}) {
     url: env.RESPOND_CUSTOM_CHANNEL_URL || 'https://webhook.respond.io/custom/channel/webhook/',
     channelId: env.RESPOND_CUSTOM_CHANNEL_ID || '',
     token: env.RESPOND_CUSTOM_CHANNEL_TOKEN || '',
+    apiToken: env.RESPOND_API_TOKEN || '',
   };
+  outbound.telegram = bot.telegram;
+  outbound.log = log;
   // Team accounts that are never blocked by the cooldown (for testing).
   const noCooldownIds = new Set(
     String(env.BUSINESS_NO_COOLDOWN_IDS || '636546162,7521179737')
@@ -339,6 +408,7 @@ function attachBusinessHandlers(bot, opts = {}) {
 
     const chatId = msg.chat.id;
     const connectionId = msg.business_connection_id;
+    if (connectionId) outbound.connectionId = connectionId;
 
     if (testIds.length && !testIds.includes(String(chatId))) return;
 
@@ -348,6 +418,8 @@ function attachBusinessHandlers(bot, opts = {}) {
 
     // A message written by the team in this chat.
     if (fromOwner) {
+      // Mirror replies written in the Telegram app (not those sent from respond.io).
+      if (!msg.sender_business_bot) pushToRespond(respondCfg, { id: chatId }, msg, messageText(msg), log, 'message_echo');
       const s = sessions.get(chatId);
       if (s) s.teamReplied = true;
       return;
@@ -355,6 +427,7 @@ function attachBusinessHandlers(bot, opts = {}) {
 
     // Customer message: mirror it to respond.io (if configured).
     pushToRespond(respondCfg, msg.from, msg, messageText(msg), log);
+    enrichRespondContact(respondCfg, msg.from, log);
 
     // Customer message.
     // The reply is sent windowMs after the customer's LAST message
@@ -419,6 +492,7 @@ const ALLOWED_UPDATES = [
 ];
 
 module.exports = {
+  sendFromRespond,
   attachBusinessHandlers,
   detectLanguage,
   parseBusinessHours,
