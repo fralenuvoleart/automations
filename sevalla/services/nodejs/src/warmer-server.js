@@ -21,6 +21,9 @@ function readJSON(filepath) {
   return null;
 }
 
+// respond.io posts replies to <Webhook URL for Outgoing message>/message
+const OUTGOING_PATH = /^\/respond\/outgoing(\/message)?\/?$/;
+
 function createServer() {
   return http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -105,12 +108,12 @@ function createServer() {
     }
 
     // ── GET /respond/outgoing (health check, e.g. when opened in a browser) ──
-    if (req.method === "GET" && url.pathname === "/respond/outgoing") {
+    if (req.method === "GET" && OUTGOING_PATH.test(url.pathname)) {
       return jsonResponse(res, 200, { status: "ok", accepts: "POST from respond.io" });
     }
 
     // ── POST /respond/outgoing (replies written in respond.io → Telegram) ──
-    if (req.method === "POST" && url.pathname === "/respond/outgoing") {
+    if (req.method === "POST" && OUTGOING_PATH.test(url.pathname)) {
       const expected = process.env.RESPOND_CUSTOM_CHANNEL_TOKEN;
       const auth = String(req.headers.authorization || "");
       if (!expected || auth !== "Bearer " + expected) {
