@@ -55,7 +55,9 @@ def main():
         sys.exit(1)
 
     # --- Inject New Data Tables into Part 2 ---
-    injection_point = "## Live Probe Cross-Match"
+    # Match the heading emoji-independently (skeleton uses "## 🔬 Live Probe Cross-Match")
+    _inj = re.search(r"^## .*Live Probe Cross-Match$", report, re.M)
+    injection_point = _inj.group(0) if _inj else None
     new_tables = []
 
     access_data = context.get("access_data") or {}
@@ -96,7 +98,7 @@ def main():
             new_tables.append(f"| {a['org']} | **{a['total_requests']}** | {a['unique_ips']} | {a['avg_requests_per_ip']:.1f} |")
         new_tables.append("")
 
-    if new_tables:
+    if new_tables and injection_point:
         report = report.replace(injection_point, "\n".join(new_tables) + "\n" + injection_point)
 
     # --- Render Error Tables from LLM's Structured Evaluation ---
