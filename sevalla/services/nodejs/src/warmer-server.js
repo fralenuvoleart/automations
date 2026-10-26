@@ -134,6 +134,9 @@ function createServer() {
       return;
     }
 
+    // ── Real user monitoring: /rum.js, /rum, /rum/summary ──
+    if (require("./rum").handle(req, res, url)) return;
+
     // ── 404 ──
     jsonResponse(res, 404, { error: "Not found" });
   });
