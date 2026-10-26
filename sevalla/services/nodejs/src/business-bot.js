@@ -25,6 +25,8 @@
  *
  * Environment:
  *   INTEGRATELY_BUSINESS_WEBHOOK_URL  webhook of the Integrately flow (required)
+ *                                     if it fails, the lead is saved to lead-queue.json and
+ *                                     retried for up to 48 h (folder: DATA_DIR, default app folder)
  *   RESPOND_CUSTOM_CHANNEL_ID         optional, respond.io Custom Channel ID
  *   RESPOND_CUSTOM_CHANNEL_TOKEN      optional, respond.io Custom Channel API token
  *                                     when both are set, every customer message is
@@ -264,6 +266,64 @@ async function sendFromRespond(contactId, message) {
   return 'tg' + contactId + '_' + sent.message_id;
 }
 
+// ── Lead retry queue ──
+// Leads that Integrately could not accept (down, paused, network error) are
+// kept in a file and retried with growing delays, so no lead is lost.
+const LEAD_QUEUE_FILE = require('path').join(process.env.DATA_DIR || require('path').join(__dirname, '..'), 'lead-queue.json');
+const LEAD_QUEUE_MAX_AGE_MS = 48 * 3600 * 1000;
+let leadQueue = [];
+try {
+  leadQueue = JSON.parse(require('fs').readFileSync(LEAD_QUEUE_FILE, 'utf8')) || [];
+} catch (_) { /* empty queue */ }
+
+function saveLeadQueue(log) {
+  try {
+    require('fs').writeFileSync(LEAD_QUEUE_FILE, JSON.stringify(leadQueue));
+  } catch (err) {
+    log.warn('[business] could not save lead queue: ' + err.message);
+  }
+}
+
+function leadLabel(p) {
+  return (p.full_name || '-') + ' ' + (p.telegram_link || p.telegram_user_id || '');
+}
+
+async function deliverLead(url, payload, log) {
+  const ok = await postWebhook(url, payload, log);
+  if (!ok) {
+    leadQueue.push({ payload, tries: 0, firstAt: Date.now(), nextAt: Date.now() + 60 * 1000 });
+    saveLeadQueue(log);
+    log.warn('[business] lead queued for retry: ' + leadLabel(payload) + ' (queue ' + leadQueue.length + ')');
+  }
+  return ok;
+}
+
+let queueBusy = false;
+async function processLeadQueue(url, log) {
+  if (queueBusy || !leadQueue.length) return;
+  queueBusy = true;
+  try {
+    const now = Date.now();
+    for (const item of [...leadQueue]) {
+      if (item.nextAt > now) continue;
+      const ok = await postWebhook(url, item.payload, log, 1);
+      if (ok) {
+        leadQueue = leadQueue.filter((x) => x !== item);
+        log.info('[business] queued lead delivered: ' + leadLabel(item.payload) + ' after ' + (item.tries + 1) + ' retries');
+      } else if (now - item.firstAt > LEAD_QUEUE_MAX_AGE_MS) {
+        leadQueue = leadQueue.filter((x) => x !== item);
+        log.error('[business] LEAD LOST after 48 h of retries: ' + leadLabel(item.payload) + ' ' + JSON.stringify(item.payload).slice(0, 500));
+      } else {
+        item.tries++;
+        item.nextAt = now + Math.min(60 * 1000 * Math.pow(2, item.tries), 30 * 60 * 1000);
+      }
+    }
+    saveLeadQueue(log);
+  } finally {
+    queueBusy = false;
+  }
+}
+
 async function postWebhook(url, payload, log, attempts = 3) {
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -277,7 +337,7 @@ async function postWebhook(url, payload, log, attempts = 3) {
     } catch (err) {
       log.warn(`[business] webhook error (attempt ${i}): ${err.message}`);
     }
-    await new Promise((r) => setTimeout(r, 2000 * i));
+    if (i < attempts) await new Promise((r) => setTimeout(r, 2000 * i));
   }
   log.error('[business] webhook failed after retries');
   return false;
@@ -321,6 +381,8 @@ function attachBusinessHandlers(bot, opts = {}) {
     log.warn('[business] INTEGRATELY_BUSINESS_WEBHOOK_URL not set, business lead capture disabled');
     return;
   }
+  if (leadQueue.length) log.warn('[business] ' + leadQueue.length + ' queued lead(s) waiting for delivery');
+  setInterval(() => processLeadQueue(webhookUrl, log).catch((e) => log.error('[business] queue: ' + e.message)), 60 * 1000).unref();
   if (!hours.length) {
     log.warn('[business] BUSINESS_HOURS could not be parsed, working hours text is always used');
   }
@@ -417,7 +479,7 @@ function attachBusinessHandlers(bot, opts = {}) {
       after_hours: !!s.afterHours,
     };
 
-    const ok = await postWebhook(webhookUrl, payload, log);
+    const ok = await deliverLead(webhookUrl, payload, log);
     log.info(`[business] lead chat=${chatId} msgs=${s.messages.length} source=${payload.lead_source || '-'} ref=${payload.reference_id || '-'} webhook=${ok}`);
   }
 
