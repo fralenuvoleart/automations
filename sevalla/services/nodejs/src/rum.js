@@ -64,6 +64,16 @@ const CLIENT_JS = `(function () {
 
     var loggedIn = function () { return document.body && document.body.classList.contains('logged-in'); };
 
+    // Which known cookies the visitor has (names only, never values), to find
+    // the cookie that makes some visits skip the cache. Read as early as possible.
+    var CK = { pll: /^pll_language$/, wpml: /wpml/i, wsf: /^ws_form_/, ch: /^_channel_/, ym: /^_ym_/, ga: /^_ga/, gcl: /^_gcl_/,
+      cmt: /^comment_author/, pass: /^wp-postpass/, wps: /^wp-settings/, test: /^wordpress_test_cookie$/ };
+    var names = document.cookie ? document.cookie.split(';').map(function (c) { return c.split('=')[0].trim(); }) : [];
+    var flags = [];
+    for (var k in CK) { if (names.some(function (n) { return CK[k].test(n); })) flags.push(k); }
+    d.ck = flags.join(',');
+    d.nck = names.length;
+
     // Paint timings
     try {
       new PerformanceObserver(function (l) {
@@ -162,7 +172,7 @@ const FIELDS = {
   v: 'n', pv: 's', seq: 'n', path: 's', qs: 'n', ref: 's', nt: 's', proto: 's', ttfb: 'n', wait: 'n',
   size: 'n', mob: 'n', net: 's', fcp: 'n', lcp: 'n', dcl: 'n', load: 'n', colo: 's', loc: 's',
   edge: 's', origin: 's', age: 'n', form: 'n', frender: 'n', fstart: 'n', fsubmit: 'n', fvfail: 'n',
-  fok: 'n', ferr: 'n', tg: 'n', wa: 'n', tel: 'n', mail: 'n',
+  fok: 'n', ferr: 'n', tg: 'n', wa: 'n', tel: 'n', mail: 'n', ck: 's', nck: 'n',
 };
 
 function clean(input) {
@@ -172,7 +182,7 @@ function clean(input) {
     const v = input[k];
     if (v === undefined || v === null) continue;
     if (type === 'n' && typeof v === 'number' && Number.isFinite(v)) out[k] = Math.max(-1, Math.min(Math.round(v), 1e9));
-    if (type === 's' && typeof v === 'string') out[k] = v.replace(/[^\w\-./:% ]/g, '').slice(0, 150);
+    if (type === 's' && typeof v === 'string') out[k] = v.replace(/[^\w\-./:%, ]/g, '').slice(0, 150);
   }
   return out.pv ? out : null;
 }
@@ -245,6 +255,32 @@ function pct(list) {
   return Math.round((known.filter((v) => v.edge === 'miss').length / known.length) * 100);
 }
 
+/**
+ * For each tracked cookie: how often visits WITH it skip the cache (edge "none")
+ * compared to visits WITHOUT it. The cookie that causes the bypass stands out.
+ */
+function cookieReport(views) {
+  const tracked = views.filter((v) => typeof v.ck === 'string' && ['hit', 'miss', 'none'].includes(v.edge));
+  const skip = (list) => (list.length ? Math.round((list.filter((v) => v.edge === 'none').length / list.length) * 100) : null);
+  const rows = [{ cookie: 'all visits', views: tracked.length, skip_cache_pct: skip(tracked), ttfb_ms: median(tracked.map((v) => v.ttfb)) }];
+  const names = new Set();
+  tracked.forEach((v) => v.ck.split(',').filter(Boolean).forEach((n) => names.add(n)));
+  for (const name of names) {
+    const has = (v) => v.ck.split(',').includes(name);
+    const withIt = tracked.filter(has);
+    const without = tracked.filter((v) => !has(v));
+    rows.push({
+      cookie: name,
+      views_with: withIt.length,
+      skip_cache_pct_with: skip(withIt),
+      skip_cache_pct_without: skip(without),
+      ttfb_ms_with: median(withIt.map((v) => v.ttfb)),
+      ttfb_ms_without: median(without.map((v) => v.ttfb)),
+    });
+  }
+  return [rows[0]].concat(rows.slice(1).sort((a, b) => (b.skip_cache_pct_with || 0) - (a.skip_cache_pct_with || 0)));
+}
+
 function readDay(day) {
   const file = path.join(RUM_DIR, day + '.jsonl');
   const latest = new Map();
@@ -278,6 +314,7 @@ function summary(days) {
   out.by_country = by(all, 'loc', 15);
   out.by_cloudflare_location = by(all, 'colo', 15);
   out.by_page = by(all, 'path', 15);
+  out.by_cookie = cookieReport(all);
   return out;
 }
 
