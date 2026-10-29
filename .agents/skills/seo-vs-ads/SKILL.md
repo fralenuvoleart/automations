@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) and the `google-ad
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: overlap between paid search terms and organic coverage. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — savings are estimates with stated assumptions.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -64,7 +63,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line** (resolved window + UTC generation timestamp). Headline first: "$X/quarter going to clicks you already rank #1 for." Then the four buckets as tables (term, cost, conversions, organic position), the savings estimate with its assumptions stated, and a short action list: exact negatives to add, exact pages to build.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-vs-ads --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -83,6 +82,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Head
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| GAQL error: unknown field | fields guessed instead of verified | run `metadata_get_resource_metadata` first (Workflow step 2) |
+| No overlap found | ads account serves a different market/language | segment both sides by the same country before joining |
 
 ## Files
 
@@ -100,14 +101,15 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Head
 ## Related / Delegation
 - Organic-only view → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-vs-ads` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth; `google-ads` uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`).
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

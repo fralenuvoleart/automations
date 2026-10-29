@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC). The `dataforseo` 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: keyword/content gap between the user's site and a named competitor. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/SEO — distinguish estimates (competitor) from real (your GSC) numbers.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/SEO (not a developer).
@@ -62,7 +61,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict (how big the gap is, in keywords and estimated traffic), then: Gap table (keyword, their position, volume, suggested page), Behind table (keyword, their pos, your pos, your page, fix), and a top-10 action list. Note explicitly which numbers are estimates (theirs) vs real (yours).
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-competitor-gap --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -80,6 +79,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| Competitor side empty | `dataforseo` not configured | run the "your keywords" half; state the competitor side requires DataForSEO |
+| Gap bucket implausibly large | competitor in a different niche/language | filter competitor keywords to the profile's languages/markets before bucketing |
 
 ## Files
 
@@ -97,7 +98,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 ## Related / Delegation
 - Content brief for a chosen gap keyword → run `seo-content-brief`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-competitor-gap` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
@@ -105,7 +107,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: when `dataforseo` is connected, the target domain/keywords are sent to DataForSEO; otherwise capability calls go only to the configured MCP servers (GSC/GA4/Google Ads).
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

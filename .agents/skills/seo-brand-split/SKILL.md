@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) in .roo/mcp.json. 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: split branded vs non-branded search performance from the site's own GSC. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — the headline is non-brand growth, not total clicks.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -39,6 +38,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Brand vs non-brand | `search-console` → `seo_audit` {"type": "brand_vs_nonbrand"} (supply: siteUrl, brandKeywords) | available |
 | Raw queries | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
 | Brand terms | site profile (`python3 seo/site_profile.py --site <domain> --get brand_terms`) | available |
+| Language path map | site profile (`python3 seo/site_profile.py --site <domain> --get language_paths`) | available |
 
 ## Workflow
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
@@ -46,7 +46,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 3. **The split.** `search-console` → `seo_audit` {"type": "brand_vs_nonbrand"} (supply: siteUrl, brandKeywords) — branded vs non-branded clicks/impressions/position.
 4. **Cross-check.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) — classify queries against `brand_terms` to confirm the split and find top non-brand queries.
 5. **Trend.** Compare current vs previous period; the signal that matters is **non-brand click/impression growth** (branded traffic mostly tracks demand, not SEO).
-6. **By language.** Segment the split by language using the profile's `priority_keywords` (`python3 seo/site_profile.py --site <domain> --get priority_keywords --lang <code>`) — report branded vs non-brand per language (RU/EN/ZH/AR) so a language-specific gap is visible.
+6. **By language.** GSC has no language dimension — derive language from the **page path** via the profile's `language_paths` map (`python3 seo/site_profile.py --site <domain> --get language_paths`; e.g. EN = `/`, RU = `/ru/`, AR = `/ar/`, ZH = `/zh/`). Classify each query by the path prefix of the page it maps to in the `analytics_query` rows; queries whose page matches no prefix fall back to script detection — label those **derived**. Report branded vs non-brand per language so a language-specific gap is visible.
 7. **Assemble.** Verdict = non-brand direction; then branded vs non-branded table (overall + per language); top non-brand queries.
 
 ## Determinism
@@ -57,7 +57,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line**. Verdict (is non-brand growing?), then: branded vs non-branded table (clicks, impressions, position, current vs previous), and the top non-brand queries. State the brand-term list used so the split is reproducible.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-brand-split --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -95,14 +95,15 @@ Begin with the **as-of line**. Verdict (is non-brand growing?), then: branded vs
 - Whole-site organic audit → run `seo-audit`.
 - Position movers over time → run `seo-rank-tracking`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-brand-split` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

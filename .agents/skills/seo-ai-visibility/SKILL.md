@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) and the `analytics
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: AI-engine visibility from GA4 referral data plus GSC generative-query heuristics. **Primary skill** — AI engines are a material share of searches for this site, not a nice-to-have. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — name the pages and the exact change.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -44,7 +43,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 
 ## Workflow
 1. **Verify.** `search-console` → `diagnostics` and `analytics` → `get_account_summaries` must both respond.
-2. **Traffic by engine.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) (current vs previous period). Confirm the AI-source list matches the site profile's `ai_sources` (`python3 seo/site_profile.py --site <domain> --get ai_sources`) and extend the filter if the profile adds engines. Label this a **lower bound** — some AI visits arrive as `Referral` or `(direct)`.
+2. **Traffic by engine.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) (current vs previous period). The host list is the registry default (`ga4.traffic_sources` / `ga4.ai_cited_pages` in [`seo/capabilities.json`](../../../seo/capabilities.json)); reconcile it with the site profile's `ai_sources` (`python3 seo/site_profile.py --site <domain> --get ai_sources`): if the profile adds engines, extend `in_list_filter.values` at call time as a **runtime override — never hand-edit this skill's call spec** (drift is caught by `resolve.py --check`); to change the default list, edit `seo/capabilities.json`. Label this a **lower bound** — some AI visits arrive as `Referral` or `(direct)`.
 3. **Trend.** `analytics` → `run_report` {"dimensions": ["date"], "metrics": ["sessions"]} (supply: property_id, date_ranges) — is AI traffic growing, and did anything spike (a spike = something started citing you; find it).
 4. **Cited pages.** `analytics` → `run_report` {"dimensions": ["sessionSource", "landingPagePlusQueryString"], "metrics": ["sessions", "conversions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — which URLs AI engines actually send people to (filtered to AI sources). These are your proven-citable pages.
 5. **Conversion comparison.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions", "conversions", "engagementRate"]} (supply: property_id, date_ranges) — compare AI-source conversion rate against organic.
@@ -61,7 +60,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict (**AI share of organic** — the headline metric — plus trend and top engine), then: engine table, cited-pages table with conversions, the citation recipe observed on winning pages, and a top-5 list of pages to restructure. Keep it concrete — name the pages and the exact change.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-ai-visibility --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -80,6 +79,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| AI sources show zero sessions | AI visits arrive as `Referral`/`(direct)` (the lower bound) | keep the lower-bound label; use `genai_query_insights` as the heuristic cross-signal |
+| GA4 unavailable | `analytics` server missing | fall back to `analytics_advanced` (aggregate only), then `genai_query_insights`-only labelled heuristic (see Fallbacks) |
 
 ## Files
 
@@ -97,7 +98,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 ## Related / Delegation
 - General organic audit → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-ai-visibility` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `analytics` (GA4) uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`); `search-console` manages its own OAuth.
@@ -105,7 +107,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

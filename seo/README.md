@@ -3,6 +3,8 @@
 Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
+> **Status (2026-10-29):** 18 `seo-*` skills, CI gate [`check.sh`](check.sh) ALL GREEN (79/79 tests, registry validated against live MCP schemas). Independently audited against the `kinsta-logs` benchmark — **8.5/10**, all findings fixed; see [`plans/seo-skills-audit-2026-10-29.md`](../plans/seo-skills-audit-2026-10-29.md). Registry v5.
+
 | Path | Purpose |
 |---|---|
 | [`capabilities.json`](capabilities.json) | **Single source of truth**: capability ID → MCP `server` + `tool` + structured `args` + `runtime`. |
@@ -17,7 +19,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 
 ## Why structured `args` (deterministic + validated)
 
-Several capabilities share one tool — `run_report` backs four GA4 capabilities,
+Several capabilities share one tool — `run_report` backs seven GA4 capabilities,
 `api_request` backs every DataForSEO capability, `analytics_compare` backs three
 modes. A bare `server: tool` is ambiguous. Each capability therefore carries
 **structured JSON `args`** (the fixed arguments) plus a **`runtime`** list (the
@@ -71,6 +73,9 @@ data layer** — not per-run LLM guesswork:
 - `priority_keywords` is **grouped by language** (a multilingual site's keywords are
   language-specific). `--get priority_keywords` flattens across languages; `--lang <code>`
   returns one language — so per-language coverage and reporting are possible.
+- `language_paths` maps each language to its URL path prefix (e.g. `{"EN": "/", "RU": "/ru/"}`)
+  — GSC has no language dimension, so per-language segmentation (e.g. `seo-brand-split`)
+  derives language from the page path deterministically.
 - The profile is **data only** — it selects and prioritises, it never invents metrics.
 - Coverage is computed **deterministically** by [`coverage.py`](coverage.py) (flattened + per-language) and rendered as the report's **Coverage vs site profile** section.
 - Each site has an append-only **action history** (`config/sites/<domain>.history.md`) so skills don't re-recommend past work.
@@ -84,6 +89,31 @@ python3 seo/site_profile.py --site pbservices.ge --history                      
 python3 seo/site_profile.py --site pbservices.ge --append-history "did X"
 python3 seo/coverage.py --site pbservices.ge --covered covered.txt               # coverage block
 ```
+
+## Skill inventory & status
+
+| Skill | Answers | Primary sources | Degrades without |
+|---|---|---|---|
+| `seo-audit` | Whole-site organic health, quick wins | GSC + GA4 | GA4 → GSC-only half; `dataforseo` → skip SERP context |
+| `seo-ai-visibility` | Real AI-engine referral traffic + cited pages | GA4 + GSC (`genai_query_insights`) | GA4 → `analytics_advanced` aggregate → genai heuristic (labelled) |
+| `seo-backlink-check` | Backlink profile, link gap vs competitor | `dataforseo` (optional) + GA4 | `dataforseo` → GA4 referral cross-check only; never fabricates counts |
+| `seo-brand-split` | Brand vs non-brand trend (overall + per language) | GSC + profile `brand_terms`/`language_paths` | GSC-only; missing `brand_terms` → stop and ask |
+| `seo-competitor-gap` | Keywords a competitor ranks for that you don't | `dataforseo` (optional) + GSC | `dataforseo` → "your keywords" half only |
+| `seo-content-brief` | SERP-driven brief for one keyword | GSC + `dataforseo` (optional) + planner (optional) | `dataforseo` → web-search SERP; planner → labelled estimates |
+| `seo-content-refresh` | Decaying pages ranked by refresh priority | GSC + profile `priority_pages` | none (GSC-only) |
+| `seo-cross-engine` | Google vs Bing divergence | GSC + Bing | Bing not connected → state and stop |
+| `seo-indexation` | Index coverage, sitemap health, submit list | GSC | none (GSC-only); Indexing API = nudge, not a guarantee |
+| `seo-internal-links` | Under-linked/orphaned priority pages | GSC + profile | no crawl source → GSC-level approximation, stated in report |
+| `seo-keyword-research` | Keyword plan with real volumes/CPC | GSC + `google-ads-planner` + `google-ads` (optional) | planner 429/unavailable → `seo_keywords_research` estimates (labelled) |
+| `seo-local` | Local-intent organic performance | GSC | GBP not wired → GSC local-intent queries only, gap stated |
+| `seo-monetisation` | AdSense earnings vs organic | GSC + AdSense | AdSense → stop or `seo-opportunity`; no URL channels → domain/date-level only (no page dimension in the AdSense API) |
+| `seo-opportunity` | Traffic value of striking-distance/gap keywords | GSC + `google-ads-planner` | planner → labelled estimates |
+| `seo-rank-tracking` | Position movers between two periods | GSC (+ `dataforseo` optional) | `dataforseo` → skip live SERP spot-check |
+| `seo-serp-features` | Featured-snippet / PAA capture targets | GSC + `dataforseo` (optional) | `dataforseo` → web-search SERP + `unavailable` record |
+| `seo-technical` | CWV, accessibility, schema, crawlability | GSC + PageSpeed (`gsc.pagespeed` + `gsc.pagespeed_a11y`) | PageSpeed failure → state it; schema/inspection still reported |
+| `seo-vs-ads` | Paid/organic overlap, wasted spend | GSC + `google-ads` (GAQL) | `google-ads` → organic half only, missing connection named |
+
+Every skill: absolute-date windows (`window.py`), as-of line, estimate labels, never-fabricate rule, findings JSON → `build_report.py` → **mandatory** `validate_report.py`, `## Fallbacks` + `## Pending Data Sources`, skill-specific Troubleshooting, delivery via `report-export`.
 
 ## Delivery (PDF / email)
 
@@ -130,8 +160,11 @@ Every `.agents/skills/seo-*/SKILL.md` follows the same minimum shape, enforced b
 [`tests/test_skill_docs.py`](tests/test_skill_docs.py):
 
 `frontmatter (name/description/license/compatibility)` → mechanical-vs-analytical banner →
-`Scope & Audience` → `When to Use` → `When NOT to Use` → `Requires` → `Workflow` →
-`Determinism` → `Output` → `Troubleshooting` → `Files` → `Related / Delegation`.
+`Scope` → `Report Audience & Purpose` → `Memory-Bank Isolation` → `When to Use` →
+`When NOT to Use` → `Requires` → `Data Sources` → `Workflow` → `Determinism` →
+`Output` (+ deliverable pipeline) → `Fallbacks` → `Pending Data Sources` →
+`Troubleshooting` → `Files` → `Related / Delegation` → `Configuration` →
+`Privacy & Retention` → `Output Structure`.
 
 Dense/conditional rules live in [`references/`](references/) (progressive disclosure);
 thresholds stay inline in the skill (they are the core guardrail).

@@ -23,6 +23,7 @@ _None_
 
 ## Upcoming
 
+- **SEO audit M9** — read `seo/references/domain-knowledge.md` and verify the CTR bands `seo-opportunity` cites (next scheduled review).
 - WhatsApp bot integration (future).
 - Python AI/NLP services (future).
 - **DataForSEO** (optional) — connect to unlock backlink / competitor / SERP enrichment.

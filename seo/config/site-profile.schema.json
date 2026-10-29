@@ -8,6 +8,7 @@
   "properties": {
     "domain": { "type": "string", "description": "Canonical domain, e.g. pbservices.ge" },
     "languages": { "type": "array", "items": { "type": "string" }, "description": "Content languages (ISO-ish codes or names)" },
+    "language_paths": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Language code -> URL path prefix (e.g. {\"EN\": \"/\", \"RU\": \"/ru/\"}). Default language maps to '/'." },
     "sections": { "type": "array", "items": { "type": "string" }, "description": "Site sections, e.g. Service pages, Blog, Homepage" },
     "services": { "type": "array", "items": { "type": "string" }, "description": "Service lines the site sells" },
     "priority_keywords": {

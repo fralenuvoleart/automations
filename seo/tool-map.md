@@ -21,7 +21,7 @@ Generated from [`capabilities.json`](capabilities.json) by `python3 seo/resolve.
 | `ads.metadata` | `google-ads` → `metadata_get_resource_metadata` (supply: resource_name) |
 | `ads.search` | `google-ads` → `search_search` (supply: customer_id, resource, fields, conditions, orderings) |
 | `adsense.accounts` | `search-console` → `adsense_accounts` {"mode": "configured"} |
-| `adsense.report` | `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS"} (supply: accountId) |
+| `adsense.report` | `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS", "dimensions": ["DATE", "DOMAIN_NAME"]} (supply: accountId) |
 | `dfs.anchors` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/anchors/live"} (supply: data) |
 | `dfs.backlinks_summary` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/summary/live"} (supply: data) |
 | `dfs.domain_overview` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/domain_rank_overview/live"} (supply: data) |
@@ -56,6 +56,7 @@ Generated from [`capabilities.json`](capabilities.json) by `python3 seo/resolve.
 | `gsc.low_ctr` | `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl) |
 | `gsc.low_hanging_fruit` | `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl) |
 | `gsc.pagespeed` | `search-console` → `pagespeed_analyze` (supply: url, strategy) |
+| `gsc.pagespeed_a11y` | `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url) |
 | `gsc.query` | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) |
 | `gsc.quick_wins` | `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl) |
 | `gsc.recommendations` | `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl) |

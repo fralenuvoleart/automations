@@ -1,6 +1,7 @@
 {
   "domain": "pbservices.ge",
   "languages": ["EN", "RU", "AR", "ZH"],
+  "language_paths": {"EN": "/", "RU": "/ru/", "AR": "/ar/", "ZH": "/zh/"},
   "sections": ["Service pages", "Blog", "Homepage", "Other pages"],
   "services": [
     "Category",

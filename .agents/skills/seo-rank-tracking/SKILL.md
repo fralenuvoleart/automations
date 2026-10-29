@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) in .roo/mcp.json; 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: position movers between two periods from the site's own GSC data. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/SEO — answer update questions with before/after evidence.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/SEO (not a developer).
@@ -61,7 +60,7 @@ The `search-console` MCP server with GSC connected. Verify with `search-console`
 Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict first (net up/down and the single biggest move), then four tables: Winners, Losers, New, Lost — query, positions before→after, clicks delta. If the user asked about a specific algorithm update, answer that question explicitly with the before/after evidence.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-rank-tracking --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -83,6 +82,8 @@ If the user wants this weekly, suggest scheduling it rather than re-running by h
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| Losers list empty | window too short or the update too recent | widen to 28/90 days; GSC lags ~2 days — never include today |
+| Deltas look inverted | misaligned periods (seasonality/weekday mix) | align weekdays; use `analytics_compare` `trends` mode for gradual moves |
 
 ## Files
 
@@ -100,7 +101,8 @@ If the user wants this weekly, suggest scheduling it rather than re-running by h
 ## Related / Delegation
 - Full site audit → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-rank-tracking` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
@@ -108,7 +110,7 @@ If the user wants this weekly, suggest scheduling it rather than re-running by h
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: when `dataforseo` is connected, the target domain/keywords are sent to DataForSEO; otherwise capability calls go only to the configured MCP servers (GSC/GA4/Google Ads).
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

@@ -1,6 +1,6 @@
 ---
 name: seo-monetisation
-description: AdSense earnings vs organic search — where organic traffic earns the most, and which pages carry the revenue. Use when asked "AdSense revenue", "which pages earn", "monetisation", or "ads vs organic earnings".
+description: AdSense earnings vs organic search — where organic traffic earns the most, broken down by date and domain (page-level only if AdSense URL channels are configured). Use when asked "AdSense revenue", "which pages earn", "monetisation", or "ads vs organic earnings".
 license: MIT
 compatibility: Requires the `search-console` MCP server (GSC + AdSense) in .roo/mcp.json. Only relevant if the site monetises with AdSense. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
 ---
@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC + AdSense) in .roo/
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: AdSense earnings correlated with organic search performance. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — which pages and queries carry the money.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -36,17 +35,19 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Need | Tool | Status |
 |---|---|---|
 | AdSense accounts | `search-console` → `adsense_accounts` {"mode": "configured"} | available* |
-| AdSense report | `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS"} (supply: accountId) | available* |
+| AdSense report | `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS", "dimensions": ["DATE", "DOMAIN_NAME"]} (supply: accountId) | available* |
+| Page-level earnings | `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS", "dimensions": ["DATE", "DOMAIN_NAME"]} with runtime dimension override `["URL_CHANNEL_ID"]` | only if URL channels are configured in AdSense |
 | Organic queries | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
 
 \* only if the site monetises with AdSense and it is connected.
 
 ## Workflow
 1. **Verify + accounts.** `search-console` → `diagnostics`; then `search-console` → `adsense_accounts` {"mode": "configured"}. If none, state that AdSense is not connected and stop.
-2. **Earnings.** `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS"} (supply: accountId) — earnings/impressions by page or date.
-3. **Organic overlay.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) — join on page.
-4. **Correlate.** Rank pages by earnings and by organic clicks; find high-earning pages with weak organic and vice-versa.
-5. **Assemble.** Verdict (where the money is), then the page × earnings × organic table.
+2. **Earnings.** `search-console` → `adsense_report` {"dateRange": "LAST_30_DAYS", "dimensions": ["DATE", "DOMAIN_NAME"]} (supply: accountId) — earnings/impressions/RPM by date and domain. **The AdSense API has no page dimension** — the finest grain is `DOMAIN_NAME`, or `URL_CHANNEL_ID` if the publisher manually configured URL channels.
+3. **Page-level check.** Try one `adsense_report` call with dimension `["URL_CHANNEL_ID"]`. If it returns rows, page-level earnings exist via URL channels — use them. If empty, record `findings.unavailable` = `{source: adsense_url_channels, affects: page-level earnings}` and continue at domain level.
+4. **Organic overlay.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) — top pages by organic clicks.
+5. **Correlate.** With URL channels: rank pages by earnings × organic clicks. Without: overlay the domain-level earnings trend/RPM on the organic page table and say plainly that per-page attribution is unavailable — never invent per-page earnings.
+6. **Assemble.** Verdict (where the money is, at the granularity the data supports), then the earnings table (date/domain or URL channel) and the organic-pages table.
 
 ## Determinism
 - Resolve every window to **absolute dates** (`YYYY-MM-DD`) before calling a tool — never pass relative phrases. GSC lags ~2 days: `endDate = today − 2`, never include today. Compute with `python3 seo/window.py --days 28` and pass the literal `startDate`/`endDate`.
@@ -54,10 +55,10 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 - Keep every **estimate** label exactly as written (AdSense revenue is platform-reported, not an SEO estimate).
 
 ## Output
-Begin with the **as-of line**. Verdict (which pages carry the revenue), then: a page table (page, AdSense earnings, organic clicks, position), and an action list. State clearly if AdSense is not connected.
+Begin with the **as-of line** and the **Data availability** section (stating whether page-level earnings exist via URL channels). Verdict (what carries the revenue, at the granularity the data supports), then: the earnings table (date/domain, or URL channel when configured), the top-organic-pages table, and an action list. State clearly if AdSense is not connected.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-monetisation --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -75,6 +76,7 @@ Begin with the **as-of line**. Verdict (which pages carry the revenue), then: a 
 | Symptom | Cause | Fix |
 |---|---|---|
 | AdSense empty | AdSense not connected to the property | connect AdSense in `search-console`; state it otherwise |
+| `URL_CHANNEL_ID` returns no rows | no URL channels configured in AdSense | record `findings.unavailable`; report domain/date level only — do not estimate per-page earnings |
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
 
@@ -95,14 +97,15 @@ Begin with the **as-of line**. Verdict (which pages carry the revenue), then: a 
 - Traffic value (CPC-based) → run `seo-opportunity`.
 - Whole-site organic audit → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-monetisation` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth (Google + AdSense).
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

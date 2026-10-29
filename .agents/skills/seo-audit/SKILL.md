@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) and the `analytics
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: whole-site organic audit (indexation, CTR, decay, cannibalization, quick wins) from the site's own GSC + GA4. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — every finding ends in a concrete, prioritized action, not a code edit.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -57,7 +56,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 1. **Verify connections.** `search-console` → `diagnostics` and `analytics` → `get_account_summaries`. If either fails, stop and report which is missing.
 2. **Pick the property.** `search-console` → `sites_list`. Use the one matching the user's domain; confirm only when ambiguous.
 3. **Indexation.** `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl). Flag large "Crawled — currently not indexed" counts or spikes in excluded pages.
-4. **Performance baseline.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate delta (last 90 days vs previous 90). Then call `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page` to get per-query and per-page deltas.
+4. **Performance baseline.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate delta (last 90 days vs previous 90). Then call `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page` to get per-query and per-page deltas. Set a high `rowLimit` on both pulls so the diff is not truncated.
 5. **Find the problems:**
    - **Decaying pages** — clicks down >30% period-over-period
    - **CTR anomalies** — position ≤5 but CTR <2% (title/meta problem) → `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
@@ -66,7 +65,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
    - **Quick wins / recommendations / low-hanging fruit** — `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl)
 6. **Spot-check pages.** For the 3–5 worst pages, `search-console` → `inspection_inspect` (supply: siteUrl, urls) — canonical, indexing state, last crawl.
 7. **Cross-check traffic.** `analytics` → `run_report` {"dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"]} (supply: property_id, date_ranges) — organic sessions + engagement by landing page, same periods. A page can hold rankings but lose revenue; call that out.
-8. **AI traffic.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — note whether AI engines (ChatGPT, Perplexity, Claude, Gemini) are a meaningful channel.
+8. **AI traffic.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — note whether AI engines (ChatGPT, Perplexity, Claude, Gemini) are a meaningful channel. The host list is the registry default; reconcile it with the profile's `ai_sources` exactly as in `seo-ai-visibility` step 2 (runtime override, never a hand-edit of this spec).
 9. **Coverage.** Compute coverage of the site profile's priority keywords/pages: `python3 seo/coverage.py --site <domain> --covered {run_dir}/covered.txt` → include the output as `findings.coverage` (flattened + per-language). List any priority keyword/page not addressed under `missing`.
 10. **History.** Read the site's action history (`python3 seo/site_profile.py --site <domain> --history`) before finalizing recommendations so you don't re-recommend past work; after the run, append the actions you recommend (`python3 seo/site_profile.py --site <domain> --append-history "<action>"`).
 
@@ -79,7 +78,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line** (resolved window + UTC generation timestamp). A report with: **verdict up top** (one paragraph — is the site healthy or not, and the #1 issue), then sections — Indexation, Losers, Quick wins (striking distance + CTR fixes, ranked by impressions), Cannibalization — each with a table and the specific fix. Include the **Coverage vs site profile** block (from `coverage.py`) and end with a prioritized 5-item action list.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-audit --days 90 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -98,6 +97,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| GA4 steps fail | `analytics` server not connected, or service account not added to the property | run the GSC half and state the engagement cross-check is unavailable (see Fallbacks) |
+| Per-query diffs look truncated | default `rowLimit` cut the `analytics_query` pulls | re-pull both periods with a high `rowLimit` |
 
 ## Files
 
@@ -120,7 +121,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 - Brand vs non-brand split → run `seo-brand-split`.
 - Technical health → run `seo-technical`; index coverage → run `seo-indexation`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-audit` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `analytics` (GA4) uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`); `search-console` manages its own OAuth.
@@ -128,7 +130,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: when `dataforseo` is connected, the target domain/keywords are sent to DataForSEO; otherwise capability calls go only to the configured MCP servers (GSC/GA4/Google Ads).
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

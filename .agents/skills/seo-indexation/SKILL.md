@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) in .roo/mcp.json. 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: index coverage and sitemap health from the site's own GSC. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — each issue ends in a concrete fix, not a code edit.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -48,7 +47,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 3. **Sitemaps.** `search-console` → `sitemaps_list` (supply: siteUrl) — submitted vs indexed, last read, errors/warnings per sitemap.
 4. **Priority pages.** `python3 seo/site_profile.py --site <domain> --get priority_pages`. If empty, use the top pages by impressions from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate).
 5. **Inspect priority pages.** `search-console` → `inspection_inspect` (supply: siteUrl, urls) — is each priority page indexed? canonical? last crawl?
-6. **Submit the missing.** For priority pages that are not indexed, `search-console` → `indexing_submit` (supply: siteUrl, urls) — then list them as the action list.
+6. **Submit the missing.** For priority pages that are not indexed, `search-console` → `indexing_submit` (supply: siteUrl, urls) — then list them as the action list. Caveat: Google's Indexing API officially covers only JobPosting/BroadcastEvent content — for ordinary pages submission is a nudge (or routes via Bing/IndexNow), not an indexing guarantee. Say so in the report, and keep internal links + sitemap health as the primary fix.
 7. **Assemble.** Rank by (priority × excluded volume).
 
 ## Determinism
@@ -59,7 +58,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line**. Verdict (is index coverage healthy, and the #1 exclusion), then: coverage table (indexed vs each exclusion reason), sitemap status table, priority-page inspection table (indexed? canonical? last crawl), and a submit/action list. Each issue names the page and the exact fix.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-indexation --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -79,6 +78,7 @@ Begin with the **as-of line**. Verdict (is index coverage healthy, and the #1 ex
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
 | Submit rejected | URL not on a verified property | confirm the property in `sites_list` |
+| Submitted pages still not indexed | Indexing API is a nudge for ordinary pages, not a guarantee | fix internal links/sitemap; re-inspect after the next crawl |
 
 ## Files
 
@@ -97,14 +97,15 @@ Begin with the **as-of line**. Verdict (is index coverage healthy, and the #1 ex
 - Page speed / structured data → run `seo-technical`.
 - Whole-site organic audit → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-indexation` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

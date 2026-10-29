@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) in .roo/mcp.json. 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: a SERP-driven brief for one target keyword. Does not read or write `memory-bank/`.
-- **Audience**: a writer/editor — the brief must be built from a real SERP, with estimates labelled.
 
 ## Report Audience & Purpose
 - **Audience**: a writer/editor (not a developer).
@@ -64,7 +63,7 @@ The `search-console` MCP server with GSC connected. Verify with `search-console`
 Begin with the **as-of line** (resolved window + UTC generation timestamp). The brief, ready to hand to a writer (or to write from directly).
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-content-brief --days 90 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -102,7 +101,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). The 
 ## Related / Delegation
 - Cluster/keyword planning across many topics → run `seo-keyword-research`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-content-brief` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth; `google-ads-planner` uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`).
@@ -110,7 +110,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). The 
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: when `dataforseo` is connected, the target domain/keywords are sent to DataForSEO; otherwise capability calls go only to the configured MCP servers (GSC/GA4/Google Ads). The web-search SERP fallback sends the target keyword to the configured search provider.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

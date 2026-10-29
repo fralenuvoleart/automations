@@ -9,9 +9,8 @@ compatibility: Requires the `analytics` MCP server (official GA4). The `datafors
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: backlink profile for a domain; the GA4 referral cross-check is the only always-available part. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/SEO — label every third-party metric as an estimate.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/SEO (not a developer).
@@ -60,7 +59,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict first (profile strength in one paragraph, and the gap vs the competitor if asked), then: profile summary table, top referring domains, anchor distribution, and — when a competitor was given — the link-gap outreach list (domain, authority, page linking to competitor). All third-party numbers labeled as index estimates.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-backlink-check --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -78,6 +77,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
 | Empty/zero results | window excludes data or filter too narrow | widen the absolute window |
+| `api_request` 401/403 | `dataforseo` not configured or unauthenticated | run the GA4 referral cross-check only; state the missing connection — never fabricate link counts |
+| Summary returns empty | typo'd target or no index presence | verify the target domain; report "no data", not zero links |
 
 ## Files
 
@@ -95,7 +96,8 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 ## Related / Delegation
 - Competitor keyword/content gap → run `seo-competitor-gap`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-backlink-check` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `analytics` (GA4) uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`).
@@ -103,7 +105,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: when `dataforseo` is connected, the target domain/keywords are sent to DataForSEO; otherwise capability calls go only to the configured MCP servers (GSC/GA4/Google Ads).
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

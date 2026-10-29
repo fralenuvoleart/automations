@@ -1,6 +1,6 @@
 ---
 name: seo-technical
-description: Technical SEO audit of priority pages — Core Web Vitals (LCP/INP/CLS), mobile vs desktop, structured-data coverage, and crawlability flags, from PageSpeed + GSC inspection. Use when asked "technical SEO", "core web vitals", "page speed audit", "why is my page slow", or "schema check".
+description: Technical SEO audit of priority pages — Core Web Vitals (LCP/INP/CLS), mobile vs desktop, structured-data coverage, accessibility (Lighthouse a11y category), and crawlability flags, from PageSpeed + GSC inspection. Use when asked "technical SEO", "core web vitals", "page speed audit", "why is my page slow", "accessibility", or "schema check".
 license: MIT
 compatibility: Requires the `search-console` MCP server (GSC + PageSpeed + schema) in .roo/mcp.json. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
 ---
@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC + PageSpeed + schem
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
-- **Scope**: technical health of the site's priority pages (CWV, mobile, structured data, crawlability). Does not read or write `memory-bank/`.
-- **Audience**: the site owner/marketer — each issue ends in a concrete fix, not a code edit.
+## Scope
+- **Scope**: technical health of the site's priority pages (CWV, mobile, structured data, crawlability, accessibility). Does not read or write `memory-bank/`.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -37,6 +36,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Need | Tool | Status |
 |---|---|---|
 | Page speed / CWV | `search-console` → `pagespeed_analyze` (supply: url, strategy) | available |
+| Accessibility (Lighthouse a11y) | `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url) | available |
 | Structured data | `search-console` → `schema_validate` (supply: url) | available |
 | Index / canonical state | `search-console` → `inspection_inspect` (supply: siteUrl, urls) | available |
 | Crawl health | `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl) | available |
@@ -45,7 +45,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 ## Workflow
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
 2. **Priority pages.** `python3 seo/site_profile.py --site <domain> --get priority_pages`. If empty, take the top pages by impressions from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate).
-3. **Core Web Vitals.** For each priority page: `search-console` → `pagespeed_analyze` (supply: url, strategy) — run **mobile first, then desktop** (`strategy: "mobile"` / `"desktop"`). Record LCP, INP, CLS and the pass/fail band.
+3. **Core Web Vitals.** For each priority page: `search-console` → `pagespeed_analyze` (supply: url, strategy) — run **mobile first, then desktop** (`strategy: "mobile"` / `"desktop"`). Record LCP, INP, CLS and the pass/fail band. Then run `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url) on the same pages for the Lighthouse accessibility category — flag contrast, missing alt text, ARIA, and label/heading issues per page.
 4. **Structured data.** `search-console` → `schema_validate` (supply: url) per page — required types present (Organization, LocalBusiness/Service, FAQ where relevant), errors vs warnings.
 5. **Index / canonical state.** `search-console` → `inspection_inspect` (supply: siteUrl, urls) for the priority set — canonical correctness, indexing state, last crawl.
 6. **Crawl health.** `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl) — surface crawl/robots/sitemap blockers.
@@ -57,10 +57,10 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 - Keep every **estimate** / **heuristic** label exactly as written (PageSpeed lab data is a snapshot, not field data).
 
 ## Output
-Begin with the **as-of line**. Verdict (is the site technically healthy, and the #1 blocker), then: CWV table (page, mobile LCP/INP/CLS, desktop), structured-data coverage table (page, types, errors), crawlability flags, and a prioritized fix list. Each issue names the page and the exact change.
+Begin with the **as-of line**. Verdict (is the site technically healthy, and the #1 blocker), then: CWV table (page, mobile LCP/INP/CLS, desktop), accessibility findings (page, a11y issue, severity), structured-data coverage table (page, types, errors), crawlability flags, and a prioritized fix list. Each issue names the page and the exact change.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-technical --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -98,14 +98,15 @@ Begin with the **as-of line**. Verdict (is the site technically healthy, and the
 - Index coverage / sitemap health → run `seo-indexation`.
 - Whole-site organic audit → run `seo-audit`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-technical` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure

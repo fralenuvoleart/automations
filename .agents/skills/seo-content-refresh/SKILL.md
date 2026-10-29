@@ -9,9 +9,8 @@ compatibility: Requires the `search-console` MCP server (GSC) in .roo/mcp.json. 
 
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
-## Scope & Audience
+## Scope
 - **Scope**: decaying-page detection and refresh prioritisation from the site's own GSC. Does not read or write `memory-bank/`.
-- **Audience**: the site owner/content editor — each row ends in refresh / consolidate / retire.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/content editor (not a developer).
@@ -46,7 +45,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 3. **Aggregate delta.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate).
 4. **Per-page delta.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period; join on `page`; compute clicks and impressions deltas.
 5. **Classify the decline.** Distinguish **decay** (clicks and impressions both down → freshness/competition) from a **ranking loss** (position down, impressions held) from a **demand drop** (impressions down, position held).
-6. **Prioritise.** Rank decaying pages by **clicks lost × page importance** (importance = in `python3 seo/site_profile.py --site <domain> --get priority_pages` or mapped to a `python3 seo/site_profile.py --site <domain> --get services` line). Thresholds: default clicks down >30% period-over-period (override via site profile `thresholds`).
+6. **Prioritise.** Rank decaying pages by **clicks lost × page importance** (importance = membership in the profile's priority pages — `python3 seo/site_profile.py --site <domain> --get priority_pages` — or the page mapping to a `python3 seo/site_profile.py --site <domain> --get services` line). Thresholds: default clicks down >30% period-over-period (override via site profile `thresholds`).
 7. **Recommend.** For each: **refresh** (decay), **consolidate** (overlaps another page), or **retire** (no demand). State the reason.
 
 ## Determinism
@@ -58,7 +57,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 Begin with the **as-of line**. Verdict (how much of the drop is decay vs demand), then: decaying-pages table (page, clicks before→after, impressions, position, importance, action), and a ranked refresh list. Each row names the page and the action.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
+0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-content-refresh --days 90 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
 1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
 2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -96,14 +95,15 @@ Begin with the **as-of line**. Verdict (how much of the drop is decay vs demand)
 - Position movers over time → run `seo-rank-tracking`.
 - Brief for the refreshed page → run `seo-content-brief`.
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
+- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-content-refresh` to select this skill's subject).
+
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.
 
 ## Privacy & Retention
 - Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); no data leaves to a third party unless the skill explicitly uses `tavily`/`dataforseo`.
+- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
 - Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
 
 ## Output Structure
