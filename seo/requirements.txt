@@ -1,0 +1,20 @@
+# Runtime dependencies for seo/mcp-servers/google-ads-planner/server.py
+# (resolve.py and mcp_client.py are stdlib-only).
+# Captured from the working venv: /home/francesco/.venvs/google-ads-mcp/bin/pip freeze
+# Pin these to reproduce the server environment.
+fastmcp==4.1.4
+google-ads==34.0.0
+google-ads-mcp==0.0.5
+google-api-core==2.43.0
+google-auth==2.62.0
+google-auth-oauthlib==1.5.0
+googleapis-common-protos==1.76.0
+grpcio==1.85.0
+grpcio-status==1.85.0
+mcp==2.3.0
+mcp-types==2.3.0
+proto-plus==1.29.0
+protobuf==7.36.2
+
+# Test-only (optional): pytest
+# pytest>=8,<9

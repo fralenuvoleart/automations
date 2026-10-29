@@ -1,0 +1,61 @@
+{
+  "version": 4,
+  "_comment": "Single source of truth: capability ID -> MCP server + tool + structured `args` (validated against the live inputSchema) + `runtime` (args the agent supplies at call time). Skills reference capabilities as {{cap:<id>}} tokens; seo/resolve.py expands them to `server` -> `tool` { args } (supply: runtime). Run `python3 seo/resolve.py --validate-live` to check every tool + args against the live server schemas.",
+  "servers": {
+    "search-console": { "package": "npx search-console-mcp@2.1.4", "auth": "oauth" },
+    "analytics": { "package": "~/.venvs/analytics-mcp (official GA4)", "auth": "service-account" },
+    "google-ads": { "package": "googleads/google-ads-mcp", "auth": "service-account" },
+    "google-ads-planner": { "package": "seo/mcp-servers/google-ads-planner", "auth": "service-account" },
+    "dataforseo": { "package": "npx dataforseo-mcp-server@3.1.3", "auth": "api-key", "configured": false, "note": "Optional — not in .roo/mcp.json. Skills degrade gracefully without it." },
+    "tavily": { "package": "npx tavily-mcp@0.2.3", "auth": "api-key" }
+  },
+  "capabilities": {
+    "gsc.sites_list": { "server": "search-console", "tool": "sites_list", "args": {}, "runtime": [], "aliases": [] },
+    "gsc.query": { "server": "search-console", "tool": "analytics_query", "args": { "dimensions": ["query", "page", "date", "country", "device"] }, "runtime": ["siteUrl", "startDate", "endDate"], "aliases": [] },
+    "gsc.compare_period": { "server": "search-console", "tool": "analytics_compare", "args": { "mode": "period_over_period" }, "runtime": ["siteUrl", "startDate", "endDate", "compareStartDate", "compareEndDate"], "aliases": [] },
+    "gsc.compare_trends": { "server": "search-console", "tool": "analytics_compare", "args": { "mode": "trends" }, "runtime": ["siteUrl", "startDate", "endDate"], "aliases": [] },
+    "gsc.compare_drop": { "server": "search-console", "tool": "analytics_compare", "args": { "mode": "drop_attribution" }, "runtime": ["siteUrl", "startDate", "endDate"], "aliases": [] },
+    "gsc.anomalies": { "server": "search-console", "tool": "analytics_anomalies", "args": {}, "runtime": ["siteUrl", "startDate", "endDate"], "aliases": [] },
+    "gsc.health": { "server": "search-console", "tool": "site_health_check", "args": { "level": "crawl_issues" }, "runtime": ["siteUrl"], "aliases": [] },
+    "gsc.inspect": { "server": "search-console", "tool": "inspection_inspect", "args": {}, "runtime": ["siteUrl", "urls"], "aliases": [] },
+    "gsc.sitemaps": { "server": "search-console", "tool": "sitemaps_list", "args": {}, "runtime": ["siteUrl"], "aliases": [] },
+    "gsc.indexing": { "server": "search-console", "tool": "indexing_submit", "args": {}, "runtime": ["urls"], "aliases": [] },
+    "gsc.keywords_related": { "server": "search-console", "tool": "seo_keywords_research", "args": { "type": "related" }, "runtime": ["keywords"], "aliases": [] },
+    "gsc.keywords_stats": { "server": "search-console", "tool": "seo_keywords_research", "args": { "type": "stats" }, "runtime": ["keywords"], "aliases": [] },
+    "gsc.keywords_traffic": { "server": "search-console", "tool": "seo_keywords_research", "args": { "type": "traffic" }, "runtime": ["keywords"], "aliases": [] },
+    "gsc.striking_distance": { "server": "search-console", "tool": "seo_audit", "args": { "type": "striking_distance" }, "runtime": ["siteUrl"], "aliases": ["seo_striking_distance"] },
+    "gsc.cannibalization": { "server": "search-console", "tool": "seo_audit", "args": { "type": "cannibalization" }, "runtime": ["siteUrl"], "aliases": ["seo_cannibalization"] },
+    "gsc.low_ctr": { "server": "search-console", "tool": "seo_audit", "args": { "type": "low_ctr" }, "runtime": ["siteUrl"], "aliases": ["seo_low_ctr_opportunities"] },
+    "gsc.lost_queries": { "server": "search-console", "tool": "seo_audit", "args": { "type": "lost_queries" }, "runtime": ["siteUrl"], "aliases": ["seo_lost_queries"] },
+    "gsc.genai": { "server": "search-console", "tool": "genai_query_insights", "args": {}, "runtime": ["siteUrl"], "aliases": [] },
+    "gsc.pagespeed": { "server": "search-console", "tool": "pagespeed_analyze", "args": {}, "runtime": ["url"], "aliases": [] },
+    "gsc.schema": { "server": "search-console", "tool": "schema_validate", "args": {}, "runtime": ["url"], "aliases": [] },
+    "gsc.compare_engines": { "server": "search-console", "tool": "compare_engines", "args": {}, "runtime": ["siteUrl"], "aliases": [] },
+    "gsc.diagnostics": { "server": "search-console", "tool": "diagnostics", "args": {}, "runtime": [], "aliases": [] },
+    "gsc.analytics_advanced": { "server": "search-console", "tool": "analytics_advanced", "args": {}, "runtime": ["propertyId", "metricType"], "aliases": [] },
+
+    "ga4.traffic_sources": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": { "filter": { "field_name": "sessionSource", "in_list_filter": { "values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false } } } }, "runtime": ["property_id", "date_ranges"], "aliases": ["analytics_traffic_sources"] },
+    "ga4.referrals": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"] }, "runtime": ["property_id", "date_ranges"], "aliases": [] },
+    "ga4.time_series": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["date"], "metrics": ["sessions"] }, "runtime": ["property_id", "date_ranges"], "aliases": ["analytics_time_series"] },
+    "ga4.landing_pages": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["landingPagePlusQueryString"], "metrics": ["sessions", "conversions"] }, "runtime": ["property_id", "date_ranges"], "aliases": ["analytics_organic_landing_pages"] },
+    "ga4.ai_cited_pages": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["sessionSource", "landingPagePlusQueryString"], "metrics": ["sessions", "conversions"], "dimension_filter": { "filter": { "field_name": "sessionSource", "in_list_filter": { "values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false } } } }, "runtime": ["property_id", "date_ranges"], "aliases": [] },
+    "ga4.conversions_by_source": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions", "conversions", "engagementRate"] }, "runtime": ["property_id", "date_ranges"], "aliases": [] },
+    "ga4.page_performance": { "server": "analytics", "tool": "run_report", "args": { "dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"] }, "runtime": ["property_id", "date_ranges"], "aliases": ["analytics_page_performance"] },
+    "ga4.funnel": { "server": "analytics", "tool": "run_funnel_report", "args": {}, "runtime": ["property_id", "funnel_steps"], "aliases": ["analytics_conversion_funnel"] },
+    "ga4.realtime": { "server": "analytics", "tool": "run_realtime_report", "args": { "dimensions": ["unifiedScreenName"], "metrics": ["activeUsers"] }, "runtime": ["property_id"], "aliases": [] },
+    "ga4.properties": { "server": "analytics", "tool": "get_account_summaries", "args": {}, "runtime": [], "aliases": [] },
+
+    "ads.customers": { "server": "google-ads", "tool": "customers_list_accessible_customers", "args": {}, "runtime": [], "aliases": ["list_accessible_customers"] },
+    "ads.metadata": { "server": "google-ads", "tool": "metadata_get_resource_metadata", "args": {}, "runtime": ["resource_name"], "aliases": [] },
+    "ads.search": { "server": "google-ads", "tool": "search_search", "args": {}, "runtime": ["customer_id", "resource", "fields", "conditions", "orderings"], "aliases": [] },
+
+    "planner.ideas": { "server": "google-ads-planner", "tool": "generate_keyword_ideas", "args": {}, "runtime": ["customer_id", "keywords"], "aliases": [], "policy": { "retry": 3, "backoff_s": [2, 4, 8], "timeout_budget_s": 40, "on_error": "degrade" } },
+
+    "dfs.backlinks_summary": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/backlinks/summary/live" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } },
+    "dfs.referring_domains": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/backlinks/referring_domains/live" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } },
+    "dfs.anchors": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/backlinks/anchors/live" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } },
+    "dfs.ranked_keywords": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } },
+    "dfs.domain_overview": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/dataforseo_labs/google/domain_rank_overview/live" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } },
+    "dfs.serp": { "server": "dataforseo", "tool": "api_request", "args": { "method": "POST", "path": "/v3/serp/google/organic/live/regular" }, "runtime": ["data"], "aliases": [], "policy": { "on_error": "degrade" } }
+  }
+}

@@ -1,64 +1,113 @@
 {
-  "mcpServers": {
-    "sevalla": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "sevalla-mcp"
-      ],
-      "env": {
-        "SEVALLA_API_KEY": "svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26",
-        "SEVALLA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
-      },
-      "alwaysAllow": [
-        "sevalla.applications.list",
-        "sevalla.applications.get",
-        "sevalla.applications.env-vars.list",
-        "sevalla.applications.logs.deployment",
-        "sevalla.deployments.get",
-        "sevalla.processes.list",
-        "sevalla.applications.logs.runtime",
-        "sevalla.deployments.start",
-        "sevalla.resources.process-resource-types",
-        "sevalla.deployments.list"
-      ]
-    },
-    "tavily": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "tavily-mcp@0.2.3"
-      ],
-      "env": {
-        "TAVILY_API_KEY": "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"
-      },
-      "alwaysAllow": [
-        "tavily-search",
-        "tavily-extract",
-        "tavily-crawl",
-        "tavily-map"
-      ]
-    },
-    "kinsta": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "kinsta-mcp@1.0.3"
-      ],
-      "env": {
-        "KINSTA_API_KEY": "a5599e8851f4fd69a1920c488c06bb2d1f0417d0031a7c80b08e515e1f6b0c72",
-        "KINSTA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
-      }
-    },
-    "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp"
-      ],
-      "env": {
-        "DEFAULT_MINIMUM_TOKENS": ""
-      }
-    }
-  }
+	"mcpServers": {
+		"sevalla": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"sevalla-mcp@1.0.0"
+			],
+			"env": {
+				"SEVALLA_API_KEY": "svl_570f93edd991bc4f9c38c00012536840da5b35e61e5fe1b2de26d5b79f62ea26",
+				"SEVALLA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
+			},
+			"alwaysAllow": [
+				"sevalla.applications.list",
+				"sevalla.applications.get",
+				"sevalla.applications.env-vars.list",
+				"sevalla.applications.logs.deployment",
+				"sevalla.deployments.get",
+				"sevalla.processes.list",
+				"sevalla.applications.logs.runtime",
+				"sevalla.deployments.start",
+				"sevalla.resources.process-resource-types",
+				"sevalla.deployments.list"
+			]
+		},
+		"tavily": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"tavily-mcp@0.2.3"
+			],
+			"env": {
+				"TAVILY_API_KEY": "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"
+			},
+			"alwaysAllow": [
+				"tavily-search",
+				"tavily-extract",
+				"tavily-crawl",
+				"tavily-map"
+			]
+		},
+		"kinsta": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"kinsta-mcp@1.0.3"
+			],
+			"env": {
+				"KINSTA_API_KEY": "a5599e8851f4fd69a1920c488c06bb2d1f0417d0031a7c80b08e515e1f6b0c72",
+				"KINSTA_COMPANY_ID": "d4e8f1f8-36a6-418b-bd8c-9735d4659ef3"
+			}
+		},
+		"context7": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@upstash/context7-mcp@4.4.4"
+			],
+			"env": {
+				"DEFAULT_MINIMUM_TOKENS": ""
+			}
+		},
+		"search-console": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"search-console-mcp@2.1.4"
+			],
+			"alwaysAllow": [
+				"get_started",
+				"diagnostics"
+			]
+		},
+		"google-ads": {
+			"command": "/home/francesco/.venvs/google-ads-mcp/bin/google-ads-mcp",
+			"env": {
+				"GOOGLE_APPLICATION_CREDENTIALS": "/mnt/backup/BACKUP/DB/AUTH/pb-services-service-account-key.json"
+			},
+			"alwaysAllow": [
+				"customers_list_accessible_customers",
+				"metadata_get_resource_metadata",
+				"search_search"
+			]
+		},
+		"google-ads-planner": {
+			"command": "/home/francesco/.venvs/google-ads-mcp/bin/python",
+			"args": [
+				"/mnt/backup/BACKUP/WWW/AUTOMATIONS/seo/mcp-servers/google-ads-planner/server.py"
+			],
+			"env": {
+				"GOOGLE_APPLICATION_CREDENTIALS": "/mnt/backup/BACKUP/DB/AUTH/pb-services-service-account-key.json"
+			},
+			"alwaysAllow": [
+				"generate_keyword_ideas"
+			]
+		},
+		"analytics": {
+			"command": "/home/francesco/.venvs/analytics-mcp/bin/analytics-mcp",
+			"env": {
+				"GOOGLE_APPLICATION_CREDENTIALS": "/mnt/backup/BACKUP/DB/AUTH/pb-services-service-account-key.json",
+				"GOOGLE_CLOUD_PROJECT": "pb-services-1729760938249"
+			},
+			"alwaysAllow": [
+				"run_report",
+				"run_funnel_report",
+				"run_realtime_report",
+				"get_account_summaries",
+				"get_property_details",
+				"get_custom_dimensions_and_metrics"
+			]
+		}
+	}
 }

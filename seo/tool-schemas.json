@@ -1,0 +1,1364 @@
+{
+  "analytics": {
+    "get_account_summaries": {
+      "properties": {},
+      "type": "object"
+    },
+    "get_custom_dimensions_and_metrics": {
+      "properties": {
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        }
+      },
+      "required": [
+        "property_id"
+      ],
+      "title": "get_custom_dimensions_and_metricsParams",
+      "type": "object"
+    },
+    "get_property_details": {
+      "properties": {
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        }
+      },
+      "required": [
+        "property_id"
+      ],
+      "title": "get_property_detailsParams",
+      "type": "object"
+    },
+    "list_google_ads_links": {
+      "properties": {
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        }
+      },
+      "required": [
+        "property_id"
+      ],
+      "title": "list_google_ads_linksParams",
+      "type": "object"
+    },
+    "list_property_annotations": {
+      "properties": {
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        }
+      },
+      "required": [
+        "property_id"
+      ],
+      "title": "list_property_annotationsParams",
+      "type": "object"
+    },
+    "run_conversions_report": {
+      "properties": {
+        "conversion_spec": {
+          "additionalProperties": true,
+          "title": "Conversion Spec",
+          "type": "object"
+        },
+        "currency_code": {
+          "default": null,
+          "title": "Currency Code",
+          "type": "string"
+        },
+        "date_ranges": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Date Ranges",
+          "type": "array"
+        },
+        "dimension_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Dimension Filter",
+          "type": "object"
+        },
+        "dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "limit": {
+          "default": null,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "metric_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Metric Filter",
+          "type": "object"
+        },
+        "metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Metrics",
+          "type": "array"
+        },
+        "offset": {
+          "default": null,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "order_bys": {
+          "default": null,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Order Bys",
+          "type": "array"
+        },
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        },
+        "return_property_quota": {
+          "default": false,
+          "title": "Return Property Quota",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "property_id",
+        "date_ranges",
+        "dimensions",
+        "metrics",
+        "conversion_spec"
+      ],
+      "title": "run_conversions_reportParams",
+      "type": "object"
+    },
+    "run_funnel_report": {
+      "properties": {
+        "date_ranges": {
+          "default": null,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Date Ranges",
+          "type": "array"
+        },
+        "funnel_breakdown": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Funnel Breakdown",
+          "type": "object"
+        },
+        "funnel_next_action": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Funnel Next Action",
+          "type": "object"
+        },
+        "funnel_steps": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Funnel Steps",
+          "type": "array"
+        },
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        },
+        "return_property_quota": {
+          "default": false,
+          "title": "Return Property Quota",
+          "type": "boolean"
+        },
+        "segments": {
+          "default": null,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "property_id",
+        "funnel_steps"
+      ],
+      "title": "run_funnel_reportParams",
+      "type": "object"
+    },
+    "run_realtime_report": {
+      "properties": {
+        "dimension_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Dimension Filter",
+          "type": "object"
+        },
+        "dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "limit": {
+          "default": null,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "metric_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Metric Filter",
+          "type": "object"
+        },
+        "metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Metrics",
+          "type": "array"
+        },
+        "offset": {
+          "default": null,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "order_bys": {
+          "default": null,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Order Bys",
+          "type": "array"
+        },
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        },
+        "return_property_quota": {
+          "default": false,
+          "title": "Return Property Quota",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "property_id",
+        "dimensions",
+        "metrics"
+      ],
+      "title": "run_realtime_reportParams",
+      "type": "object"
+    },
+    "run_report": {
+      "properties": {
+        "currency_code": {
+          "default": null,
+          "title": "Currency Code",
+          "type": "string"
+        },
+        "date_ranges": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Date Ranges",
+          "type": "array"
+        },
+        "dimension_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Dimension Filter",
+          "type": "object"
+        },
+        "dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "limit": {
+          "default": null,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "metric_filter": {
+          "additionalProperties": true,
+          "default": null,
+          "title": "Metric Filter",
+          "type": "object"
+        },
+        "metrics": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Metrics",
+          "type": "array"
+        },
+        "offset": {
+          "default": null,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "order_bys": {
+          "default": null,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Order Bys",
+          "type": "array"
+        },
+        "property_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Property Id"
+        },
+        "return_property_quota": {
+          "default": false,
+          "title": "Return Property Quota",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "property_id",
+        "date_ranges",
+        "dimensions",
+        "metrics"
+      ],
+      "title": "run_reportParams",
+      "type": "object"
+    }
+  },
+  "google-ads": {
+    "customers_list_accessible_customers": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "metadata_get_resource_metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "login_customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional manager customer ID to use as the login-customer-id header."
+        },
+        "resource_name": {
+          "description": "The name of the Google Ads resource (e.g., 'campaign', 'ad_group').",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_name"
+      ],
+      "type": "object"
+    },
+    "search_search": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "default": [],
+          "description": "List of conditions to filter the data, combined using AND clauses",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "description": "The id of the customer"
+        },
+        "fields": {
+          "description": "The fields to fetch",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The maximum number of rows to return"
+        },
+        "login_customer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional manager customer ID to use as the login-customer-id header."
+        },
+        "orderings": {
+          "default": [],
+          "description": "How the data is ordered",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resource": {
+          "description": "The resource to return fields from",
+          "type": "string"
+        }
+      },
+      "required": [
+        "customer_id",
+        "fields",
+        "resource"
+      ],
+      "type": "object"
+    }
+  },
+  "google-ads-planner": {
+    "generate_keyword_ideas": {
+      "additionalProperties": false,
+      "properties": {
+        "customer_id": {
+          "type": "string"
+        },
+        "geo_targets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "page_size": {
+          "default": 25,
+          "type": "integer"
+        },
+        "page_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "customer_id"
+      ],
+      "type": "object"
+    }
+  },
+  "search-console": {
+    "accounts_manage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "accountId": {
+          "description": "Account ID for add_site or remove",
+          "type": "string"
+        },
+        "action": {
+          "description": "Account action",
+          "enum": [
+            "list",
+            "add_site",
+            "remove"
+          ],
+          "type": "string"
+        },
+        "email": {
+          "description": "Optional email filter",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "Site URL to add to account",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "adsense_accounts": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "accountId": {
+          "description": "Specific AdSense account ID (default: auto-select)",
+          "type": "string"
+        },
+        "mode": {
+          "description": "configured = saved accounts; discover = all accessible publisher IDs (default: configured)",
+          "enum": [
+            "configured",
+            "discover"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "adsense_payments_alerts": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "accountId": {
+          "description": "Specific AdSense account ID (default: auto-select)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "adsense_report": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "accountId": {
+          "description": "Specific AdSense account ID (default: auto-select)",
+          "type": "string"
+        },
+        "dateRange": {
+          "description": "Preset date range (default: LAST_7_DAYS)",
+          "enum": [
+            "TODAY",
+            "YESTERDAY",
+            "THIS_WEEK",
+            "LAST_WEEK",
+            "THIS_MONTH",
+            "LAST_MONTH",
+            "LAST_7_DAYS",
+            "LAST_30_DAYS"
+          ],
+          "type": "string"
+        },
+        "dimensions": {
+          "description": "Breakdown dimensions",
+          "items": {
+            "enum": [
+              "DATE",
+              "WEEK",
+              "MONTH",
+              "DOMAIN_NAME",
+              "COUNTRY_NAME",
+              "PLATFORM_TYPE_NAME",
+              "AD_UNIT_ID",
+              "AD_UNIT_NAME",
+              "CUSTOM_CHANNEL_ID",
+              "CUSTOM_CHANNEL_NAME",
+              "PRODUCT_NAME",
+              "PRODUCT_CODE",
+              "URL_CHANNEL_ID"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "endDate": {
+          "description": "Custom end date YYYY-MM-DD (requires startDate)",
+          "type": "string"
+        },
+        "metrics": {
+          "description": "Metrics to report (default: earnings, page views, impressions, clicks, RPM)",
+          "items": {
+            "enum": [
+              "ESTIMATED_EARNINGS",
+              "PAGE_VIEWS",
+              "IMPRESSIONS",
+              "CLICKS",
+              "PAGE_VIEWS_CTR",
+              "PAGE_VIEWS_RPM",
+              "IMPRESSIONS_CTR",
+              "IMPRESSIONS_RPM"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "orderBy": {
+          "description": "Sort order as \"+METRIC\" (ascending) or \"-METRIC\" (descending), e.g. \"-ESTIMATED_EARNINGS\"",
+          "type": "string"
+        },
+        "rowLimit": {
+          "description": "Max rows to return (default: 100, max: 200)",
+          "type": "number"
+        },
+        "startDate": {
+          "description": "Custom start date YYYY-MM-DD (requires endDate, overrides dateRange)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "analytics_advanced": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "endDate": {
+          "description": "End date YYYY-MM-DD",
+          "type": "string"
+        },
+        "metricType": {
+          "description": "Metric type",
+          "enum": [
+            "ecommerce",
+            "realtime",
+            "user_behavior",
+            "audience_segments",
+            "conversion_funnel"
+          ],
+          "type": "string"
+        },
+        "propertyId": {
+          "description": "GA4 Property ID",
+          "type": "string"
+        },
+        "startDate": {
+          "description": "Start date YYYY-MM-DD",
+          "type": "string"
+        }
+      },
+      "required": [
+        "propertyId",
+        "metricType"
+      ],
+      "type": "object"
+    },
+    "analytics_anomalies": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "endDate": {
+          "description": "End date YYYY-MM-DD",
+          "type": "string"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "startDate": {
+          "description": "Start date YYYY-MM-DD",
+          "type": "string"
+        },
+        "threshold": {
+          "description": "Sensitivity threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "analytics_compare": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "compareEndDate": {
+          "description": "Comparison end date",
+          "type": "string"
+        },
+        "compareStartDate": {
+          "description": "Comparison start date",
+          "type": "string"
+        },
+        "endDate": {
+          "description": "End date YYYY-MM-DD",
+          "type": "string"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "mode": {
+          "description": "Comparison mode",
+          "enum": [
+            "period_over_period",
+            "trends",
+            "drop_attribution"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "startDate": {
+          "description": "Start date YYYY-MM-DD",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "analytics_query": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "dimensions": {
+          "description": "Dimensions: query, page, country, device, searchAppearance, date",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "endDate": {
+          "description": "End date YYYY-MM-DD",
+          "type": "string"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "filters": {
+          "description": "Filter objects",
+          "items": {},
+          "type": "array"
+        },
+        "rowLimit": {
+          "description": "Row limit",
+          "type": "number"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "startDate": {
+          "description": "Start date YYYY-MM-DD",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "compare_engines": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "dimension": {
+          "description": "Comparison dimension",
+          "enum": [
+            "query",
+            "page"
+          ],
+          "type": "string"
+        },
+        "endDate": {
+          "description": "End date YYYY-MM-DD",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Result row limit",
+          "type": "number"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "startDate": {
+          "description": "Start date YYYY-MM-DD",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "diagnostics": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {},
+      "type": "object"
+    },
+    "genai_query_insights": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "days": {
+          "description": "Lookback window in days (default: 28)",
+          "type": "number"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "includePages": {
+          "description": "Enrich matched queries with the pages they map to (default: false)",
+          "type": "boolean"
+        },
+        "minImpressions": {
+          "description": "Ignore queries with fewer impressions than this (default: 1)",
+          "type": "number"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "get_started": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {},
+      "type": "object"
+    },
+    "indexing_status": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "type": {
+          "description": "Check type (default: status)",
+          "enum": [
+            "status",
+            "quota"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "description": "URL to check status for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "indexing_submit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: google)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "host": {
+          "description": "Host for IndexNow submission",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key for IndexNow submission",
+          "type": "string"
+        },
+        "keyLocation": {
+          "description": "Key location URL for IndexNow",
+          "type": "string"
+        },
+        "method": {
+          "description": "Submission method (default: standard)",
+          "enum": [
+            "standard",
+            "index_now",
+            "remove"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "urls": {
+          "description": "List of URLs to submit",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls"
+      ],
+      "type": "object"
+    },
+    "inspection_inspect": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "urls": {
+          "description": "List of URLs to inspect",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "siteUrl",
+        "urls"
+      ],
+      "type": "object"
+    },
+    "pagespeed_analyze": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "category": {
+          "description": "Lighthouse categories",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwvOnly": {
+          "description": "Return Core Web Vitals metrics only",
+          "type": "boolean"
+        },
+        "strategy": {
+          "description": "Device strategy",
+          "enum": [
+            "mobile",
+            "desktop"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "description": "The URL to analyze",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "schema_validate": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "url": {
+          "description": "The webpage URL to validate structured markup for",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "seo_audit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "brandKeywords": {
+          "description": "Brand keywords for brand_vs_nonbrand analysis",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "minImpressions": {
+          "description": "Minimum impressions threshold",
+          "type": "number"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "type": {
+          "description": "Audit analysis type",
+          "enum": [
+            "recommendations",
+            "quick_wins",
+            "low_hanging_fruit",
+            "cannibalization",
+            "striking_distance",
+            "lost_queries",
+            "low_ctr",
+            "brand_vs_nonbrand"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl",
+        "type"
+      ],
+      "type": "object"
+    },
+    "seo_keywords_research": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "country": {
+          "description": "Country code",
+          "type": "string"
+        },
+        "engine": {
+          "description": "Target search engine (default: google)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "keywords": {
+          "description": "Keywords to analyze",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "language": {
+          "description": "Language code",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        },
+        "type": {
+          "description": "Analysis type",
+          "enum": [
+            "stats",
+            "related",
+            "traffic"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "keywords"
+      ],
+      "type": "object"
+    },
+    "site_health_check": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "level": {
+          "description": "Health check depth",
+          "enum": [
+            "summary",
+            "full",
+            "crawl_issues"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "Optional specific site URL",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "sitemaps_delete": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "feedUrl": {
+          "description": "The sitemap feed URL to delete",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl",
+        "feedUrl"
+      ],
+      "type": "object"
+    },
+    "sitemaps_list": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "feedUrl": {
+          "description": "Optional specific sitemap feed URL",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl"
+      ],
+      "type": "object"
+    },
+    "sitemaps_submit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "feedUrl": {
+          "description": "The XML sitemap feed URL to submit",
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "siteUrl",
+        "feedUrl"
+      ],
+      "type": "object"
+    },
+    "sites_list": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "sites_manage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "action": {
+          "description": "Action to perform",
+          "enum": [
+            "add",
+            "delete"
+          ],
+          "type": "string"
+        },
+        "engine": {
+          "description": "Target search engine (default: all)",
+          "enum": [
+            "google",
+            "bing",
+            "all"
+          ],
+          "type": "string"
+        },
+        "siteUrl": {
+          "description": "The site property URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "siteUrl"
+      ],
+      "type": "object"
+    }
+  }
+}

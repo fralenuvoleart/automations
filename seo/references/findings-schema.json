@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SEO Findings (loose)",
+  "description": "The LLM writes this; seo/report/build_report.py renders it. Values are free text; only the shape is enforced.",
+  "type": "object",
+  "required": ["skill", "as_of", "window", "verdict", "sections"],
+  "properties": {
+    "skill": { "type": "string" },
+    "as_of": { "type": "string", "description": "YYYY-MM-DD anchor" },
+    "window": {
+      "type": "object",
+      "required": ["startDate", "endDate"],
+      "properties": {
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "compareStartDate": { "type": "string" },
+        "compareEndDate": { "type": "string" },
+        "lag": { "type": "integer" }
+      }
+    },
+    "verdict": { "type": "string" },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["heading", "body"],
+        "properties": {
+          "heading": { "type": "string" },
+          "body": { "type": "string" },
+          "table": { "type": "array", "items": { "type": "object" } },
+          "estimate": { "type": "boolean", "description": "true => body must carry an estimate/heuristic label" }
+        }
+      }
+    },
+    "actions": { "type": "array", "items": { "type": "string" } }
+  }
+}

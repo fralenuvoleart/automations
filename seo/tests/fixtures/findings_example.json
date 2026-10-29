@@ -1,0 +1,11 @@
+{
+  "skill": "seo-audit",
+  "as_of": "2026-10-29",
+  "window": { "startDate": "2026-09-30", "endDate": "2026-10-27", "lag": 2 },
+  "verdict": "Site is healthy; the #1 issue is two decaying pages.",
+  "sections": [
+    { "heading": "Losers", "body": "Two pages lost clicks period-over-period.", "table": [ { "query": "seo audit", "clicks_delta": -3 } ] },
+    { "heading": "Estimates", "body": "Estimated traffic value is roughly 1k/month (estimate).", "estimate": true }
+  ],
+  "actions": ["Rewrite the titles of the two decaying pages."]
+}
