@@ -137,7 +137,11 @@ def get(domain: str, key: str, lang: str | None = None) -> object:
     val = profile[key]
     if key == "priority_keywords" and isinstance(val, dict):
         if lang:
-            return val.get(lang.lower(), [])
+            target = lang.lower()
+            for k, items in val.items():
+                if k.lower() == target:
+                    return items
+            return []
         out: list[str] = []
         for k in sorted(val):
             out.extend(val[k])

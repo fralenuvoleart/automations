@@ -43,8 +43,13 @@ Favour high-impression striking-distance queries over low-volume ones.
 
 ## Cannibalization
 Two or more URLs ranking for the same query, splitting signals. Detect by
-grouping GSC `query` × `page`; the fix is consolidation (merge, canonical, or
-re-target one page), not more content.
+grouping GSC `query` × `page`. Apply the **Cannibalization Decision Matrix**:
+
+| Scenario | Primary Signal | Recommended Action |
+|---|---|---|
+| Same search intent, duplicate/overlapping content | Page A has higher clicks/backlinks, Page B is thin or stale | **301 Redirect** Page B → Page A; merge any unique information into Page A. |
+| Specialized landing page vs broad category/hub | Page A is specific service/product; Page B is broad guide | **Canonicalize** or preserve both, adding an explicit contextual internal link from Page B to Page A with the exact target query anchor. |
+| Different search intents (e.g. guide vs pricing) | Both pages deserve independent rankings | **De-optimize** secondary page (revise H1, title tag, intro) to target its distinct sub-intent; re-point internal links. |
 
 ## Content decay
 A page whose clicks fall materially period-over-period while impressions hold
@@ -71,12 +76,15 @@ health, legal) the bar is higher.
 
 ## International SEO (multilingual / multi-region)
 - One URL per language/region; use `hreflang` (including `x-default`) to map
-  them, and keep the mapping reciprocal.
+  them, and keep the mapping reciprocal (if page A links to page B with `hreflang="ru"`,
+  page B must link back to page A with `hreflang="en"`).
+- Every language variant must reference self-referential `hreflang` plus `x-default`.
+- Derive language deterministically from the URL path prefix (from the site profile's
+  `language_paths`, e.g. `{"EN": "/", "RU": "/ru/"}`).
 - Do not auto-redirect by IP alone; offer a visible language switcher.
 - Localise keywords per language (do not translate literally) — a language's
   search demand differs from a word-for-word translation.
-- Keep one canonical per language variant; avoid duplicate content across
-  languages.
+- Keep one self-referential canonical per language variant; avoid cross-language canonicals.
 
 ## Local SEO
 - The local pack is driven by relevance, distance, and prominence — a Google
@@ -91,11 +99,14 @@ health, legal) the bar is higher.
 - Original value: data, examples, first-hand experience — not a rehash.
 - Freshness: update facts/dates; a stale page decays.
 
-## Link building (basics)
+## Link building (basics & anchor distribution)
 - Relevance and authority beat volume; a few strong, topically-relevant links
   outperform many weak ones.
-- Anchor diversity: mostly branded/URL/natural anchors; exact-match commercial
-  anchors at scale look manipulative.
+- **Healthy Anchor Profile (B2B/Services benchmark):**
+  - Branded anchors (`"PB Services"`, `"PB Services Georgia"`): **50–70%**
+  - Naked URLs / Domain (`"pbservices.ge"`, `"https://..."`): **15–25%**
+  - Topical / Natural / Generic (`"website"`, `"learn more"`, `"click here"`): **10–15%**
+  - Exact-match commercial keywords (`"open bank account georgia"`): **< 10–15%** (higher triggers Penguin/algorithmic manipulation filters).
 - Link velocity spikes and low-authority-dominated profiles are risk signals.
 
 ## Keyword difficulty & winnability (heuristic)
@@ -104,12 +115,31 @@ health, legal) the bar is higher.
 - Weight by relevance to a service line; drop off-topic terms even if
   high-volume.
 
-## AI / generative visibility
-AI engines (ChatGPT, Perplexity, Claude, Gemini, Copilot) send traffic that
-GA4 records as referral or direct — so GA4 AI-referral counts are a **lower
-bound**, never the full picture. Pages that get cited tend to lead with a direct
-answer, use clean headings, include stats/definitions, and carry schema. GSC
-"generative-shaped query" heuristics are an **undercount**, not AI traffic.
+## AI / Generative Engine Optimization (GEO & AEO)
+Generative engines (SearchGPT, Perplexity, Claude, Gemini, Copilot) synthesize answers
+from citable, high-information-gain pages:
+
+### AI Crawler Accessibility
+Verify that `robots.txt` and WAF/edge firewall rules permit major AI search crawlers:
+- `GPTBot` (OpenAI training/search), `OAI-SearchBot` (SearchGPT real-time indexer)
+- `PerplexityBot` (Perplexity search indexer)
+- `ClaudeBot` (Anthropic web indexer)
+- `Google-Extended` (Gemini training control)
+- `Applebot-Extended` (Apple Intelligence)
+Blocking search-facing user-agents while trying to rank in AI search is a critical disconnect.
+
+### Information Gain & Quotability Scorecard
+To maximize LLM extraction and citation frequency:
+- **First-Fold Definition:** Direct, definitive answer within the first 45 words of the lead section (`X is Y that does Z`).
+- **Data & Statistical Density:** Include specific metrics, percentages, dates, and benchmarks; LLMs bias heavily toward pages providing primary quantitative evidence.
+- **Structured Synthesis Format:** Markdown/HTML tables for comparisons; bulleted lists with bold lead-ins for multi-part steps.
+- **Sentence Salience:** Write clean, declarative sentences that can be quoted verbatim without requiring surrounding context.
+
+### Entity Disambiguation & Knowledge Graph Grounding
+LLMs resolve entities against structured knowledge graphs. Enhance Schema markup with:
+- `sameAs` array on `Organization` / `LocalBusiness` linking to authoritative entity sources (Wikidata, Wikipedia, LinkedIn, Crunchbase, official company registries).
+- Explicit `author` and `reviewedBy` objects of type `Person` with credentials to establish verified E-E-A-T.
+- Clear `@id` URIs to disambiguate the subject across multilingual versions.
 
 ## Estimates vs real data
 - **Real** (the site's own): GSC positions/clicks/impressions, GA4 sessions/conversions.

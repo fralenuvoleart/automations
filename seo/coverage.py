@@ -37,6 +37,8 @@ def _read_list(value: str | None) -> list[str]:
         if text.startswith("["):
             return [str(x) for x in json.loads(text)]
         return [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if value.lower().endswith((".txt", ".json", ".csv", ".tsv")) or "/" in value or "\\" in value:
+        raise FileNotFoundError(f"file not found: '{value}'")
     if value.strip().startswith("["):
         return [str(x) for x in json.loads(value)]
     return [x.strip() for x in value.split(",") if x.strip()]

@@ -49,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         "created": datetime.now(timezone.utc).isoformat(),
     }, indent=2) + "\n")
 
+    (run_dir / "context.json").write_text("{}\n")
+
     (run_dir / "findings.json").write_text(json.dumps({
         "skill": args.skill,
         "as_of": win["as_of"],
@@ -57,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         "sections": [],
     }, indent=2) + "\n")
 
-    print(f"wrote {run_dir}/.run_state.json and findings.json "
+    print(f"wrote {run_dir}/.run_state.json, context.json, and findings.json "
           f"(window {win['startDate']}\u2192{win['endDate']})")
     return 0
 

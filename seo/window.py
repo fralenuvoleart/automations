@@ -51,9 +51,10 @@ def as_of_line(window: dict, generated_at: str | None = None) -> str:
     """Human-readable provenance line for report output."""
     stamp = generated_at or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     span = f"{window['startDate']}\u2192{window['endDate']}"
-    if "compareStartDate" in window:
+    if "compareStartDate" in window and "compareEndDate" in window:
         span += f" (vs {window['compareStartDate']}\u2192{window['compareEndDate']})"
-    return f"Window {span} \u00b7 GSC lag {window['lag']}d \u00b7 generated {stamp}"
+    lag = window.get("lag", DEFAULT_LAG)
+    return f"Window {span} \u00b7 GSC lag {lag}d \u00b7 generated {stamp}"
 
 
 def main() -> int:

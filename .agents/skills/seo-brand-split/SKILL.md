@@ -36,7 +36,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Need | Tool | Status |
 |---|---|---|
 | Brand vs non-brand | `search-console` → `seo_audit` {"type": "brand_vs_nonbrand"} (supply: siteUrl, brandKeywords) | available |
-| Raw queries | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Query-to-page mappings | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
 | Brand terms | site profile (`python3 seo/site_profile.py --site <domain> --get brand_terms`) | available |
 | Language path map | site profile (`python3 seo/site_profile.py --site <domain> --get language_paths`) | available |
 
@@ -44,9 +44,9 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
 2. **Brand terms.** `python3 seo/site_profile.py --site <domain> --get brand_terms` — pass these as `brandKeywords`.
 3. **The split.** `search-console` → `seo_audit` {"type": "brand_vs_nonbrand"} (supply: siteUrl, brandKeywords) — branded vs non-branded clicks/impressions/position.
-4. **Cross-check.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) — classify queries against `brand_terms` to confirm the split and find top non-brand queries.
+4. **Cross-check.** `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) — classify queries against `brand_terms` to confirm the split and find top non-brand queries.
 5. **Trend.** Compare current vs previous period; the signal that matters is **non-brand click/impression growth** (branded traffic mostly tracks demand, not SEO).
-6. **By language.** GSC has no language dimension — derive language from the **page path** via the profile's `language_paths` map (`python3 seo/site_profile.py --site <domain> --get language_paths`; e.g. EN = `/`, RU = `/ru/`, AR = `/ar/`, ZH = `/zh/`). Classify each query by the path prefix of the page it maps to in the `analytics_query` rows; queries whose page matches no prefix fall back to script detection — label those **derived**. Report branded vs non-brand per language so a language-specific gap is visible.
+6. **By language & hreflang integrity.** GSC has no language dimension — derive language from the **page path** via the profile's `language_paths` map (`python3 seo/site_profile.py --site <domain> --get language_paths`; e.g. EN = `/`, RU = `/ru/`, AR = `/ar/`, ZH = `/zh/`). Classify each query by the path prefix of the page it maps to in the `analytics_query` rows; queries whose page matches no prefix fall back to script detection — label those **derived**. Verify reciprocal `hreflang` consistency so secondary language versions do not cannibalize primary language queries (see [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md)). Report branded vs non-brand per language so a language-specific gap is visible.
 7. **Assemble.** Verdict = non-brand direction; then branded vs non-branded table (overall + per language); top non-brand queries.
 
 ## Determinism

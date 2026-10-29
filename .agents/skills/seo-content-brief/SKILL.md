@@ -26,7 +26,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 
 ## When NOT to Use
 - No `search-console` server configured
-- Keyword planning across many topics (use `seo-keyword-research`)
+- Keyword planning across many topics (use `seo-keyword-strategy`)
 
 ## Requires
 The `search-console` MCP server with GSC connected. Verify with `search-console` → `diagnostics`.
@@ -37,21 +37,23 @@ The `search-console` MCP server with GSC connected. Verify with `search-console`
 | Live SERP top 10 | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/regular"} (supply: data) | optional* (fallback: web search) |
 | Secondary keywords + volumes | `search-console` → `seo_keywords_research` {"type": "related"} (supply: keywords) | available (estimates) |
 | Real volumes / CPC (planner) | `google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords) | optional (real volumes replace estimates) |
-| Existing foothold | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Existing foothold | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
 | Page speed / schema checks | `search-console` → `pagespeed_analyze` (supply: url), `search-console` → `schema_validate` (supply: url) | available |
 
 ## Workflow
 1. **The SERP.** Call `dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/regular"} (supply: data) for the live Google top 10 of the target keyword — titles, URLs, SERP features (featured snippet, PAA, video). If the server is unauthenticated, fetch the top results via web search instead; the brief must be built from a real SERP either way.
 2. **Read the top 3.** Fetch and skim the top-ranking pages: their structure, depth, angle, what they all cover (table stakes) and what none cover (the opening).
 3. **Keyword set.** `search-console` → `seo_keywords_research` {"type": "related"} (supply: keywords) seeded with the target — secondary keywords and question variants worth folding in. Label volumes as estimates.
-4. **Your existing foothold.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) filtered to the topic — queries the site already gets impressions for (work them into headings), and existing pages on adjacent topics (internal-link sources; also flag if one already half-covers this and should be expanded instead of a new page).
-5. **Assemble the brief:**
+4. **Your existing foothold.** `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) filtered to the topic — queries the site already gets impressions for (work them into headings), and existing pages on adjacent topics (internal-link sources; also flag if one already half-covers this and should be expanded instead of a new page).
+5. **Assemble the brief (incorporating SERP feature capture):**
    - Target keyword + secondaries with volumes
    - Search intent and required format (guide/listicle/comparison/tool page), inferred from what actually ranks
+   - SERP feature capture target: specify exact target format (paragraph definition box ≤ 45 words, comparison table, or bullet list) to capture Featured Snippets and PAA blocks
    - Proposed title + meta (write for the CTR, under 60/155 chars)
    - H2/H3 outline with a one-line note per section on what it must say
    - Questions to answer (PAA + question keywords)
    - Table stakes vs the differentiating angle
+   - Quotability & Information Gain Scorecard (GEO): lead definition under 45 words, primary statistics/dates, structured comparison table, and Schema entity grounding (see [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md))
    - Internal links: 3–5 existing pages to link from, with anchors
    - Target length: match the ranking median, don't pad
 
@@ -99,7 +101,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). The 
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
 ## Related / Delegation
-- Cluster/keyword planning across many topics → run `seo-keyword-research`.
+- Cluster/keyword planning across many topics → run `seo-keyword-strategy`.
 
 - Deliver the report as PDF/email → run `report-export` (pass `--skill seo-content-brief` to select this skill's subject).
 

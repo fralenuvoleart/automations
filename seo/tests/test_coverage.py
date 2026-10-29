@@ -41,6 +41,14 @@ def test_read_list_accepts_json_and_csv():
     assert coverage._read_list(None) == []
 
 
+def test_read_list_rejects_missing_file_path():
+    try:
+        coverage._read_list("nonexistent_covered.txt")
+        assert False, "expected FileNotFoundError"
+    except FileNotFoundError:
+        pass
+
+
 def _run_all() -> int:
     import traceback
 

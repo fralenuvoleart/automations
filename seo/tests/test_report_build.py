@@ -30,6 +30,27 @@ def test_build_is_deterministic():
     assert a == b
 
 
+def test_build_handles_missing_lag_and_sanitizes_tables():
+    minimal = {
+        "skill": "seo-audit",
+        "as_of": "2026-10-29",
+        "window": {"startDate": "2026-10-01", "endDate": "2026-10-28"},
+        "verdict": "healthy",
+        "sections": [{
+            "heading": "Sanitized Table",
+            "body": "table below",
+            "table": [
+                {"Query": "best | agency", "Notes": "line1\nline2", "Cost": None}
+            ]
+        }]
+    }
+    md = build_report.build(minimal, generated_at="2026-10-29T06:00Z")
+    assert "GSC lag 2d" in md
+    assert r"best \| agency" in md
+    assert "line1 line2" in md
+    assert "| None |" not in md
+
+
 def _run_all() -> int:
     import traceback
 

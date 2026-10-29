@@ -10,7 +10,7 @@ compatibility: Requires the `search-console` MCP server (GSC) and the `analytics
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
 ## Scope
-- **Scope**: whole-site organic audit (indexation, CTR, decay, cannibalization, quick wins) from the site's own GSC + GA4. Does not read or write `memory-bank/`.
+- **Scope**: whole-site organic macro health audit (indexation, CTR, decay, cannibalization, local-intent visibility when regional markets apply, quick wins) from the site's own GSC + GA4. Does not read or write `memory-bank/`.
 
 ## Report Audience & Purpose
 - **Audience**: the site owner/marketer (not a developer).
@@ -27,7 +27,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 ## When NOT to Use
 - No `search-console` server in `.roo/mcp.json`
 - Single-page technical debugging (call `search-console` → `inspection_inspect` (supply: siteUrl, urls) / `search-console` → `pagespeed_analyze` (supply: url) directly)
-- Competitor analysis (use `seo-competitor-gap`)
+- Competitor analysis (use `seo-keyword-strategy` or `seo-backlink-check`)
 
 ## Requires
 - The `search-console` MCP server with GSC connected (verify with `search-console` → `diagnostics` — `google` must report `ok`).
@@ -39,15 +39,13 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Property list | `search-console` → `sites_list` | available |
 | Indexation / crawl health | `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl) | available |
 | Aggregate period delta | `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) | available |
-| Raw GSC performance | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Query-to-page performance | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
 | Anomaly detection | `search-console` → `analytics_anomalies` (supply: siteUrl, startDate, endDate) | available |
 | Drop root cause | `search-console` → `analytics_compare` {"mode": "drop_attribution"} (supply: siteUrl, startDate, endDate) | available |
 | Striking distance | `search-console` → `seo_audit` {"type": "striking_distance"} (supply: siteUrl) | available |
 | Cannibalization | `search-console` → `seo_audit` {"type": "cannibalization"} (supply: siteUrl) | available |
 | Low-CTR targets | `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl) | available |
 | Quick wins | `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl) | available |
-| Recommendations | `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl) | available |
-| Low-hanging fruit | `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl) | available |
 | Page inspection | `search-console` → `inspection_inspect` (supply: siteUrl, urls) | available |
 | GA4 page performance | `analytics` → `run_report` {"dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"]} (supply: property_id, date_ranges) | available |
 | GA4 traffic sources | `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) | available |
@@ -56,13 +54,14 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 1. **Verify connections.** `search-console` → `diagnostics` and `analytics` → `get_account_summaries`. If either fails, stop and report which is missing.
 2. **Pick the property.** `search-console` → `sites_list`. Use the one matching the user's domain; confirm only when ambiguous.
 3. **Indexation.** `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl). Flag large "Crawled — currently not indexed" counts or spikes in excluded pages.
-4. **Performance baseline.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate delta (last 90 days vs previous 90). Then call `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page` to get per-query and per-page deltas. Set a high `rowLimit` on both pulls so the diff is not truncated.
-5. **Find the problems:**
-   - **Decaying pages** — clicks down >30% period-over-period
-   - **CTR anomalies** — position ≤5 but CTR <2% (title/meta problem) → `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
-   - **Striking distance** — position 8–20 with high impressions → `search-console` → `seo_audit` {"type": "striking_distance"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
-   - **Cannibalization** — same query, multiple pages → `search-console` → `seo_audit` {"type": "cannibalization"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
-   - **Quick wins / recommendations / low-hanging fruit** — `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl)
+4. **Performance baseline.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate delta (last 90 days vs previous 90). Then call `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page` to get clean per-query and per-page deltas without Cartesian dimension fragmentation.
+5. **Find the systemic problems (Executive Scorecard):**
+   - **Decaying pages** — clicks down >30% period-over-period (delegate operational refresh to `seo-content-refresh`).
+   - **CTR anomalies** — position ≤5 but CTR <2% (title/meta problem) → `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate).
+   - **Striking distance** — position 8–20 with high impressions → `search-console` → `seo_audit` {"type": "striking_distance"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate).
+   - **Cannibalization** — same query, multiple pages → `search-console` → `seo_audit` {"type": "cannibalization"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate). Apply the Cannibalization Decision Matrix from [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md) (301 redirect for overlapping duplicate intent; canonical / exact-anchor internal link for hub vs landing page; title/H1 de-optimization for distinct sub-intents).
+   - **Quick wins** — `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl).
+   - **Local visibility (when applicable)** — if the profile's `markets` is not WORLDWIDE, verify queries containing local modifiers ("near me", target cities).
 6. **Spot-check pages.** For the 3–5 worst pages, `search-console` → `inspection_inspect` (supply: siteUrl, urls) — canonical, indexing state, last crawl.
 7. **Cross-check traffic.** `analytics` → `run_report` {"dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"]} (supply: property_id, date_ranges) — organic sessions + engagement by landing page, same periods. A page can hold rankings but lose revenue; call that out.
 8. **AI traffic.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — note whether AI engines (ChatGPT, Perplexity, Claude, Gemini) are a meaningful channel. The host list is the registry default; reconcile it with the profile's `ai_sources` exactly as in `seo-ai-visibility` step 2 (runtime override, never a hand-edit of this spec).
@@ -85,7 +84,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 4. Present the report path.
 
 ## Fallbacks
-- If the specialized `seo_*` tools are not exposed, derive every finding from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) using the thresholds above.
+- If the specialized `seo_*` tools are not exposed, derive every finding from `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) using the thresholds above.
 - If GA4 is not connected, run the GSC half and state that the revenue/engagement cross-check is unavailable. Do not substitute third-party estimates for the site's own data.
 
 ## Pending Data Sources
@@ -116,7 +115,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
 ## Related / Delegation
-- Paid-vs-organic overlap is available via the connected `google-ads` MCP — run the `seo-vs-ads` skill for the full analysis.
+- Paid-vs-organic overlap is available via the connected `google-ads` MCP — run the `seo-paid-organic` skill for the full analysis.
 - Position movers over time → run `seo-rank-tracking`.
 - Brand vs non-brand split → run `seo-brand-split`.
 - Technical health → run `seo-technical`; index coverage → run `seo-indexation`.

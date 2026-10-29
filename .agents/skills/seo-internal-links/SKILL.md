@@ -35,15 +35,15 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 ## Data Sources
 | Need | Tool | Status |
 |---|---|---|
-| Page-level data | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Query-to-page mapping | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
 | Page inspection | `search-console` → `inspection_inspect` (supply: siteUrl, urls) | available |
 | Priority pages | site profile (`python3 seo/site_profile.py --site <domain> --get priority_pages`) | available |
 | True link graph (crawl) | crawl source | not connected |
 
 ## Workflow
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
-2. **Priority pages.** `python3 seo/site_profile.py --site <domain> --get priority_pages`. If empty, use the top pages by impressions from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate).
-3. **Signals.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) — a priority page with impressions but weak position often lacks internal links; `search-console` → `inspection_inspect` (supply: siteUrl, urls) to confirm crawlability.
+2. **Priority pages.** `python3 seo/site_profile.py --site <domain> --get priority_pages`. If empty, use the top pages by impressions from `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate).
+3. **Signals.** `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) — a priority page with impressions but weak position often lacks internal links; `search-console` → `inspection_inspect` (supply: siteUrl, urls) to confirm crawlability.
 4. **Candidate sources.** Match priority pages to related pages that already rank (topic overlap) — those are the best internal-link sources.
 5. **Recommend.** For each under-linked priority page: 3–5 source pages + the anchor text to use. Record `findings.unavailable` = `{source: crawl, affects: full link graph}` so the report states the approximation.
 6. **Assemble.** Rank by priority × impressions.

@@ -3,7 +3,7 @@
 Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
-> **Status (2026-10-29):** 18 `seo-*` skills, CI gate [`check.sh`](check.sh) ALL GREEN (79/79 tests, registry validated against live MCP schemas). Independently audited against the `kinsta-logs` benchmark — **8.5/10**, all findings fixed; see [`plans/seo-skills-audit-2026-10-29.md`](../plans/seo-skills-audit-2026-10-29.md). Registry v5.
+> **Status (2026-10-29):** 12 consolidated `seo-*` power skills, CI gate [`check.sh`](check.sh) ALL GREEN. Registry v6.
 
 | Path | Purpose |
 |---|---|
@@ -90,28 +90,22 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "did X"
 python3 seo/coverage.py --site pbservices.ge --covered covered.txt               # coverage block
 ```
 
-## Skill inventory & status
+## Skill inventory & status (12 Consolidated Power Skills)
 
 | Skill | Answers | Primary sources | Degrades without |
 |---|---|---|---|
-| `seo-audit` | Whole-site organic health, quick wins | GSC + GA4 | GA4 → GSC-only half; `dataforseo` → skip SERP context |
-| `seo-ai-visibility` | Real AI-engine referral traffic + cited pages | GA4 + GSC (`genai_query_insights`) | GA4 → `analytics_advanced` aggregate → genai heuristic (labelled) |
-| `seo-backlink-check` | Backlink profile, link gap vs competitor | `dataforseo` (optional) + GA4 | `dataforseo` → GA4 referral cross-check only; never fabricates counts |
-| `seo-brand-split` | Brand vs non-brand trend (overall + per language) | GSC + profile `brand_terms`/`language_paths` | GSC-only; missing `brand_terms` → stop and ask |
-| `seo-competitor-gap` | Keywords a competitor ranks for that you don't | `dataforseo` (optional) + GSC | `dataforseo` → "your keywords" half only |
-| `seo-content-brief` | SERP-driven brief for one keyword | GSC + `dataforseo` (optional) + planner (optional) | `dataforseo` → web-search SERP; planner → labelled estimates |
-| `seo-content-refresh` | Decaying pages ranked by refresh priority | GSC + profile `priority_pages` | none (GSC-only) |
-| `seo-cross-engine` | Google vs Bing divergence | GSC + Bing | Bing not connected → state and stop |
-| `seo-indexation` | Index coverage, sitemap health, submit list | GSC | none (GSC-only); Indexing API = nudge, not a guarantee |
-| `seo-internal-links` | Under-linked/orphaned priority pages | GSC + profile | no crawl source → GSC-level approximation, stated in report |
-| `seo-keyword-research` | Keyword plan with real volumes/CPC | GSC + `google-ads-planner` + `google-ads` (optional) | planner 429/unavailable → `seo_keywords_research` estimates (labelled) |
-| `seo-local` | Local-intent organic performance | GSC | GBP not wired → GSC local-intent queries only, gap stated |
-| `seo-monetisation` | AdSense earnings vs organic | GSC + AdSense | AdSense → stop or `seo-opportunity`; no URL channels → domain/date-level only (no page dimension in the AdSense API) |
-| `seo-opportunity` | Traffic value of striking-distance/gap keywords | GSC + `google-ads-planner` | planner → labelled estimates |
-| `seo-rank-tracking` | Position movers between two periods | GSC (+ `dataforseo` optional) | `dataforseo` → skip live SERP spot-check |
-| `seo-serp-features` | Featured-snippet / PAA capture targets | GSC + `dataforseo` (optional) | `dataforseo` → web-search SERP + `unavailable` record |
-| `seo-technical` | CWV, accessibility, schema, crawlability | GSC + PageSpeed (`gsc.pagespeed` + `gsc.pagespeed_a11y`) | PageSpeed failure → state it; schema/inspection still reported |
-| `seo-vs-ads` | Paid/organic overlap, wasted spend | GSC + `google-ads` (GAQL) | `google-ads` → organic half only, missing connection named |
+| `seo-audit` | Whole-site macro organic health, local visibility, cannibalization, quick wins | GSC + GA4 | GA4 → GSC-only half; `dataforseo` → skip SERP context |
+| `seo-ai-visibility` | Real AI-engine referral traffic + cited pages + GEO information gain | GA4 + GSC (`genai_query_insights`) | GA4 → `analytics_advanced` aggregate → genai heuristic (labelled) |
+| `seo-backlink-check` | Backlink profile, authority, anchor risk, link gap vs competitor | `dataforseo` (optional) + GA4 | `dataforseo` → GA4 referral cross-check only; never fabricates counts |
+| `seo-brand-split` | Brand vs non-brand trend (overall + per language + hreflang) | GSC + profile `brand_terms`/`language_paths` | GSC-only; missing `brand_terms` → stop and ask |
+| `seo-content-brief` | SERP-driven brief for one keyword, SERP feature capture, GEO scorecard | GSC + `dataforseo` (optional) + planner (optional) | `dataforseo` → web-search SERP; planner → labelled estimates |
+| `seo-content-refresh` | Decaying pages ranked by refresh priority, decay vs demand loss | GSC + profile `priority_pages` | none (GSC-only) |
+| `seo-indexation` | Index coverage, sitemap health, submit list, international hreflang | GSC | none (GSC-only); Indexing API = nudge, not a guarantee |
+| `seo-internal-links` | Under-linked/orphaned priority pages, link equity distribution | GSC + profile | no crawl source → GSC-level approximation, stated in report |
+| `seo-keyword-strategy` | Comprehensive keyword strategy, striking-distance value, competitor gap | GSC + `google-ads-planner` + `dataforseo` (optional) | planner 429/unavailable → `seo_keywords_research` estimates (labelled) |
+| `seo-paid-organic` | Paid vs organic query overlap, wasted ad spend elimination | GSC + `google-ads` (GAQL) | `google-ads` → organic half only, missing connection named |
+| `seo-rank-tracking` | Position movers between two periods, Google vs Bing divergence | GSC (+ `dataforseo` optional, + Bing) | `dataforseo` → skip live SERP spot-check; Bing unconfigured → skip |
+| `seo-technical` | Template CWV archetypes, accessibility, Knowledge Graph schema, AI bots | GSC + PageSpeed (`gsc.pagespeed` + `gsc.pagespeed_a11y`) | PageSpeed failure → state it; schema/inspection still reported |
 
 Every skill: absolute-date windows (`window.py`), as-of line, estimate labels, never-fabricate rule, findings JSON → `build_report.py` → **mandatory** `validate_report.py`, `## Fallbacks` + `## Pending Data Sources`, skill-specific Troubleshooting, delivery via `report-export`.
 

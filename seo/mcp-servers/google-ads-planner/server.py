@@ -56,7 +56,8 @@ def _idea_to_dict(idea: Any) -> dict:
     }
     trend = []
     for v in m.monthly_search_volumes:
-        month_no = int(v.month) - 1  # Month enum: JANUARY=2
+        raw_m = int(v.month)
+        month_no = max(1, min(12, raw_m - 1)) if raw_m >= 2 else 1  # Month enum: JANUARY=2
         trend.append({"month": f"{v.year}-{month_no:02d}", "searches": v.monthly_searches})
     out["monthly_trend"] = sorted(trend, key=lambda t: t["month"])
     return out

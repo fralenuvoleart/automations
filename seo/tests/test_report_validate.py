@@ -59,6 +59,23 @@ def test_url_present_in_data_is_ok():
     assert validate_report.validate(bad, data_text="https://example.com/ok") == []
 
 
+def test_standard_schema_and_doc_urls_not_flagged_as_hallucinations():
+    item = _clone()
+    item["$schema"] = "http://json-schema.org/draft-07/schema#"
+    item["sections"][0]["body"] = "docs at https://developers.google.com/search/docs"
+    # Even if data_text has no matching URLs, schema and dev docs should not be flagged
+    assert validate_report.validate(item, data_text="no urls here") == []
+
+
+def test_missing_compare_end_date_does_not_crash():
+    item = _clone()
+    item["window"]["compareStartDate"] = "2026-08-01"
+    item["window"].pop("compareEndDate", None)
+    # Must not raise KeyError
+    issues = validate_report.validate(item, report_text="Window 2026-09-30\u21922026-10-27 \u00b7 GSC lag 2d")
+    assert isinstance(issues, list)
+
+
 def test_report_missing_asof_line_fails():
     issues = validate_report.validate(GOOD, report_text="no header here")
     assert any("as-of" in i for i in issues)

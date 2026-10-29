@@ -37,8 +37,10 @@ def test_priority_keywords_grouped_by_language():
 def test_get_flattens_and_filters_by_lang():
     flat = site_profile.get("pbservices.ge", "priority_keywords")
     ru = site_profile.get("pbservices.ge", "priority_keywords", lang="ru")
+    ru_upper = site_profile.get("pbservices.ge", "priority_keywords", lang="RU")
     en = site_profile.get("pbservices.ge", "priority_keywords", lang="en")
     assert isinstance(flat, list) and len(flat) == len(ru) + len(en) + 1  # +1 zh, ar empty
+    assert ru == ru_upper
     assert "ип в грузии" in ru
     assert "individual entrepreneur georgia" in en
     assert "ип в грузии" not in en

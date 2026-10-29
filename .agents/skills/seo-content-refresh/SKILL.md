@@ -36,14 +36,14 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Need | Tool | Status |
 |---|---|---|
 | Period delta | `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) | available |
-| Page-level data | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Page and query data | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
 | Priority pages | site profile (`python3 seo/site_profile.py --site <domain> --get priority_pages`) | available |
 
 ## Workflow
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
 2. **Two windows.** Default: last 90 days vs previous 90. GSC lags ~2 days — never include today.
 3. **Aggregate delta.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate).
-4. **Per-page delta.** `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period; join on `page`; compute clicks and impressions deltas.
+4. **Per-page delta.** `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) once per period; join on `page` and `query`; compute clicks and impressions deltas.
 5. **Classify the decline.** Distinguish **decay** (clicks and impressions both down → freshness/competition) from a **ranking loss** (position down, impressions held) from a **demand drop** (impressions down, position held).
 6. **Prioritise.** Rank decaying pages by **clicks lost × page importance** (importance = membership in the profile's priority pages — `python3 seo/site_profile.py --site <domain> --get priority_pages` — or the page mapping to a `python3 seo/site_profile.py --site <domain> --get services` line). Thresholds: default clicks down >30% period-over-period (override via site profile `thresholds`).
 7. **Recommend.** For each: **refresh** (decay), **consolidate** (overlaps another page), or **retire** (no demand). State the reason.

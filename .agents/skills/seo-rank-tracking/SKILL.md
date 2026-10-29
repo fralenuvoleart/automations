@@ -36,14 +36,15 @@ The `search-console` MCP server with GSC connected. Verify with `search-console`
 | Property list | `search-console` → `sites_list` | available |
 | Aggregate period delta | `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) | available |
 | Gradual trends | `search-console` → `analytics_compare` {"mode": "trends"} (supply: siteUrl, startDate, endDate) | available |
-| Raw query/page data | `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) | available |
+| Query and page rankings | `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) | available |
+| Cross-engine comparison | `search-console` → `compare_engines` (supply: siteUrl, dimension, startDate, endDate) | available* |
 | Lost queries | `search-console` → `seo_audit` {"type": "lost_queries"} (supply: siteUrl) | available |
 | Live SERP spot-check | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/regular"} (supply: data) | optional* |
 
 ## Workflow
 1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
 2. **Two windows.** Default: last 28 days vs previous 28. If the user names an event ("since the March update"), split around that date. GSC data lags ~2 days — never include today.
-3. **Pull both periods.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate. Then call `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page`.
+3. **Pull both periods & cross-engine check.** `search-console` → `analytics_compare` {"mode": "period_over_period"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) for the aggregate. Call `search-console` → `analytics_query` {"dimensions": ["query", "page"]} (supply: siteUrl, startDate, endDate) once per period and diff on `query` and `page`. If Bing is connected, optionally spot-check engine divergence via `search-console` → `compare_engines` (supply: siteUrl, dimension, startDate, endDate) with `dimension: "query"`.
 4. **Join and diff.** Match queries across periods; compute position delta, clicks delta, impressions delta.
 5. **Classify:**
    - **Winners** — position improved ≥2 spots on queries with real impressions

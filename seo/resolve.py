@@ -191,6 +191,24 @@ def check_semantics() -> int:
                 if m not in GA4_METRICS:
                     print(f"ERROR {cid}: unknown GA4 metric '{m}'")
                     issues += 1
+            df = args.get("dimension_filter")
+            if isinstance(df, dict):
+                def _check_filter(fobj):
+                    nonlocal issues
+                    if not isinstance(fobj, dict):
+                        return
+                    if "filter" in fobj and "field_name" in fobj["filter"]:
+                        fn = fobj["filter"]["field_name"]
+                        if fn not in GA4_DIMENSIONS:
+                            print(f"ERROR {cid}: unknown GA4 filter dimension '{fn}'")
+                            issues += 1
+                    for grp in ("and_group", "or_group"):
+                        if grp in fobj and isinstance(fobj[grp], dict):
+                            for expr in fobj[grp].get("expressions", []):
+                                _check_filter(expr)
+                    if "not_expression" in fobj:
+                        _check_filter(fobj["not_expression"])
+                _check_filter(df)
         if c["server"] == "search-console" and c["tool"] == "analytics_query":
             for d in args.get("dimensions", []):
                 if d not in GSC_DIMENSIONS:

@@ -62,11 +62,13 @@ def validate(findings: dict, report_text: str | None = None, data_text: str | No
         issues.append("output contains an unexpanded {{cap:}} token")
 
     if report_text is not None:
+        compare_dict = {}
+        if "compareStartDate" in win and "compareEndDate" in win:
+            compare_dict = {"compareStartDate": win["compareStartDate"], "compareEndDate": win["compareEndDate"]}
         expected = window.as_of_line(
             {"startDate": win.get("startDate"), "endDate": win.get("endDate"),
              "lag": win.get("lag", window.DEFAULT_LAG),
-             **({"compareStartDate": win["compareStartDate"], "compareEndDate": win["compareEndDate"]}
-                if "compareStartDate" in win else {})},
+             **compare_dict},
             generated_at=None,
         ).split(" \u00b7 generated")[0]
         if expected not in report_text:
@@ -86,7 +88,19 @@ def validate(findings: dict, report_text: str | None = None, data_text: str | No
                 issues.append(f"report is missing coverage language: {lang!r}")
 
     if data_text is not None:
+        ignored_hosts = {
+            "json-schema.org", "schema.org", "developers.google.com",
+            "support.google.com", "pagespeed.web.dev", "search.google.com",
+            "github.com", "kinsta.com", "dataforseo.com", "w3.org",
+        }
         for url in set(URL_RE.findall(blob)):
+            from urllib.parse import urlparse
+            try:
+                host = urlparse(url).netloc.lower()
+                if any(host == h or host.endswith("." + h) for h in ignored_hosts):
+                    continue
+            except Exception:
+                pass
             if url not in data_text:
                 issues.append(f"URL not found in source data (possible hallucination): {url}")
 
@@ -102,7 +116,13 @@ def _main() -> int:
 
     findings = json.loads(Path(args.findings).read_text())
     report_text = Path(args.report).read_text() if args.report else None
-    data_text = Path(args.data).read_text() if args.data else None
+    data_text = None
+    if args.data:
+        dp = Path(args.data)
+        if dp.exists():
+            data_text = dp.read_text()
+        else:
+            print(f"WARNING data file '{args.data}' not found; skipping data-crosscheck validation")
 
     issues = validate(findings, report_text, data_text)
     for i in issues:

@@ -47,7 +47,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 2. **Source.** Call `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/summary/live"} (supply: data) for the profile, `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/referring_domains/live"} (supply: data) for the domain list, `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/anchors/live"} (supply: data) for anchor distribution (pass the target as `data`). If the server is unauthenticated, **stop and say which connection is missing — never fabricate link counts.**
 3. **Target profile.** Pull summary + top ~100 referring domains by rank for the user's domain: total backlinks, referring domains, dofollow share, authority distribution.
 4. **Competitor (if named).** Same pulls for the competitor. Compute the **link gap**: strong domains linking to them but not to the user — that's the outreach list.
-5. **Quality read.** Flag: spammy anchor patterns (exact-match commercial anchors at scale), link velocity spikes, a profile dominated by low-authority domains.
+5. **Quality & anchor distribution read.** Compare anchor distribution against the benchmark in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md) (branded 50–70%, naked URL 15–25%, topical/generic 10–15%). Flag exact-match commercial anchors exceeding 10–15% as manipulative link profile risks, link velocity spikes, and profiles dominated by low-authority domains.
 6. **Traffic cross-check (own site only).** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"]} (supply: property_id, date_ranges) — referral sessions by source; note which linking domains actually send visitors.
 
 ## Determinism
@@ -94,7 +94,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
 ## Related / Delegation
-- Competitor keyword/content gap → run `seo-competitor-gap`.
+- Competitor keyword/content gap → run `seo-keyword-strategy`.
 
 - Deliver the report as PDF/email → run `report-export` (pass `--skill seo-backlink-check` to select this skill's subject).
 

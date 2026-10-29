@@ -23,6 +23,13 @@ import window  # noqa: E402
 TEMPLATE = HERE / "templates" / "base.md"
 
 
+def _clean_cell(val: object) -> str:
+    if val is None:
+        return ""
+    s = str(val).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    return s.replace("|", "\\|").strip()
+
+
 def _render_table(rows: list[dict]) -> str:
     if not rows:
         return ""
@@ -31,9 +38,9 @@ def _render_table(rows: list[dict]) -> str:
         for k in r:
             if k not in cols:
                 cols.append(k)
-    header = "| " + " | ".join(cols) + " |"
+    header = "| " + " | ".join(_clean_cell(c) for c in cols) + " |"
     sep = "| " + " | ".join("---" for _ in cols) + " |"
-    body = ["| " + " | ".join(str(r.get(c, "")) for c in cols) + " |" for r in rows]
+    body = ["| " + " | ".join(_clean_cell(r.get(c, "")) for c in cols) + " |" for r in rows]
     return "\n".join([header, sep, *body])
 
 
@@ -75,7 +82,10 @@ def build(findings: dict, generated_at: str | None = None) -> str:
                 out += (f"- {lang}: {d.get('covered', 0)}/{d.get('total', 0)} covered "
                         f"({d.get('missing', 0)} missing)\n")
         if missing:
-            out += "\n**Missing:**\n" + "\n".join(f"- {m}" for m in missing) + "\n"
+            if len(missing) > 10:
+                out += f"\n**Missing ({len(missing)}):** " + ", ".join(f"`{m}`" for m in missing) + "\n"
+            else:
+                out += "\n**Missing:**\n" + "\n".join(f"- {m}" for m in missing) + "\n"
 
     for s in findings.get("sections", []):
         out += f"\n## {s['heading']}\n\n{s['body'].strip()}\n"
