@@ -2,8 +2,9 @@
 
 Shared interpretation guide for the SEO skills. This is **methodology and
 definitions**, not a fact database — any numeric benchmark below is an
-industry rule-of-thumb, not a measured fact, and must be labelled as a
-heuristic in reports (see [`conciseness-directives.md`](conciseness-directives.md)).
+industry rule-of-thumb (or a published platform threshold, where noted), not a
+measured fact, and must be labelled as a heuristic in reports (see
+[`conciseness-directives.md`](conciseness-directives.md)).
 
 ## Search intent taxonomy
 Classify every target keyword into one of four intents; the intent dictates the
@@ -50,6 +51,58 @@ A page whose clicks fall materially period-over-period while impressions hold
 is decaying (content freshness, lost links, or a competitor overtaking it).
 Distinguish decay (both down) from a ranking loss (position down, impressions
 held) from a demand drop (impressions down).
+
+## Core Web Vitals (published thresholds)
+Google's published "good" thresholds (field data, 75th percentile):
+
+| Metric | Good | Needs improvement | Poor |
+|---|---|---|---|
+| LCP (Largest Contentful Paint) | ≤ 2.5 s | 2.5–4.0 s | > 4.0 s |
+| INP (Interaction to Next Paint) | ≤ 200 ms | 200–500 ms | > 500 ms |
+| CLS (Cumulative Layout Shift) | ≤ 0.1 | 0.1–0.25 | > 0.25 |
+
+PageSpeed lab data is a **snapshot**, not field data — label it as such.
+
+## E-E-A-T (Experience, Expertise, Authoritativeness, Trust)
+A quality lens, not a direct ranking factor. Signals: named authors with
+credentials, cited sources, first-hand experience, accurate/updated facts,
+clear contact/company info, HTTPS, no deceptive UX. For YMYL topics (money,
+health, legal) the bar is higher.
+
+## International SEO (multilingual / multi-region)
+- One URL per language/region; use `hreflang` (including `x-default`) to map
+  them, and keep the mapping reciprocal.
+- Do not auto-redirect by IP alone; offer a visible language switcher.
+- Localise keywords per language (do not translate literally) — a language's
+  search demand differs from a word-for-word translation.
+- Keep one canonical per language variant; avoid duplicate content across
+  languages.
+
+## Local SEO
+- The local pack is driven by relevance, distance, and prominence — a Google
+  Business Profile (GBP) is the primary lever.
+- NAP consistency (name, address, phone) across the site and citations.
+- Local-intent queries ("near me", city names) are the organic signal; the map
+  pack itself needs GBP data (not available from GSC alone).
+
+## Content quality (helpful-content lens)
+- Answer the query directly and early; match the format that ranks.
+- Depth over padding: cover the sub-questions (PAA) the SERP implies.
+- Original value: data, examples, first-hand experience — not a rehash.
+- Freshness: update facts/dates; a stale page decays.
+
+## Link building (basics)
+- Relevance and authority beat volume; a few strong, topically-relevant links
+  outperform many weak ones.
+- Anchor diversity: mostly branded/URL/natural anchors; exact-match commercial
+  anchors at scale look manipulative.
+- Link velocity spikes and low-authority-dominated profiles are risk signals.
+
+## Keyword difficulty & winnability (heuristic)
+- Prefer keywords where the site already has a foothold (striking distance) or
+  a topical match over high-volume head terms it cannot win.
+- Weight by relevance to a service line; drop off-topic terms even if
+  high-volume.
 
 ## AI / generative visibility
 AI engines (ChatGPT, Perplexity, Claude, Gemini, Copilot) send traffic that

@@ -2,94 +2,45 @@
 
 ## Current Focus
 
-Project is `automations` — two service runtimes:
-- `services/nodejs/` — Telegram bot + cache warmer (production, deployed on Sevalla)
-- `services/python/` — placeholder for future AI/NLP services
+`automations` — two service runtimes plus a shared Agent-Skills toolkit:
+
+- `services/nodejs/` — Telegram bot + cache warmer (production, deployed on Sevalla).
+- `services/python/` — placeholder for future AI/NLP services.
+- `.agents/skills/` — Agent Skills (SEO/GEO toolkit, `kinsta-logs`, `report-export`, `web-to-pdf`).
+
+## SEO/GEO skills toolkit (current state)
+
+**21 skills** in `.agents/skills/`:
+- **18 `seo-*` skills** — `seo-audit`, `seo-ai-visibility`, `seo-backlink-check`, `seo-brand-split`, `seo-competitor-gap`, `seo-content-brief`, `seo-content-refresh`, `seo-cross-engine`, `seo-indexation`, `seo-internal-links`, `seo-keyword-research`, `seo-local`, `seo-monetisation`, `seo-opportunity`, `seo-rank-tracking`, `seo-serp-features`, `seo-technical`, `seo-vs-ads`.
+- **`kinsta-logs`** — Kinsta server-log analysis.
+- **`report-export`** — shared Markdown→PDF + email delivery; every report skill delegates to it.
+- **`web-to-pdf`** — webpage→PDF.
+
+**Non-skill SEO tooling** lives in `seo/`:
+- `capabilities.json` — single source of truth (capability → server + tool + `args` + `runtime`).
+- `resolve.py` — expands `{{cap:<id>}}` / `{{site:<key>}}` tokens; `--check` / `--validate-live` / `--write` / `--map`.
+- `site_profile.py` — per-site profile + action history (`config/sites/<domain>.json` / `.history.md`).
+- `coverage.py` — deterministic coverage block (flattened + per-language).
+- `window.py` / `orchestrate.py` — deterministic windows + run seeding.
+- `report/` — `build_report.py` (findings JSON → Markdown) + `validate_report.py` (mandatory).
+- `references/` — shared contracts: `report-structure.md`, `conciseness-directives.md`, `data-source-map.md`, `capability-usage.md`, `domain-knowledge.md`, `findings-schema.json`.
+- `check.sh` — CI gate (`--check` + `--validate-live` + all tests).
+
+**MCP servers** (`.roo/mcp.json`): `search-console` (GSC/GA4/Bing/AdSense, OAuth), `analytics` (official GA4, service account), `google-ads` (service account), `google-ads-planner` (local, `seo/mcp-servers/`), `tavily`. **`dataforseo` is optional and not configured** — skills degrade gracefully and the report states the missing source.
+
+**Credentials:** service account via `GOOGLE_APPLICATION_CREDENTIALS`; `search-console` OAuth in `~/.search-console-mcp-config.enc`; report email SMTP in `~/.config/report-export/email.json`.
+
+## Sevalla services (current state)
+
+- `services/nodejs/` — Telegram bot (`src/telegram-bot.js`) + cache warmer (`src/cache-warmer.js`), wired by `index.js`; shell scripts in `scripts/`; docs in `docs/WARMER.md`.
+- Deployed on Sevalla — see `systemPatterns.md` for the Sevalla API rules (exec endpoint, backgrounding, bot 409 handling).
+
+## Conventions
+
+- Plan files → `plans/`.
+- Read this memory bank before every task; update `activeContext.md` + `progress.md` after significant changes.
+- Skill contract + CI: see `systemPatterns.md` and [`seo/README.md`](../seo/README.md).
 
 ## Recent Changes
 
-- **2026-10-29**: Applied the full SEO-skills review (bugs + best-practice alignment vs `kinsta-logs`). **Correctness:** fixed `seo-ai-visibility`'s "cited pages" query (was returning *all* landing pages — added the AI `sessionSource` filter via new capability `ga4.ai_cited_pages`) and replaced its `run_funnel_report` step (undefined `funnel_steps`, wrong tool) with `ga4.conversions_by_source`; fixed the call-spec-vs-prose dimension contradiction in `seo-audit`/`seo-rank-tracking`; reconciled planner status in `seo-keyword-research` (frontmatter vs `## Requires`) and `seo-content-brief` (frontmatter vs Data Sources vs Pending); aligned `seo-content-brief`'s Output with the top-of-report as-of line. **Consistency:** removed the copy-pasted planner troubleshooting row from the 6 skills that don't use the planner; dropped the inapplicable GSC-lag line from `seo-backlink-check`; added `## Fallbacks` + `## Pending Data Sources` to every skill and extended [`test_skill_docs.py`](../seo/tests/test_skill_docs.py) `REQUIRED_HEADERS` to enforce them; linked `data-source-map.md`/`capability-usage.md`/`domain-knowledge.md` from every Files table. **Parity with `kinsta-logs`:** added `## Report Audience & Purpose`, `## Memory-Bank Isolation`, and `## Configuration` sections to all 8 skills; added [`seo/references/domain-knowledge.md`](../seo/references/domain-knowledge.md) (intent taxonomy, CTR/striking-distance/decay/AI-visibility methodology). **Systemic:** made `--data` mandatory in every validate step; added a semantic dimension/metric allowlist check to [`seo/resolve.py`](../seo/resolve.py) `--check` (catches typo'd GA4/GSC names the loose live schema can't). Registry now has `ga4.ai_cited_pages` + `ga4.conversions_by_source`; `tool-map.md` regenerated. Verified: `resolve.py --check` clean, 54/54 tests pass.
-
-- **2026-10-29**: Completed schema-level validation of capability args. Added [`seo/mcp_client.py`](../seo/mcp_client.py) (spawns each MCP server, calls `tools/list`, dumps schemas to [`seo/tool-schemas.json`](../seo/tool-schemas.json)); upgraded the registry to **v4** — capabilities now carry structured JSON `args` + a `runtime` list, and enum-typed tools were split into per-value capabilities (`gsc.compare_period`/`_trends`/`_drop`, `gsc.striking_distance`/`cannibalization`/`low_ctr`/`lost_queries`, `gsc.keywords_related`/`_stats`/`_traffic`). [`seo/resolve.py`](../seo/resolve.py) now renders `{args} (supply: runtime)` and adds `--validate-live` (checks tool + arg names/types/enums/required against the live `inputSchema`) and `--map` (regenerates [`seo/tool-map.md`](../seo/tool-map.md)). Re-expanded all 8 skills to the v4 format. Verified: `--check` clean, `--validate-live` clean (dataforseo SKIPped, optional), no doubled prefixes or leftover prose args.
-
-- **2026-10-29**: Applied the SEO review findings and tightened the `seo/` layer. Fixed the broken `google-ads-planner` link in [`seo-keyword-research`](../.agents/skills/seo-keyword-research/SKILL.md) (now `../../../seo/mcp-servers/...`); brought `seo-keyword-research` and `seo-vs-ads` onto capability tokens (they previously bypassed the registry); aligned their `compatibility` lines and the DataForSEO "pending" wording; and fixed GA4 verification in `seo-ai-visibility`/`seo-audit`/`seo-backlink-check` to check the `analytics` server directly (not `search-console`'s GA4). Registry upgraded to **v3**: each server now carries a `tools` manifest and capabilities use `args` (the call spec is derived, removing the `tool`/`call` redundancy). Added `resolve.py --validate` to check every capability tool against its server manifest — closing the "registry vs reality" gap. All checks pass: `--check` clean, `--validate` clean, no broken links, all 8 frontmatter names match their directories.
-
-- **2026-10-29**: Removed the optional `dataforseo` server from [`.roo/mcp.json`](../.roo/mcp.json) (user is not adding DataForSEO for now) and made the fallbacks explicit. [`seo/capabilities.json`](../seo/capabilities.json) now marks `dataforseo` as `"configured": false`; [`seo/tool-map.md`](../seo/tool-map.md) and [`seo/README.md`](../seo/README.md) label it optional. The 7 skills that touch DataForSEO now degrade gracefully: `seo-backlink-check` runs only the GA4 referral cross-check, `seo-competitor-gap` runs only the "your keywords" half, `seo-content-brief` builds the SERP from web search, and `seo-rank-tracking`/`seo-ai-visibility`/`seo-audit`/`seo-keyword-research` skip the SERP/backlink enrichment — each states the skipped part instead of failing. Verified: JSON valid, `resolve.py --check` clean, no "pending credentials" text left.
-
-- **2026-10-29**: Consolidated all non-skill SEO files into a root [`seo/`](../seo/) folder and built the **capability-ID resolver** for zero-touch server swaps. [`seo/capabilities.json`](../seo/capabilities.json) is the single source of truth (capability ID → server + tool + full **`call` spec** with exact arguments); [`seo/resolve.py`](../seo/resolve.py) expands `{{cap:<id>}}` tokens in skills to that call spec (`--check` / `--write` / `--list`). This makes execution deterministic even for shared tools (`run_report` backs 4 GA4 capabilities; `api_request` backs all DataForSEO capabilities) — the LLM copies the exact args instead of inferring them. Moved the local `google-ads-planner` server to [`seo/mcp-servers/`](../seo/mcp-servers/) (updated [`.roo/mcp.json`](../.roo/mcp.json)); removed `docs/mcp-tool-map.md` (superseded by [`seo/tool-map.md`](../seo/tool-map.md)); repointed all skill links. Verified: `resolve.py --check` clean, token→call round-trip works.
-
-- **2026-10-29**: Implemented the MCP-stack proposal. Added the **official GA4 MCP** (`analytics-mcp` 0.8.0, installed at `~/.venvs/analytics-mcp`, entry `analytics` in [`.roo/mcp.json`](../.roo/mcp.json) using the service account + `GOOGLE_CLOUD_PROJECT=pb-services-1729760938249`) — this closes the AI-visibility/GA4 gap via generic `run_report`/`run_funnel_report`. Added the **official DataForSEO MCP** (`dataforseo-mcp-server@latest`, entry `dataforseo`, creds pending) to unlock backlinks/competitor/SERP. Created the canonical capability→tool map [`seo/tool-map.md`](../seo/tool-map.md) (single source of truth so a server swap = edit the map). Repointed GA4 in [`seo-ai-visibility`](../.agents/skills/seo-ai-visibility/SKILL.md), [`seo-audit`](../.agents/skills/seo-audit/SKILL.md), [`seo-backlink-check`](../.agents/skills/seo-backlink-check/SKILL.md) to the `analytics` server; repointed DataForSEO in [`seo-backlink-check`](../.agents/skills/seo-backlink-check/SKILL.md), [`seo-competitor-gap`](../.agents/skills/seo-competitor-gap/SKILL.md), [`seo-content-brief`](../.agents/skills/seo-content-brief/SKILL.md), [`seo-rank-tracking`](../.agents/skills/seo-rank-tracking/SKILL.md). GA4 server smoke-tested (starts cleanly).
-
-- **2026-10-29**: Patched the 8 SEO skills after an MCP-tool audit. Verified against the installed `search-console-mcp` v2.1.4 (registered tools = 24 + `get_started`; enumerated from `registerTool(...)` in its `dist/index.js`) and replaced 9 non-existent tool references with real equivalents: `analytics_conversion_funnel`→`analytics_advanced` (`conversion_funnel`), `analytics_page_performance`→`analytics_advanced` (`user_behavior`), `analytics_time_series`→`analytics_compare` (`trends`), `analytics_organic_landing_pages`→`analytics_query` (`page`), and `seo_striking_distance`/`seo_cannibalization`/`seo_low_ctr_opportunities`/`seo_lost_queries`→`seo_audit` (typed). `analytics_traffic_sources` has **no** registered equivalent (only `getTrafficSources` internals reachable via `compare_engines`) — marked `partial`/not-exposed in [`seo-ai-visibility`](../.agents/skills/seo-ai-visibility/SKILL.md), [`seo-backlink-check`](../.agents/skills/seo-backlink-check/SKILL.md), [`seo-audit`](../.agents/skills/seo-audit/SKILL.md). Fixed a broken relative link in [`seo-keyword-research`](../.agents/skills/seo-keyword-research/SKILL.md) (`../../mcp-servers` → `../../../mcp-servers`). Corrected stale unprefixed skill names in the 2026-10-28 entries below. Reachability re-checked: `search-console` ok (GSC 2 sites, GA4 `353738640`), `google-ads` ok (`5963609731`), `google-ads-planner` registered but live call still times out (known pending).
-
-- **2026-10-29**: Renamed the 6 unprefixed SEO skills under [`.agents/skills/`](../.agents/skills/) to carry the `seo-` prefix — `ai-visibility`→`seo-ai-visibility`, `backlink-check`→`seo-backlink-check`, `competitor-gap`→`seo-competitor-gap`, `content-brief`→`seo-content-brief`, `keyword-research`→`seo-keyword-research`, `rank-tracking`→`seo-rank-tracking` (`seo-audit`, `seo-vs-ads` unchanged). Done with `git mv` (history preserved) + frontmatter `name` updated in each SKILL.md to match the directory name (Agent Skills spec requirement). Cross-references updated: `seo-keyword-research`→`seo-content-brief`, `seo-content-brief`→`seo-keyword-research`, `seo-audit`→`seo-competitor-gap`. Kept the flat `<root>/<skill-name>/SKILL.md` layout — a common grouping folder would break discovery + the name-match invariant.
-
-- **2026-10-28**: Built custom **`google-ads-planner`** MCP server — [`mcp-servers/google-ads-planner/server.py`](../mcp-servers/google-ads-planner/server.py), FastMCP stdio, reuses `ads_mcp.utils` auth (ADC, same service account, same venv). Exposes `generate_keyword_ideas` (KeywordPlanIdeaService: volume, competition, top-of-page bids, 12-month trend; internal retry honors the API's "Retry in N seconds" rate-limit hint). Registered in [`.roo/mcp.json`](../.roo/mcp.json) with `alwaysAllow`. Requires **Basic** API access (user upgraded from Explorer — verified via Google docs that Explorer restricts all KeywordPlan* services). [`seo-keyword-research`](../.agents/skills/seo-keyword-research/SKILL.md) step 3 now uses it as the primary metrics source. Live verification still blocked by persistent `RESOURCE_EXHAUSTED` (per-method quota; likely post-upgrade propagation lag) — first successful call pending.
-
-- **2026-10-28**: Ported the Google Ads skill sections — [`seo-vs-ads`](../.agents/skills/seo-vs-ads/SKILL.md) now has the full paid-half workflow via `search_search` on `search_term_view` (verified fields via `metadata_get_resource_metadata`: cost in micros, `absolute_top_impression_percentage` for presence strength); [`seo-keyword-research`](../.agents/skills/seo-keyword-research/SKILL.md) gained optional real-CPC enrichment from served terms; [`seo-audit`](../.agents/skills/seo-audit/SKILL.md) pending pointer replaced with a live reference to `seo-vs-ads`. Keyword Planner idea generation confirmed **not exposed** by google-ads-mcp 0.0.5 (GAQL-only: 3 tools), so planner volume for arbitrary seeds stays estimated regardless of access level.
-
-- **2026-10-28**: Aligned `google-ads` entry in [`.roo/mcp.json`](../.roo/mcp.json) with the available MCP tool surface — added `alwaysAllow` for `customers_list_accessible_customers`, `metadata_get_resource_metadata`, `search_search`. Package already at latest (`google-ads-mcp 0.0.5`); re-verified live: `customers_list_accessible_customers` → `5963609731`.
-
-- **2026-10-28**: Connected **Google Ads** via the official `googleads/google-ads-mcp` server (venv at `~/.venvs/google-ads-mcp`, added to [`.roo/mcp.json`](../.roo/mcp.json)). Auth: service account `pbs-service-account@pb-services-1729760938249.iam.gserviceaccount.com` (added as a user in the Ads account); `GOOGLE_APPLICATION_CREDENTIALS` → `/mnt/backup/BACKUP/DB/AUTH/pb-services-service-account-key.json`. API access level: **Explorer** (2,880 ops/day). Verified `list_accessible_customers` → `customers/5963609731`. Developer tokens were sunset Sept 2026 — no MCC/token needed.
-
-- **2026-10-28**: Ported all 8 SEO/GEO skills from the Ryze MCP tool surface to the `search-console` MCP server (search-console-mcp). Each skill now uses the server's real tools (`analytics_query`, `analytics_compare`, `analytics_anomalies`, `seo_audit`, `site_health_check`, `inspection_inspect`, `seo_keywords_research`, `genai_query_insights`, `pagespeed_analyze`, `schema_validate`, `analytics_advanced`). Skills needing Google Ads (`seo-keyword-research`, `seo-content-brief`, `seo-vs-ads`) or DataForSEO (`seo-competitor-gap`, `seo-backlink-check`, `seo-content-brief`) carry explicit `## Pending Data Sources` sections. Methodology (thresholds, output contracts) preserved.
-
-- **2026-10-28**: Removed the `ryze` connector from [`.roo/mcp.json`](../.roo/mcp.json) — replaced by the direct `search-console` GSC/GA4 connection. The 8 Ryze skills remain in [`.agents/skills/`](../.agents/skills/) as a methodology reference only; they are non-functional without a Ryze-compatible MCP server.
-
-- **2026-10-28**: `search-console-mcp` login completed — GSC (`https://pbservices.ge/`) and GA4 (property `353738640`, via service account) registered in `~/.search-console-mcp-config.enc`. The Roo Code MCP server process predates the login and must be restarted to pick up the credentials.
-
-- **2026-10-28**: Added `search-console-mcp` (GSC + GA4 + Bing + AdSense) as a stdio MCP server in [`.roo/mcp.json`](../.roo/mcp.json). Auth is a browser OAuth login (`npx search-console-mcp setup`) — the server ships its own OAuth client, so **no Google Cloud project is needed**. Login still pending (the wizard is interactive and needs a real TTY). Google Ads deliberately deferred — it requires a developer token from an MCC/manager account.
-
-- **2026-10-28**: Added the Ryze SEO MCP connector + 8 open-source SEO/GEO skills. Registered `ryze` as a native remote MCP server (`"type": "streamable-http"`, `url: https://connector.get-ryze.ai/mcp`) in [`.roo/mcp.json`](../.roo/mcp.json) — no `mcp-remote` bridge needed (Roo Code supports remote MCP natively). Copied the repo's `skills/*` into [`.agents/skills/`](../.agents/skills/): `seo-audit`, `seo-keyword-research`, `seo-rank-tracking`, `seo-competitor-gap`, `seo-backlink-check`, `seo-ai-visibility`, `seo-content-brief`, `seo-vs-ads`. Source: `Ryze-AI-Adgent/open-seo-mcp-skills` (MIT). Requires OAuth sign-in to Ryze on first use.
-
-- **2026-10-23**: Merged collaborator (`seomaster700-spec`) commit `bcc9ab7` "Accept respond.io outgoing path /respond/outgoing/message" into `main` (fast-forward from `7c9d691`) and pushed to `origin/main`. Change in [`warmer-server.js`](../services/nodejs/src/warmer-server.js) replaces the exact-path checks for `GET`/`POST /respond/outgoing` with a regex `OUTGOING_PATH = /^\/respond\/outgoing(\/message)?\/?$/`, so respond.io's `<Webhook URL for Outgoing message>/message` path is also accepted.
-- **2026-07-27**: Implemented relay mode for hidden-profile users in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js). Detection via `!user.username` — no-username users get `copyMessage` with "💬 Reply" button instead of `forwardMessage`. Consultant taps button → private 1-1 relay via bot DM with `/close` to end. All in-memory state (`relayUsers` Set, `relaySessions` Map). Normal users with `@username` completely untouched. Webhook payload now includes `relayMode` boolean.
-- **2026-07-27**: Added `forward_origin` detection for Scenario 2 (user has @username but forwarding privacy "Nobody"). After `forwardMessage`, checks `fwdMsg.forward_origin?.type === 'hidden_user'` — if true, sends follow-up `👤 @username` + clickable `t.me/username` button to admin group. Covers the gap where Telegram renders "Hidden User" in forward header despite available @username.
-- **2026-08-26**: Enhanced [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) — time format changed from ISO-8601 to `YYYY-MM-DD hh:mm AM/PM (UTC)`, failed URLs now listed with reason at the bottom, and cache layers now show granular `unknownBy` breakdown (e.g. `2 DYNAMIC, 1 MISSING`) instead of a single `N UNKNOWN`.
-- **2026-08-26**: Changed warmer **status** time format from ISO-8601 (`2026-08-26T05:26:04.722Z`) to `YYYY-MM-DD hh:mm AM/PM (UTC)` in both [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) (live `Started:` line) and the `npm run status` inline script in [`package.json`](../services/nodejs/package.json) (live `Started:` + `Last run:` lines).
-- **2026-08-26**: [`index.js`](../services/nodejs/index.js) cache warmer schedule changed to run twice daily — `0 1,13 * * *` with explicit `{ timezone: "UTC" }` (01:00 and 13:00 UTC). Was previously `0 1 * * *` with no timezone option (relied on container local time).
-- **2026-08-26**: Changed [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) failure semantics — HTTP 4xx/5xx responses now count as **Failed** (not Successful) and appear in the `failedUrls` list with `status` + reason. Previously only network/timeout errors (no HTTP response) were counted as failed.
-- **2026-08-26**: [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) `── Status Codes ──` now merges 4xx/5xx failed counts alongside successful codes, marking them with `✗`. 3xx remain successful (not failed).
-- **2026-08-26**: [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) now captures redirect hops explicitly — `fetch` uses `redirect: "manual"` + manual follow loop, recording the 3xx code into a new persisted `redirectCodes` map. `── Status Codes ──` shows 3xx with `↳`. Previously 3xx was invisible (fetch auto-followed redirects).
-- **2026-07-23**: Fixed script naming — [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) now shows formatted last-run summary (was raw URL dump), [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now shows live progress only. Raw URL dump still available via `npm run logs`.
-- **2026-07-22**: Clarified CDN/Edge cache tracking in warmer — these layers are diagnostic-only (cannot be warmed from a single Sevalla location because Cloudflare has 300+ distributed edge nodes). `npm run status` and [`sevalla-status.sh`](../services/nodejs/scripts/sevalla-status.sh) now show UNKNOWN counts alongside HIT/MISS/BYPASS with a contextual note. Updated [`WARMER.md`](../docs/WARMER.md) with a dedicated "CDN/Edge Tracking: Diagnostic Only" section.
-- **2026-07-20**: Added forwarded message deep link + user chat link to Integrately webhook in [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js):
-  - `forwardMessage` return value captured → `forwardedMessageLink` (strips `-100` prefix)
-  - `userChatLink`: `https://t.me/{username}` preferred, `tg://user?id={id}` fallback
-- **2026-07-20**: Fixed [`sevalla-warmer.sh`](../services/nodejs/scripts/sevalla-warmer.sh) — now uses `sh -c "nohup npm run warmer &"` to background the warmer. Sevalla exec API has max 60s timeout; the warmer takes ~18min. Also corrected `timeout` field (API max is 60, was sending 300).
-- **2026-07-20**: Deleted root `package.json` — confirmed unreferenced by any shell script, JS file, Sevalla action, or quick command. Deploys use `services/nodejs/package.json` exclusively.
-- **2026-07-20**: Fixed [`index.js`](../services/nodejs/index.js) — `bot.launch()` now wrapped in retry logic (5 attempts, 3s delay) for 409 Conflict errors. Added global `unhandledRejection` handler to prevent unexpected promise rejections from crashing the entire process (logs them instead).
-- **2026-07-20**: Fixed [`sevalla-warmer.sh`](../services/nodejs/scripts/sevalla-warmer.sh) and [`sevalla-summary.sh`](../services/nodejs/scripts/sevalla-summary.sh) — both scripts now show HTTP status code and ✓/✗ feedback instead of silent output. Uses `curl -w` to capture status, checks 2xx range, and falls back to `output`/`error` fields if `stdout`/`stderr` are absent.
-- **2026-07-20**: Enhanced [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) — nested stats architecture:
-  - Stats grouped per HTTP status code with independent cache counters (Kinsta/CDN/Edge)
-  - Top-level rollup computed from nested data; summary shows both totals and per-status drill-down
-  - Non-2xx status codes list each URL individually in the summary
-  - UNKNOWN cache values tracked with full detail: which URL, which header layer, raw value
-  - Redirect detection via `res.redirected` — lists `from → to` for any redirected URLs
-  - Cache header values uppercased in logs and display (`HIT`/`MISS`/`BYPASS`)
-  - New persisted fields: `perStatus`, `unknowns`, `redirectUrls`, `statusCodes`
-  - `npm run logs` updated with backward-compatible null checks
-- **2026-07-20**: Created [`docs/WARMER.md`](../docs/WARMER.md) — comprehensive documentation covering warmer logic, cache header semantics, configuration, and explanation of why warmer stats (548 sitemap URLs, 100% HIT) differ from Kinsta Analytics (all traffic, includes MISS/BYPASS/non-cached).
-- **2026-07-19**: Patched [`telegram-bot.js`](../services/nodejs/src/telegram-bot.js) — 6 fixes applied:
-  1. `t()` helper no longer coerces missing `name` to `"undefined"` string
-  2. Deep-clone via `JSON.parse(JSON.stringify())` prevents env-var overrides from mutating the `require()`-cached messages
-  3. `startPayloads` Map entries now deleted after first use (memory leak fixed)
-  4. `forwardMessage` and auto-reply now retry on failure (2 retries, exponential backoff)
-  5. Integrately webhook `fetch` now retries on failure
-  6. Per-user rate limiting added: max 3 messages per 10-second window
-- **2026-07-19**: Enhanced [`cache-warmer.js`](../services/nodejs/src/cache-warmer.js) — 4 features added:
-  1. Concurrency guard (`isRunning` lock) prevents overlapping manual + cron runs
-  2. Cache stats tracking: Kinsta (`X-Kinsta-Cache`), CDN (`CF-Cache-Status`), Edge (`Ki-Cf-Cache-Status`) — each tallied HIT/MISS/BYPASS/UNKNOWN
-  3. Failed URLs tracked with error reasons, printed in summary
-  4. Summary persisted to `cache-warmer-last-run.json`; readable via `npm run logs`
-- Extracted bot logic from `index.js` → [`src/telegram-bot.js`](../services/nodejs/src/telegram-bot.js) for self-documenting structure
-- Renamed `src/warmer.js` → [`src/cache-warmer.js`](../services/nodejs/src/cache-warmer.js)
-- [`index.js`](../services/nodejs/index.js) is now a thin wiring layer: imports bot + warmer, starts cron
-- Removed old `pbs-telegram/` directory — fully migrated
-
-## Prior Tasks (Completed)
-
-- Cache warmer JS rewrite (from Python)
-- Repo restructuring to `automations/` layout
-- Production readiness fixes (concurrency limiting, retries, graceful shutdown, timestamped logging)
-- Descriptive file naming for discoverability
+- **2026-10-29**: Built out the SEO/GEO toolkit — 18 `seo-*` skills, the Site Profile layer (per-site criteria + action history), deterministic coverage, the report `unavailable`/`coverage` blocks, and the shared `report-export` skill (PDF + email, one config with per-skill subjects). CI gate `seo/check.sh` is green.

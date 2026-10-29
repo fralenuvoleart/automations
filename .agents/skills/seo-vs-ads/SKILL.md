@@ -100,6 +100,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Head
 ## Related / Delegation
 - Organic-only view → run `seo-audit`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth; `google-ads` uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`).

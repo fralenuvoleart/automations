@@ -100,6 +100,7 @@ If the user wants this weekly, suggest scheduling it rather than re-running by h
 ## Related / Delegation
 - Full site audit → run `seo-audit`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.

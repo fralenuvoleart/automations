@@ -29,6 +29,21 @@ MCP_JSON = ROOT / ".roo" / "mcp.json"
 SKILLS = ROOT / ".agents" / "skills"
 
 TOKEN_RE = re.compile(r"\{\{cap:([A-Za-z0-9_.]+)\}\}")
+SITE_TOKEN_RE = re.compile(r"\{\{site:([A-Za-z0-9_.]+)\}\}")
+SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
+
+
+def site_keys() -> set[str]:
+    """Allowed ``{{site:<key>}}`` keys, from the site-profile schema."""
+    try:
+        return set(json.loads(SITE_SCHEMA.read_text()).get("properties", {}))
+    except FileNotFoundError:
+        return set()
+
+
+def site_display(key: str) -> str:
+    """Render a ``{{site:<key>}}`` token as the deterministic retrieval command."""
+    return f"`python3 seo/site_profile.py --site <domain> --get {key}`"
 
 # Curated allowlists for the *semantic* check (--check). The live inputSchema
 # only says "array of strings", so a typo'd GA4 dimension/metric or GSC
@@ -197,6 +212,11 @@ def check() -> int:
             if re.search(rf"`{re.escape(a)}`", text):
                 print(f"DRIFT {f.relative_to(ROOT)}: legacy tool `{a}` -> should be {d}")
                 issues += 1
+        keys = site_keys()
+        for m in SITE_TOKEN_RE.finditer(text):
+            if m.group(1) not in keys:
+                print(f"ERROR {f.relative_to(ROOT)}: unknown site-profile key {m.group(0)}")
+                issues += 1
     issues += check_expanded()
     issues += check_policies()
     issues += check_semantics()
@@ -290,6 +310,7 @@ def write() -> int:
     for f in skill_files():
         text = orig = f.read_text()
         text = TOKEN_RE.sub(lambda m: disp.get(m.group(1), m.group(0)), text)
+        text = SITE_TOKEN_RE.sub(lambda m: site_display(m.group(1)), text)
         for a, d in alias.items():
             text = re.sub(rf"`{re.escape(a)}`", d, text)
         if text != orig:

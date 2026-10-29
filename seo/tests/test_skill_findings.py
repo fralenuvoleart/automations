@@ -30,8 +30,14 @@ def _doc(name: str) -> dict:
     }
 
 
-def test_there_are_eight_seo_skills():
-    assert len(_names()) == 8
+def test_seo_skills_present():
+    names = _names()
+    assert len(names) >= 8, names
+    for required in (
+        "seo-audit", "seo-ai-visibility", "seo-backlink-check", "seo-competitor-gap",
+        "seo-content-brief", "seo-keyword-research", "seo-rank-tracking", "seo-vs-ads",
+    ):
+        assert required in names, f"missing {required}"
 
 
 def test_every_skill_findings_validate():

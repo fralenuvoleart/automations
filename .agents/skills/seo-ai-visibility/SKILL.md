@@ -10,7 +10,7 @@ compatibility: Requires the `search-console` MCP server (GSC) and the `analytics
 > **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
 ## Scope & Audience
-- **Scope**: AI-engine visibility from GA4 referral data plus GSC generative-query heuristics. Does not read or write `memory-bank/`.
+- **Scope**: AI-engine visibility from GA4 referral data plus GSC generative-query heuristics. **Primary skill** — AI engines are a material share of searches for this site, not a nice-to-have. Does not read or write `memory-bank/`.
 - **Audience**: the site owner/marketer — name the pages and the exact change.
 
 ## Report Audience & Purpose
@@ -44,7 +44,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 
 ## Workflow
 1. **Verify.** `search-console` → `diagnostics` and `analytics` → `get_account_summaries` must both respond.
-2. **Traffic by engine.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) (current vs previous period). Label this a **lower bound** — some AI visits arrive as `Referral` or `(direct)`.
+2. **Traffic by engine.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) (current vs previous period). Confirm the AI-source list matches the site profile's `ai_sources` (`python3 seo/site_profile.py --site <domain> --get ai_sources`) and extend the filter if the profile adds engines. Label this a **lower bound** — some AI visits arrive as `Referral` or `(direct)`.
 3. **Trend.** `analytics` → `run_report` {"dimensions": ["date"], "metrics": ["sessions"]} (supply: property_id, date_ranges) — is AI traffic growing, and did anything spike (a spike = something started citing you; find it).
 4. **Cited pages.** `analytics` → `run_report` {"dimensions": ["sessionSource", "landingPagePlusQueryString"], "metrics": ["sessions", "conversions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — which URLs AI engines actually send people to (filtered to AI sources). These are your proven-citable pages.
 5. **Conversion comparison.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions", "conversions", "engagementRate"]} (supply: property_id, date_ranges) — compare AI-source conversion rate against organic.
@@ -58,7 +58,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 - Keep every **estimate** / **heuristic** label exactly as written (AI referral counts are a lower bound).
 
 ## Output
-Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict (AI traffic share of organic, trend, top engine), then: engine table, cited-pages table with conversions, the citation recipe observed on winning pages, and a top-5 list of pages to restructure. Keep it concrete — name the pages and the exact change.
+Begin with the **as-of line** (resolved window + UTC generation timestamp). Verdict (**AI share of organic** — the headline metric — plus trend and top engine), then: engine table, cited-pages table with conversions, the citation recipe observed on winning pages, and a top-5 list of pages to restructure. Keep it concrete — name the pages and the exact change.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
 0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 28 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
@@ -97,6 +97,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 ## Related / Delegation
 - General organic audit → run `seo-audit`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `analytics` (GA4) uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`); `search-console` manages its own OAuth.

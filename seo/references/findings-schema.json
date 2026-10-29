@@ -32,6 +32,43 @@
         }
       }
     },
-    "actions": { "type": "array", "items": { "type": "string" } }
+    "actions": { "type": "array", "items": { "type": "string" } },
+    "unavailable": {
+      "type": "array",
+      "description": "Sources that were expected but not available (graceful degradation). Rendered as a 'Data availability' section.",
+      "items": {
+        "type": "object",
+        "required": ["source", "affects"],
+        "properties": {
+          "source": { "type": "string" },
+          "affects": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Coverage of the site profile's priority keywords/pages. Rendered as a 'Coverage vs site profile' section. Produce it deterministically with seo/coverage.py.",
+      "properties": {
+        "priority_keywords": { "type": "array", "items": { "type": "string" } },
+        "priority_pages": { "type": "array", "items": { "type": "string" } },
+        "covered": { "type": "array", "items": { "type": "string" } },
+        "missing": { "type": "array", "items": { "type": "string" } },
+        "by_language": {
+          "type": "object",
+          "description": "Per-language coverage counts (language code -> {total, covered, missing}).",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "covered": { "type": "integer" },
+              "missing": { "type": "integer" }
+            }
+          }
+        },
+        "pages_covered": { "type": "array", "items": { "type": "string" } },
+        "pages_missing": { "type": "array", "items": { "type": "string" } }
+      }
+    }
   }
 }

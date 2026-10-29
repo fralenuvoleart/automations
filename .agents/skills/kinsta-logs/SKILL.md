@@ -143,16 +143,22 @@ The entire data gathering pipeline (site discovery, log fetching, baseline probi
 
 ### Step 4: Export PDF & Email
 
+Delivery is handled by the shared [`report-export`](../report-export/SKILL.md) skill (same engine: WeasyPrint/Chromium + SMTP). The kinsta-logs scripts remain available as a fallback.
+
 1. **Export PDF (MANDATORY — always run after validation):**
    ```bash
-   bash .agents/skills/kinsta-logs/scripts/export_pdf.sh "$REPORT_PATH"
+   python3 .agents/skills/report-export/scripts/export_pdf.py \
+     --md "$REPORT_PATH" --out "${REPORT_PATH%.md}.pdf" --title "Kinsta Log Report"
    ```
+   *(Fallback: `bash .agents/skills/kinsta-logs/scripts/export_pdf.sh "$REPORT_PATH"`.)*
 
 2. **Send Email (User-Initiated Only):**
    Ask the user if they want to email the report. If yes:
    ```bash
-   python3 .agents/skills/kinsta-logs/scripts/send_report_email.py "${REPORT_PATH%.md}.pdf"
+   python3 .agents/skills/report-export/scripts/send_email.py \
+     --attachment "${REPORT_PATH%.md}.pdf" --skill kinsta-logs
    ```
+   *(Fallback: `python3 .agents/skills/kinsta-logs/scripts/send_report_email.py "${REPORT_PATH%.md}.pdf"` — uses `~/.config/kinsta-log-analyzer/email.json`; the shared skill uses `~/.config/report-export/email.json`.)*
 
 ---
 

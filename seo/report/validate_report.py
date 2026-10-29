@@ -74,6 +74,16 @@ def validate(findings: dict, report_text: str | None = None, data_text: str | No
         for s in sections:
             if s.get("heading") and s["heading"] not in report_text:
                 issues.append(f"report is missing section heading: {s['heading']!r}")
+        for u in (findings.get("unavailable") or []):
+            src = str(u.get("source", ""))
+            if src and src not in report_text:
+                issues.append(f"report is missing unavailable source: {src!r}")
+        for m in ((findings.get("coverage") or {}).get("missing") or []):
+            if str(m) not in report_text:
+                issues.append(f"report is missing coverage 'missing' item: {m!r}")
+        for lang in ((findings.get("coverage") or {}).get("by_language") or {}):
+            if str(lang) not in report_text:
+                issues.append(f"report is missing coverage language: {lang!r}")
 
     if data_text is not None:
         for url in set(URL_RE.findall(blob)):

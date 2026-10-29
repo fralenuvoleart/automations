@@ -25,6 +25,7 @@ REQUIRED_FRONTMATTER = ["name", "description", "license", "compatibility"]
 SHARED_LINKS = ["seo/references/report-structure.md", "seo/references/conciseness-directives.md"]
 
 LINK_RE = re.compile(r"\]\(([^)]+)\)")
+DOUBLE_BACKTICK_RE = re.compile(r"(?<!`)``(?!`)")
 
 
 def _skill_files():
@@ -83,7 +84,17 @@ def test_relative_links_resolve():
 
 def test_no_unexpanded_tokens():
     for f in _skill_files():
-        assert "{{cap:" not in f.read_text(), f"{f.parent.name}: unexpanded {{cap:}} token"
+        text = f.read_text()
+        assert "{{cap:" not in text, f"{f.parent.name}: unexpanded {{cap:}} token"
+        assert "{{site:" not in text, f"{f.parent.name}: unexpanded {{site:}} token"
+
+
+def test_no_double_backtick_artifacts():
+    for f in _skill_files():
+        for i, line in enumerate(f.read_text().splitlines(), 1):
+            assert not DOUBLE_BACKTICK_RE.search(line), (
+                f"{f.parent.name}:{i}: double-backtick artifact"
+            )
 
 
 def _run_all() -> int:

@@ -105,6 +105,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). One 
 ## Related / Delegation
 - Brief for a chosen keyword → run `seo-content-brief`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth; `google-ads-planner` and `google-ads` use the service account (`GOOGLE_APPLICATION_CREDENTIALS`).

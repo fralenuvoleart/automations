@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SEO Site Profile",
+  "description": "Personalised SEO/GEO criteria for one site. Data only — selects and prioritises, never invents metrics. Consumed by skills via {{site:<key>}} tokens.",
+  "type": "object",
+  "required": ["domain", "languages", "sections", "services", "priority_keywords"],
+  "additionalProperties": false,
+  "properties": {
+    "domain": { "type": "string", "description": "Canonical domain, e.g. pbservices.ge" },
+    "languages": { "type": "array", "items": { "type": "string" }, "description": "Content languages (ISO-ish codes or names)" },
+    "sections": { "type": "array", "items": { "type": "string" }, "description": "Site sections, e.g. Service pages, Blog, Homepage" },
+    "services": { "type": "array", "items": { "type": "string" }, "description": "Service lines the site sells" },
+    "priority_keywords": {
+      "type": "object",
+      "description": "Keywords that matter most, grouped by language code (keys should be in `languages`). `site_profile.py --get priority_keywords` flattens; `--lang <code>` returns one language.",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
+    "priority_pages": { "type": "array", "items": { "type": "string" }, "description": "URLs that matter most" },
+    "brand_terms": { "type": "array", "items": { "type": "string" }, "description": "Branded terms for the brand vs non-brand split" },
+    "markets": { "type": "array", "items": { "type": "string" }, "description": "Target markets (country codes, or the sentinel WORLDWIDE)" },
+    "competitors": { "type": "array", "items": { "type": "string" }, "description": "Competitor domains" },
+    "ai_sources": { "type": "array", "items": { "type": "string" }, "description": "AI-engine referrer hosts to track" },
+    "thresholds": { "type": "object", "description": "Per-site numeric overrides (e.g. decay_pct, striking_distance_min/max)" }
+  }
+}

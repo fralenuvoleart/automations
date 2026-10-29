@@ -46,6 +46,37 @@ def build(findings: dict, generated_at: str | None = None) -> str:
            .replace("{{as_of_line}}", line)
            .replace("{{verdict}}", str(findings.get("verdict", "")))).rstrip() + "\n"
 
+    unavailable = findings.get("unavailable") or []
+    if unavailable:
+        out += "\n## Data availability\n\n"
+        for u in unavailable:
+            src = u.get("source", "unknown")
+            affects = u.get("affects", "")
+            reason = u.get("reason", "")
+            tail = f" ({reason})" if reason else ""
+            out += f"- **{src}** — {affects}{tail}\n"
+
+    coverage = findings.get("coverage") or {}
+    if coverage:
+        kw = coverage.get("priority_keywords") or []
+        pages = coverage.get("priority_pages") or []
+        covered = coverage.get("covered") or []
+        missing = coverage.get("missing") or []
+        out += "\n## Coverage vs site profile\n\n"
+        out += (f"- Priority keywords: {len(kw)} total · "
+                f"{len(covered)} covered · {len(missing)} missing\n")
+        if pages:
+            out += f"- Priority pages: {len(pages)} total\n"
+        by_lang = coverage.get("by_language") or {}
+        if by_lang:
+            out += "\n**By language:**\n"
+            for lang in sorted(by_lang):
+                d = by_lang[lang] or {}
+                out += (f"- {lang}: {d.get('covered', 0)}/{d.get('total', 0)} covered "
+                        f"({d.get('missing', 0)} missing)\n")
+        if missing:
+            out += "\n**Missing:**\n" + "\n".join(f"- {m}" for m in missing) + "\n"
+
     for s in findings.get("sections", []):
         out += f"\n## {s['heading']}\n\n{s['body'].strip()}\n"
         if s.get("table"):

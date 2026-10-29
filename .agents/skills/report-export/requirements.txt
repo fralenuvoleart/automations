@@ -1,0 +1,5 @@
+# report-export — optional Python fallback engine.
+# The primary path uses `npx md-to-pdf` + Chromium (no Python deps).
+# Install these only if you want the pure-Python WeasyPrint fallback.
+weasyprint>=60.0
+markdown>=3.4

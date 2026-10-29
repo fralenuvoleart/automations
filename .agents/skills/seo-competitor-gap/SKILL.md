@@ -97,6 +97,7 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). Verd
 ## Related / Delegation
 - Content brief for a chosen gap keyword → run `seo-content-brief`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `search-console` manages its own OAuth.

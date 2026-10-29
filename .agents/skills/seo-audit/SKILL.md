@@ -46,6 +46,9 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 | Striking distance | `search-console` → `seo_audit` {"type": "striking_distance"} (supply: siteUrl) | available |
 | Cannibalization | `search-console` → `seo_audit` {"type": "cannibalization"} (supply: siteUrl) | available |
 | Low-CTR targets | `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl) | available |
+| Quick wins | `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl) | available |
+| Recommendations | `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl) | available |
+| Low-hanging fruit | `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl) | available |
 | Page inspection | `search-console` → `inspection_inspect` (supply: siteUrl, urls) | available |
 | GA4 page performance | `analytics` → `run_report` {"dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"]} (supply: property_id, date_ranges) | available |
 | GA4 traffic sources | `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) | available |
@@ -60,9 +63,12 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
    - **CTR anomalies** — position ≤5 but CTR <2% (title/meta problem) → `search-console` → `seo_audit` {"type": "low_ctr"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
    - **Striking distance** — position 8–20 with high impressions → `search-console` → `seo_audit` {"type": "striking_distance"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
    - **Cannibalization** — same query, multiple pages → `search-console` → `seo_audit` {"type": "cannibalization"} (supply: siteUrl), else derive from `search-console` → `analytics_query` {"dimensions": ["query", "page", "date", "country", "device"]} (supply: siteUrl, startDate, endDate)
+   - **Quick wins / recommendations / low-hanging fruit** — `search-console` → `seo_audit` {"type": "quick_wins"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "recommendations"} (supply: siteUrl), `search-console` → `seo_audit` {"type": "low_hanging_fruit"} (supply: siteUrl)
 6. **Spot-check pages.** For the 3–5 worst pages, `search-console` → `inspection_inspect` (supply: siteUrl, urls) — canonical, indexing state, last crawl.
 7. **Cross-check traffic.** `analytics` → `run_report` {"dimensions": ["pagePath"], "metrics": ["sessions", "engagementRate", "averageSessionDuration"]} (supply: property_id, date_ranges) — organic sessions + engagement by landing page, same periods. A page can hold rankings but lose revenue; call that out.
 8. **AI traffic.** `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions"], "dimension_filter": {"filter": {"field_name": "sessionSource", "in_list_filter": {"values": ["chatgpt.com", "chat.openai.com", "perplexity.ai", "gemini.google.com", "claude.ai", "copilot.microsoft.com"], "case_sensitive": false}}}} (supply: property_id, date_ranges) — note whether AI engines (ChatGPT, Perplexity, Claude, Gemini) are a meaningful channel.
+9. **Coverage.** Compute coverage of the site profile's priority keywords/pages: `python3 seo/coverage.py --site <domain> --covered {run_dir}/covered.txt` → include the output as `findings.coverage` (flattened + per-language). List any priority keyword/page not addressed under `missing`.
+10. **History.** Read the site's action history (`python3 seo/site_profile.py --site <domain> --history`) before finalizing recommendations so you don't re-recommend past work; after the run, append the actions you recommend (`python3 seo/site_profile.py --site <domain> --append-history "<action>"`).
 
 ## Determinism
 - Resolve every window to **absolute dates** (`YYYY-MM-DD`) before calling a tool — never pass relative phrases. GSC lags ~2 days: `endDate = today − 2`, never include today. Compute with `python3 seo/window.py --days 90 --compare` and pass the literal `startDate`/`endDate`/`compareStartDate`/`compareEndDate`.
@@ -70,7 +76,7 @@ This skill is a standalone SEO tool — it MUST NOT read from or write to `memor
 - Keep every **estimate** / **heuristic** label exactly as written.
 
 ## Output
-Begin with the **as-of line** (resolved window + UTC generation timestamp). A report with: **verdict up top** (one paragraph — is the site healthy or not, and the #1 issue), then sections — Indexation, Losers, Quick wins (striking distance + CTR fixes, ranked by impressions), Cannibalization — each with a table and the specific fix. End with a prioritized 5-item action list.
+Begin with the **as-of line** (resolved window + UTC generation timestamp). A report with: **verdict up top** (one paragraph — is the site healthy or not, and the #1 issue), then sections — Indexation, Losers, Quick wins (striking distance + CTR fixes, ranked by impressions), Cannibalization — each with a table and the specific fix. Include the **Coverage vs site profile** block (from `coverage.py`) and end with a prioritized 5-item action list.
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
 0. (optional) Seed the run: `python3 seo/orchestrate.py --skill <name> --days 90 --compare --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
@@ -103,13 +109,18 @@ Begin with the **as-of line** (resolved window + UTC generation timestamp). A re
 | [`seo/references/data-source-map.md`](../../../seo/references/data-source-map.md) | freshness + degradation ladder | Read |
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | capability tokens, `args` vs `runtime`, `policy` | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | SEO interpretation methodology | Read |
+| [`seo/site_profile.py`](../../../seo/site_profile.py) | site profile + action history | Execute |
+| [`seo/coverage.py`](../../../seo/coverage.py) | deterministic coverage block | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | renders findings JSON → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
 ## Related / Delegation
 - Paid-vs-organic overlap is available via the connected `google-ads` MCP — run the `seo-vs-ads` skill for the full analysis.
 - Position movers over time → run `seo-rank-tracking`.
+- Brand vs non-brand split → run `seo-brand-split`.
+- Technical health → run `seo-technical`; index coverage → run `seo-indexation`.
 
+- Deliver the report as PDF/email → run `report-export` (pass `--skill <name>` to select this skill's subject).
 ## Configuration
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
 - `analytics` (GA4) uses the service account (`GOOGLE_APPLICATION_CREDENTIALS`); `search-console` manages its own OAuth.
