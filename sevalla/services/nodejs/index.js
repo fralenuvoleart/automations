@@ -85,15 +85,28 @@ if (BOT_TOKEN && (PREVIOUS_BOT_ON || BUSINESS_LEADS_ON)) {
   console.log("Bot disabled via DISABLE_TELEGRAM_BOT env var — warmer-only mode");
 }
 
-// ── Cache Warmer (daily at 01:00 and 13:00 UTC) ──
-cron.schedule("0 1,13 * * *", () => {
+// ── Cache Warmer (daily at 02:15 and 14:15 UTC) ──
+// Times agreed with the site admin: no cache-purging maintenance after 02:15
+// and 14:15 UTC, so a purge during maintenance does not leave the edge cold for
+// the working day. Override with WARMER_CRON: one or more 5-field cron
+// expressions in UTC, separated by ";" (example: "15 2 * * *;15 14 * * *").
+const DEFAULT_WARMER_CRON = "15 2 * * *;15 14 * * *";
+const warmerCrons = (process.env.WARMER_CRON || DEFAULT_WARMER_CRON)
+  .split(";").map((c) => c.trim()).filter(Boolean)
+  .filter((c) => {
+    if (cron.validate(c)) return true;
+    console.error(`[cron] Invalid WARMER_CRON entry ignored: "${c}"`);
+    return false;
+  });
+if (!warmerCrons.length) warmerCrons.push(...DEFAULT_WARMER_CRON.split(";"));
+for (const expr of warmerCrons) cron.schedule(expr, () => {
   console.log("[cron] Starting cache warmer...");
   runWarmer()
     .then(() => console.log("[cron] Cache warmer finished."))
     .catch((err) => console.error("[cron] Cache warmer failed:", err.message));
 }, { timezone: "UTC" });
 
-console.log("Cache warmer scheduled daily at 01:00 and 13:00 UTC");
+console.log(`Cache warmer scheduled (UTC): ${warmerCrons.join(" | ")}`);
 
 // ── HTTP server for public warmer trigger (Sevalla ingress on port 8080) ──
 createServer().listen(8080, () => {

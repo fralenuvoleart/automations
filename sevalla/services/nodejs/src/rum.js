@@ -21,6 +21,8 @@
  *   RUM_TOKEN            token for the report (default: WARMER_TOKEN)
  *   RUM_ALLOWED_ORIGINS  default https://pbservices.ge,https://www.pbservices.ge
  *   RUM_KEEP_DAYS        default 45
+ *   RUM_MAINTENANCE_HOURS  admin maintenance window in Tbilisi hours, default 4-7
+ *                        (04:00-07:00). The report shows it apart in by_hour.
  */
 
 const fs = require('fs');
@@ -297,6 +299,45 @@ function readDay(day) {
   return [...latest.values()];
 }
 
+// Tbilisi is UTC+4 all year (no daylight saving time).
+const TBILISI_OFFSET_H = 4;
+// Admin maintenance window in Tbilisi hours [start, end), e.g. "4-7" = 04:00-07:00.
+const MAINT = (process.env.RUM_MAINTENANCE_HOURS || '4-7').split('-').map(Number);
+
+function tbilisiHour(ts) {
+  return (new Date(ts).getUTCHours() + TBILISI_OFFSET_H) % 24;
+}
+
+function inMaintenance(h) {
+  const [a, b] = MAINT;
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return false;
+  return a <= b ? h >= a && h < b : h >= a || h < b;
+}
+
+/**
+ * Views per Tbilisi hour, plus the maintenance window vs the rest of the day,
+ * so admin purges in the morning can be told apart from normal behaviour.
+ */
+function hourReport(views) {
+  const timed = views.filter((v) => typeof v.t === 'number');
+  const skip = (list) => {
+    const known = list.filter((v) => ['hit', 'miss', 'none'].includes(v.edge));
+    return known.length ? Math.round((known.filter((v) => v.edge === 'none').length / known.length) * 100) : null;
+  };
+  const row = (list) => ({ views: list.length, edge_miss_pct: pct(list), skip_cache_pct: skip(list), ttfb_ms: median(list.map((v) => v.ttfb)) });
+  const hours = [];
+  for (let h = 0; h < 24; h++) {
+    const list = timed.filter((v) => tbilisiHour(v.t) === h);
+    if (list.length) hours.push(Object.assign({ hour_tbilisi: String(h).padStart(2, '0') + ':00', maintenance: inMaintenance(h) }, row(list)));
+  }
+  return {
+    maintenance_window_tbilisi: MAINT.join('-'),
+    maintenance: row(timed.filter((v) => inMaintenance(tbilisiHour(v.t)))),
+    rest_of_day: row(timed.filter((v) => !inMaintenance(tbilisiHour(v.t)))),
+    hours,
+  };
+}
+
 function summary(days) {
   const out = { generated: new Date().toISOString(), days: [] };
   const all = [];
@@ -315,6 +356,7 @@ function summary(days) {
   out.by_cloudflare_location = by(all, 'colo', 15);
   out.by_page = by(all, 'path', 15);
   out.by_cookie = cookieReport(all);
+  out.by_hour = hourReport(all);
   return out;
 }
 
