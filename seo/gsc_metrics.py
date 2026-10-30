@@ -156,10 +156,9 @@ def parse_rows(payload, dims: list[str]) -> list[dict]:
                     raise ValueError(f"row lacks dimension '{d}': {sorted(r)}")
                 row[d] = r[d]
         if not any(k in r for k in ("clicks", "impressions", "ctr", "position")):
-            # insight/query payloads carry no metric fields at all: no metrics, not zeroed metrics
-            row.update({"clicks": 0.0, "impressions": 0.0, "ctr": 0.0, "position": 0.0})
-            out.append(row)
-            continue
+            # every Search Analytics row carries all four metrics; none at all means a different payload
+            # (renamed fields, another tool) — reading it as zero traffic would be silent and wrong
+            raise ValueError(f"row carries no clicks/impressions/ctr/position — not a Search Analytics response: {r!r}"[:300])
         clicks, imps = _metric(r.get("clicks"), "clicks"), _metric(r.get("impressions"), "impressions")
         ctr = r.get("ctr")
         ctr = (clicks / imps if imps else 0.0) if ctr in (None, "") else _metric(ctr, "ctr")
@@ -181,8 +180,9 @@ def load_rows(path: str | Path, default_dims: list[str]) -> list[dict]:
             for c in json.loads(ctx.read_text()).get("calls", []):
                 if c.get("file") == f"{p.parent.name}/{p.name}" and c.get("args", {}).get("dimensions"):
                     dims = c["args"]["dimensions"]
-        except (json.JSONDecodeError, AttributeError):
-            pass
+        except (json.JSONDecodeError, AttributeError) as e:
+            # guessing the dimensions would mislabel every row: stop and name the run (A8)
+            raise ValueError(f"unreadable call log {ctx} ({e}); cannot tell the dimensions of {p.name}") from None
     return parse_rows(json.loads(p.read_text()), dims)
 
 

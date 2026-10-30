@@ -63,10 +63,10 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`), [`s
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-rank-tracking --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-rank-tracking.json`](../../../seo/plans/seo-rank-tracking.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-rank-tracking --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-rank-tracking.json`](../../../seo/data-plans/seo-rank-tracking.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
@@ -78,7 +78,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`), [`s
 5. **Which page.** For the top 10 losers, the ranking pages from `data/pq_cur.json` (attribution only).
 6. **Bing divergence (optional).** Only if `data/diagnostics.json` shows Bing connected: <!--cap:gsc.compare_engines-->`search-console` → `compare_engines` (supply: siteUrl, dimension, startDate, endDate)<!--/cap--> with `dimension: query` for the same window (record it).
 7. **SERP spot-check.** `data/serp_*.json` (DataForSEO, the top 5 losers) → who took the spot; the section is a live snapshot (`window` note).
-8. **Weekly mode** (the SEO sheet's weekly report — use when asked for the weekly report, "this week" or a trend): `python3 seo/pipeline.py --skill seo-rank-tracking --site <domain> --mode weekly` ([plan](../../../seo/plans/seo-rank-tracking.weekly.json)) — 8 Monday–Sunday weeks ending with the latest complete week (`window.weeks`), one query and one page pull per week (a single 8-week query × date pull exceeds the 25,000-row limit on this site). Then:
+8. **Weekly mode** (the SEO sheet's weekly report — use when asked for the weekly report, "this week" or a trend): `python3 seo/pipeline.py --skill seo-rank-tracking --site <domain> --mode weekly` ([plan](../../../seo/data-plans/seo-rank-tracking.weekly.json)) — 8 Monday–Sunday weeks ending with the latest complete week (`window.weeks`), one query and one page pull per week (a single 8-week query × date pull exceeds the 25,000-row limit on this site). Then:
    - `computed/trend_category.json`, `trend_keyword.json`, `trend_page_tag.json`, `trend_language.json` → week-by-week clicks, impressions and position (`low_volume` cells are noise, never trends);
    - week vs previous week: `computed/movers.json` (step 2), `keywords.json` (step 3) and `targets.json` (step 4).
 
@@ -131,7 +131,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |

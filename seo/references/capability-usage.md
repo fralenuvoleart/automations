@@ -16,7 +16,7 @@ Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json
   legacy tool names outside blocks, bad policies, and invalid/deprecated GA4/GSC names.
 
 ## At run time
-- Plan calls are made by `seo/pipeline.py` from `seo/plans/<skill>.json`: it fills `siteUrl`, GA4
+- Plan calls are made by `seo/pipeline.py` from `seo/data-plans/<skill>.json`: it fills `siteUrl`, GA4
   `property_id`, dates and `date_ranges` from the profile and run window, and records each call itself.
   The rules below apply to calls an agent makes by hand (judgment steps).
 - The block's `<!--cap:ID-->` is the ID you pass to `seo/record.py --cap ID` after the call.

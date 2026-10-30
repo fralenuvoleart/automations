@@ -60,10 +60,10 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`sitemap`, `craw
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-indexation --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-indexation.json`](../../../seo/plans/seo-indexation.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-indexation --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-indexation.json`](../../../seo/data-plans/seo-indexation.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
@@ -72,7 +72,7 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`sitemap`, `craw
 3. **The sample** (deterministic): all priority pages (if none: the top 50 pages by clicks, `computed/top_pages.json` — say so) plus `computed/unseen.json` — sitemap URLs **with zero impressions**, in sitemap order, up to 150 (the likeliest non-indexed pages).
 4. **Inspection.** `computed/inspection.json` (from `data/inspect_*.json`, batches of ≤ 50; quota 2,000 inspections/day/property, 600/minute) → counts and shares **of the sample** per coverage state and verdict, the URLs not indexed, and Google-selected vs declared canonical mismatches. Last crawl and robots/page-fetch state per URL are in the raw `data/inspect_*.json`.
 5. **hreflang & canonicals.** `data/crawl.json` → `hreflang_issues` (missing self-reference, missing `x-default`, non-reciprocal or broken alternates), `canonical_issues` (cross-language canonicals first), `broken_internal`.
-6. **Request indexing — opt-in only.** List non-indexed priority pages for manual **Request indexing** in GSC URL Inspection (the recommended path). Call <!--cap:gsc.indexing-->`search-console` → `indexing_submit` {"method": "standard", "engine": "google"} (supply: siteUrl, urls)<!--/cap--> **only if the user explicitly confirms in this conversation**: Google's Indexing API officially supports only JobPosting/BroadcastEvent pages; other submissions may be ignored. Internal links and sitemap health remain the primary fix.
+6. **Request indexing — opt-in only.** List non-indexed priority pages for manual **Request indexing** in GSC URL Inspection (the recommended path). Call <!--cap:gsc.indexing-->`search-console` → `indexing_submit` {"method": "standard", "engine": "google"} (supply: siteUrl, urls)<!--/cap--> **only if the user explicitly confirms in this conversation**, and record the response: Google's Indexing API officially supports only JobPosting/BroadcastEvent pages; other submissions may be ignored. Internal links and sitemap health remain the primary fix.
 7. **Assemble.** Rank issues: priority pages first, then by number of URLs affected.
 
 ## Determinism
@@ -122,7 +122,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |

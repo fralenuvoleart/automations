@@ -60,14 +60,14 @@ Local tools: [`seo/ads_metrics.py`](../../../seo/ads_metrics.py) (`overlap`).
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-paid-organic --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-paid-organic.json`](../../../seo/plans/seo-paid-organic.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-paid-organic --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-paid-organic.json`](../../../seo/data-plans/seo-paid-organic.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
-1. **Account.** The plan uses the profile's Ads customer ID (<!--site:ads_customer_id-->`python3 seo/site_profile.py --site <domain> --get ads_customer_id`<!--/site-->; required — without it the pipeline stops: find it with <!--cap:ads.customers-->`google-ads` → `customers_list_accessible_customers`<!--/cap--> and set it in the profile). If access goes through a manager account, rerun with `--input login_customer_id=<manager ID> --force`. A GAQL field error → check fields with <!--cap:ads.metadata-->`google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id)<!--/cap--> (`search_term_view`, `customer`) — never guess GAQL fields.
+1. **Account.** The plan uses the profile's Ads customer ID (<!--site:ads_customer_id-->`python3 seo/site_profile.py --site <domain> --get ads_customer_id`<!--/site-->; required — without it the pipeline stops: find it with <!--cap:ads.customers-->`google-ads` → `customers_list_accessible_customers`<!--/cap--> (record it) and set it in the profile). If access goes through a manager account, rerun with `--input login_customer_id=<manager ID> --force`. A GAQL field error → check fields with <!--cap:ads.metadata-->`google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id)<!--/cap--> (`search_term_view`, `customer`) — never guess GAQL fields.
 2. **Paid search terms.** `data/terms.json` (search terms over the run window, by cost) in the currency of `data/currency.json`. The search-terms report omits low-volume terms (privacy thresholds) — say so.
 3. **Organic.** `data/query_cur.json` over the same window. If campaigns target specific countries, compare like with like: an extra <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> pull (recorded).
 4. **Overlap.** `computed/overlap.json` → buckets `double_paying` (organic ≤ 3 + spend), `defend_check` (double-paying with ad absolute-top share < 50 %: competitors may bid — needs a manual SERP check), `paid_only_winners` (converting in Ads, no organic top-20: the content roadmap), `organic_only` (scale candidates), plus spend in the account currency.
@@ -103,9 +103,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| GAQL "unknown field" | field guessed or renamed | check the fields with `ads.metadata` (step 1), then fix the plan |
+| GAQL "unknown field" | field guessed or renamed | check the fields with `ads.metadata` (step 1, record it), then fix the plan |
 | `USER_PERMISSION_DENIED` | access through a manager account | pass `login_customer_id` |
-| No overlap found | ads target another market/language | compare against `gsc.geo_query` for the ad countries |
+| No overlap found | ads target another market/language | compare against `gsc.geo_query` for the ad countries (record it) |
 
 ## Files
 <!--include:files-->
@@ -119,7 +119,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |

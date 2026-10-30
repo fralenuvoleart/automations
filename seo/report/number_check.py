@@ -7,7 +7,9 @@ the findings passes when some evidence value matches it at the precision it is w
 `code`, identifiers like GA4 or H1, and standard constants (HTTP codes, Core Web Vitals limits,
 the site's thresholds, rules and settings). Counts of computed lists ("14 orphan pages") match the
 list's length. A figure the agent derives itself must be computed by a script and recorded
-(``record.py --source derived``) — never worked out in prose.
+(``record.py --source derived``) — never worked out in prose. Figures found only in a pull that is still
+cut at the row limit after the pipeline's splitting/paging (``pipeline.json`` ``truncated``), or in an
+output built on it (``tainted``), are refused: incomplete data cannot support a figure.
 
 Limits: matching is by value, not by meaning, so a large evidence set can contain a coincidental
 match for a short decimal; the check is strongest on distinctive figures (clicks, impressions,
@@ -89,10 +91,12 @@ def tokens_raw(text: str):
 class Index:
     """Sorted evidence values (plus ratio→% and ms→s forms) for tolerance lookups."""
 
-    def __init__(self, values):
+    def __init__(self, values, tainted: "Index | None" = None, tainted_files: list[str] | None = None):
         vals = {round(v, 9) for v in values}
         self.vals = sorted(vals | {round(v * 100, 9) for v in vals if v <= 100}       # ratio → %
                            | {round(v / 1000, 9) for v in vals if v >= 100})          # ms → s
+        self.tainted = tainted              # values found only in data cut at the row limit
+        self.tainted_files = tainted_files or []
 
     def has(self, x: float, tol: float) -> bool:
         x = abs(x)
@@ -102,6 +106,7 @@ class Index:
     @classmethod
     def from_run(cls, run_dir: Path, extra_json: list | None = None) -> "Index":
         vals: list[float] = list(STANDARD)
+        bad: list[float] = []
         ctx = run_dir / "context.json"
         files = []
         if ctx.exists():
@@ -109,9 +114,16 @@ class Index:
                 if isinstance(c, dict) and c.get("file"):
                     files.append(run_dir / c["file"])
         files += sorted((run_dir / "computed").glob("*.json")) if (run_dir / "computed").exists() else []
+        # pulls still cut at the row limit (pipeline.json) and outputs built on them: their figures are incomplete
+        tainted: set[str] = set()
+        pj = run_dir / "pipeline.json"
+        if pj.exists():
+            summary = json.loads(pj.read_text())
+            tainted = {f"data/{n}.json" for n in summary.get("truncated") or []} | set(summary.get("tainted") or [])
         for f in files:
+            rel = f"{f.parent.name}/{f.name}"
             try:
-                _walk(json.loads(f.read_text()), vals)
+                _walk(json.loads(f.read_text()), bad if rel in tainted else vals)
             except (OSError, json.JSONDecodeError):
                 continue
         state = run_dir / ".run_state.json"
@@ -121,7 +133,7 @@ class Index:
             vals += site_constants(st.get("site"))
         for obj in extra_json or []:
             _walk(obj, vals)
-        return cls(vals)
+        return cls(vals, cls(bad) if bad else None, sorted(tainted))
 
 
 def site_constants(site: str | None) -> list[float]:
@@ -164,7 +176,13 @@ def check(findings: dict, index: Index, limit: int = 20) -> list[str]:
     issues = []
     for where, text in texts(findings):
         for written, val, tol in tokens(text):
-            if not index.has(val, tol):
+            if index.has(val, tol):
+                continue
+            if index.tainted is not None and index.tainted.has(val, tol):
+                issues.append(f"number comes only from data cut at the row limit ({', '.join(index.tainted_files)}): "
+                              f"{written!r} in {where} — incomplete data cannot support a figure; drop it or "
+                              "report the gap")
+            else:
                 issues.append(f"number not found in evidence or computed outputs (possible hallucination): "
                               f"{written!r} in {where}")
     if len(issues) > limit:

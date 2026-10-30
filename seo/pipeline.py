@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a skill's data plan: the scripted half of every SEO skill.
 
-Seeds the run (fixed run folder), then executes ``seo/plans/<skill>[.<mode>].json`` step by step:
+Seeds the run (fixed run folder), then executes ``seo/data-plans/<skill>[.<mode>].json`` step by step:
 ``pull`` steps call MCP tools through ``seo/mcp_client.py`` (cache first, recorded as evidence),
 ``local`` steps run a local script whose output is evidence (crawler, profile), ``compute`` steps
 run the analysis scripts into ``{run_dir}/computed/<name>.json``. Later steps can use earlier
@@ -41,7 +41,7 @@ import record  # noqa: E402
 import resolve  # noqa: E402
 import site_profile  # noqa: E402
 
-PLANS = HERE / "plans"
+PLANS = HERE / "data-plans"
 KINDS = ("pull", "local", "compute")
 PERIODS = ("current", "previous", "both", "window", "weeks", "lookback")
 PH_RE = re.compile(r"\{([a-zA-Z_][\w.:-]*)\}")
@@ -263,6 +263,67 @@ class Context:
             raise StepFailed(text[:300] or "MCP tool returned an error")
         return res
 
+    def fetch(self, cap: str, args: dict, confirm: bool = False) -> tuple[dict, dict]:
+        """One logical pull, made complete: a GSC window cut at the row limit is split by date until every
+        chunk is under it (rows summed per key); a GA4 report is paged with offset. Returns (response, info)."""
+        c = self.caps[cap]
+        full = {**(c.get("args") or {}), **args}
+        raw = self.call_raw(cap, args, confirm)
+        if _complete(raw, c, full):
+            return raw, {"rows": _rows_returned(raw), "calls": 1}
+        rt = set(c.get("runtime") or [])
+        if c.get("tool") == "run_report":  # GA4 Data API pages with offset (a call-level arg, not a runtime arg)
+            return self._page(cap, args, raw, _row_limit(c, full))
+        if {"startDate", "endDate"} <= rt and "compareStartDate" not in rt and args.get("startDate"):
+            return self._split(cap, args, full, raw)
+        return raw, {"rows": _rows_returned(raw), "calls": 1, "truncated": True}
+
+    def _page(self, cap: str, args: dict, first: dict, limit: int) -> tuple[dict, dict]:
+        pl = _payload(first)
+        key = _rows_key(pl)
+        rows, calls, complete = list(pl[key]), 1, False
+        while calls < MAX_CALLS_PER_PULL:
+            nxt = _payload(self.call_raw(cap, {**args, "offset": len(rows)}))
+            page = (nxt or {}).get(_rows_key(nxt) or key) or []
+            rows += page
+            calls += 1
+            total = pl.get("row_count", pl.get("rowCount"))
+            if len(page) < limit or (isinstance(total, (int, float)) and len(rows) >= total):
+                complete = True
+                break
+        merged = {**pl, key: rows, META: {"complete": complete, "pages": calls, "rows": len(rows)}}
+        return _wrap(merged), {"rows": len(rows), "calls": calls, **({} if complete else {"truncated": True})}
+
+    def _split(self, cap: str, args: dict, full: dict, first: dict) -> tuple[dict, dict]:
+        """Halve the date range until every chunk is under the row limit; rows are summed per key."""
+        c = self.caps[cap]
+        start, end = dt.date.fromisoformat(args["startDate"]), dt.date.fromisoformat(args["endDate"])
+        todo = [(start, end, first)]  # ranges whose response hit the limit
+        done, chunks, calls, complete = [], [], 1, True
+        while todo:
+            a, b, raw = todo.pop(0)
+            if a == b or calls + 2 > MAX_CALLS_PER_PULL:  # a single day still over the limit, or out of budget
+                done.append(_payload(raw))
+                chunks.append([a.isoformat(), b.isoformat()])
+                complete = False
+                continue
+            mid = a + (b - a) // 2
+            for lo, hi in ((a, mid), (mid + dt.timedelta(days=1), b)):
+                r = self.call_raw(cap, {**args, "startDate": lo.isoformat(), "endDate": hi.isoformat()})
+                calls += 1
+                if _complete(r, c, full):
+                    done.append(_payload(r))
+                    chunks.append([lo.isoformat(), hi.isoformat()])
+                else:
+                    todo.append((lo, hi, r))
+        done = [d for d in done if isinstance(d, dict)]
+        first_pl = done[0] if done else {}
+        merged_rows = _merge_gsc(done, full.get("dimensions") or [])
+        merged = {**{k: v for k, v in first_pl.items() if k != _rows_key(first_pl)}, "rows": merged_rows,
+                  META: {"complete": complete, "split": sorted(chunks), "rows": len(merged_rows)}}
+        return _wrap(merged), {"rows": len(merged_rows), "calls": calls, "chunks": len(chunks),
+                               **({} if complete else {"truncated": True})}
+
     def value(self, v, item=None, i: int | None = None):
         """Resolve placeholders and $-expressions recursively."""
         if isinstance(v, str):
@@ -458,22 +519,85 @@ def _items(ctx: Context, st: dict) -> list:
     return [("item", v) for v in vals]
 
 
+GA4_DEFAULT_LIMIT = 10000   # GA4 runReport returns at most this many rows when no limit is given
+MAX_CALLS_PER_PULL = 64     # splitting / paging budget for one pull
+META = "_pipeline"          # completeness marker the pipeline adds to a merged response
+
+
+def _payload(raw):
+    """The JSON payload inside an MCP response (content[].text), or the response itself."""
+    if isinstance(raw, dict):
+        for x in raw.get("content") or []:
+            if isinstance(x, dict) and isinstance(x.get("text"), str):
+                try:
+                    return json.loads(x["text"])
+                except json.JSONDecodeError:
+                    return None
+    return raw
+
+
+def _wrap(payload) -> dict:
+    return {"content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}], "isError": False}
+
+
+def _rows_key(payload) -> str | None:
+    if isinstance(payload, dict):
+        for key in ("rows", "data", "results", "items"):
+            if isinstance(payload.get(key), list):
+                return key
+    return None
+
+
 def _rows_returned(raw) -> int | None:
     """Data rows in an MCP response, without assuming one particular tool's envelope."""
     if not isinstance(raw, dict):
         return None
-    for key in ("rows", "data", "results", "items"):
-        if isinstance(raw.get(key), list):
-            return len(raw[key])
-    for x in raw.get("content") or []:
-        if isinstance(x, dict) and isinstance(x.get("text"), str):
-            try:
-                n = _rows_returned(json.loads(x["text"]))
-            except json.JSONDecodeError:
-                n = None
-            if n is not None:
-                return n
-    return None
+    pl = raw if _rows_key(raw) else _payload(raw)
+    key = _rows_key(pl)
+    return len(pl[key]) if key else None
+
+
+def _row_limit(cap: dict, full_args: dict) -> int | None:
+    """The most rows one call can return for this capability (None = not a row-limited tool)."""
+    for k in ("rowLimit", "limit"):
+        if full_args.get(k):
+            return int(full_args[k])
+    return GA4_DEFAULT_LIMIT if cap.get("tool") == "run_report" else None
+
+
+def _complete(raw, cap: dict, full_args: dict) -> bool:
+    """False when the response may have been cut at the row limit (merged responses carry their own verdict)."""
+    pl = _payload(raw)
+    if isinstance(pl, dict) and isinstance(pl.get(META), dict):
+        return bool(pl[META].get("complete"))
+    limit, n = _row_limit(cap, full_args), _rows_returned(raw)
+    if limit is None or n is None:
+        return True
+    total = pl.get("row_count", pl.get("rowCount")) if isinstance(pl, dict) else None
+    if isinstance(total, (int, float)) and total > n:
+        return False
+    return n < limit
+
+
+def _merge_gsc(payloads: list, dims: list[str]) -> list[dict]:
+    """Rows of date-split GSC responses summed per key; position impression-weighted, CTR recomputed."""
+    acc: dict = {}
+    for pl in payloads:
+        for r in pl.get(_rows_key(pl)) or []:
+            key = tuple(r["keys"]) if isinstance(r.get("keys"), list) else tuple(r.get(d) for d in dims)
+            a = acc.setdefault(key, {"r": r, "clicks": 0.0, "impressions": 0.0, "pos_w": 0.0})
+            imp = float(r.get("impressions") or 0)
+            a["clicks"] += float(r.get("clicks") or 0)
+            a["impressions"] += imp
+            a["pos_w"] += float(r.get("position") or 0) * imp
+    out = []
+    for a in acc.values():
+        r = {k: v for k, v in a["r"].items() if k not in ("clicks", "impressions", "ctr", "position")}
+        imp = a["impressions"]
+        r.update({"clicks": a["clicks"], "impressions": imp, "ctr": a["clicks"] / imp if imp else 0.0,
+                  "position": a["pos_w"] / imp if imp else 0.0})
+        out.append(r)
+    return sorted(out, key=lambda r: (-r["clicks"], -r["impressions"]))
 
 
 def run_step(ctx: Context, st: dict, report: list) -> None:
@@ -502,19 +626,20 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 if st.get("skip_empty") and not args.get(st["skip_empty"]):
                     entry.update({"status": "skipped", "reason": f"no {st['skip_empty']} to process"})
                     continue
-                if record.record_from_cache(ctx.run_dir, name, st["cap"], args, st.get("allow_window")):
-                    entry["status"] = "cached"
+                c = ctx.caps[st["cap"]]
+                full = {**(c.get("args") or {}), **args}
+                hit = record.cached(ctx.run_dir, st["cap"], args)
+                if hit is not None and _complete(hit["response"], c, full):  # an incomplete cached pull is re-fetched
+                    record.record_from_cache(ctx.run_dir, name, st["cap"], args, st.get("allow_window"))
+                    entry.update({"status": "cached", "rows": _rows_returned(hit["response"])})
                     continue
-                raw = ctx.call_raw(st["cap"], args, confirm=st.get("confirm") is True)
+                record.record(ctx.run_dir, name, "{}", st["cap"], args=args, allow_window=st.get("allow_window"),
+                              dry_run=True)  # guards (runtime args, window) before any call
+                raw, info = ctx.fetch(st["cap"], args, confirm=st.get("confirm") is True)
                 record.record(ctx.run_dir, name, json.dumps(raw, ensure_ascii=False), st["cap"], args=args,
                               allow_window=st.get("allow_window"))
                 entry["status"] = "ok"
-                rows, cap_limit = _rows_returned(raw), args.get("rowLimit") or args.get("limit")
-                if rows is not None:
-                    entry["rows"] = rows
-                    if cap_limit and rows >= int(cap_limit):
-                        # A1: cut at the server row limit — no headline figure may be built on this pull
-                        entry["truncated"] = True
+                entry.update({k: v for k, v in info.items() if v is not None})  # rows, calls, chunks, truncated
             except (StepFailed, TimeoutError, RuntimeError, OSError, ValueError) as e:
                 if not ((st.get("optional") or ctx.dry_run) and len(items) > 1):
                     raise
@@ -534,6 +659,10 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
             continue
         argv, out = _script(ctx, run)
         entry["run"] = [st["run"][0], *argv]
+        tainted = sorted({e["name"] for e in report if e.get("truncated")
+                          and str(ctx.run_dir / "data" / f"{e['name']}.json") in argv})
+        if tainted:  # built on data cut at the row limit: its figures cannot be reported (validate_report.py)
+            entry["tainted_by"] = tainted
         if kind == "local":
             record.record(ctx.run_dir, name, out, source=st["source"], args={"run": entry["run"]})
             entry["file"] = f"data/{name}.json"
@@ -620,11 +749,18 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
             unavailable.append({"source": src, "affects": affects, **({"reason": reason} if reason else {})})
         elif affects not in u["affects"].split("; "):
             u["affects"] += f"; {affects}"
+    for e in report:
+        if e.get("truncated"):
+            lim = _row_limit(ctx.caps[e["cap"]], {**(ctx.caps[e["cap"]].get("args") or {}), **(e.get("args") or {})})
+            unavailable.append({"source": f"{ctx.caps[e['cap']]['server']} ({e['cap']}, {e['name']}) — cut at {lim:,} rows",
+                                "affects": "figures from this pull and the analyses built on it (incomplete data)"})
     summary = {"skill": skill, "mode": mode, "site": site, "status": status, "steps": report,
                "unavailable": unavailable, "computed": sorted(p.name for p in (run_dir / "computed").glob("*.json"))
                if (run_dir / "computed").exists() else [],
-               # A1: pulls cut at the server row limit — no headline figure may be built on them
-               "truncated": [e["name"] for e in report if e.get("truncated")]}
+               # A1: pulls still cut at the row limit after splitting/paging, and the outputs built on them;
+               # validate_report.py refuses figures found only there
+               "truncated": [e["name"] for e in report if e.get("truncated")],
+               "tainted": [e["file"] for e in report if e.get("tainted_by") and e.get("file")]}
     (run_dir / "pipeline.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
     fp = run_dir / "findings.json"
     f = json.loads(fp.read_text())
@@ -656,7 +792,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skill")
     ap.add_argument("--site")
-    ap.add_argument("--mode", help="plan variant, e.g. weekly (seo/plans/<skill>.<mode>.json)")
+    ap.add_argument("--mode", help="plan variant, e.g. weekly (seo/data-plans/<skill>.<mode>.json)")
     ap.add_argument("--input", action="append", default=[], help="key=value for the plan's inputs")
     ap.add_argument("--as-of", dest="as_of")
     ap.add_argument("--days", type=int)
@@ -692,7 +828,8 @@ def main(argv: list[str] | None = None) -> int:
                               else " ".join(e.get("run", [])[1:]).replace(str(run_dir), "{run_dir}"))
                     print(f"{e['name']:<24} {e['kind']:<8} {what:<24} {detail[:110]}"
                           + (f"  [{e.get('reason')}]" if e.get("status") == "skipped" else
-                             f"  [not run: {e.get('error')}]" if e.get("status") == "failed" and e["kind"] != "pull" else ""))
+                             f"  [not run: {e.get('error')}]" if e.get("status") == "failed"
+                             and (e["kind"] != "pull" or e.get("error") != "dry run") else ""))
                 return 0
     except (PlanError, orchestrate.SeedError) as e:
         print(f"ERROR {e}", file=sys.stderr)
@@ -703,8 +840,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{summary['status'].upper()} — {ok} steps done ({cached} from cache), "
           f"{len(summary['unavailable'])} unavailable, computed: {', '.join(summary['computed']) or 'none'}")
     if summary.get("truncated"):
-        print(f"WARNING truncated at the server row limit: {', '.join(summary['truncated'])} — no headline "
-              "figure may be reported from these pulls; split the window or page the pull")
+        print(f"WARNING still cut at the row limit after splitting/paging: {', '.join(summary['truncated'])} — "
+              "figures from these pulls cannot pass validate_report.py (use the BigQuery export for this volume)")
     for u in summary["unavailable"]:
         print(f"  unavailable: {u['source']} → {u['affects']}" + (f" ({u['reason']})" if u.get("reason") else ""))
     if summary["status"] != "ok":

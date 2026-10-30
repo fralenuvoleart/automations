@@ -65,10 +65,10 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`robots`, `facts
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-ai-visibility --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-ai-visibility.json`](../../../seo/plans/seo-ai-visibility.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-ai-visibility --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-ai-visibility.json`](../../../seo/data-plans/seo-ai-visibility.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
@@ -76,7 +76,7 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`robots`, `facts
 2. **Referrals by assistant.** `data/ai_sources.json` (current + comparison window), filtered with the profile's AI hosts — to track a new assistant, add its host to the `AI assistants` channel rule in `seo/config/rules/<domain>.json`, never edit a call spec. Label totals a **lower bound** (some AI visits arrive as direct or unlisted referrers).
 3. **Trend.** `data/ai_trend.json` — growth and spikes per assistant (a spike = something started citing a page; find which in step 4).
 4. **Cited pages.** `data/ai_cited.json` and `computed/cited_top.json` — the landing pages assistants send people to, with key events: the proven-citable pages.
-5. **Share and quality.** `computed/channels.json` → **AI share of organic** = `ai_share_of_organic` (headline, lower bound); `key_event_rate` of the AI vs the organic channel. If the user compares with the GA4 UI (default channel group, not the site rules), pull <!--cap:ga4.channels-->`analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges)<!--/cap--> for the same windows (recorded) and show both.
+5. **Share and quality.** `computed/channels.json` → **AI share of organic** = `ai_share_of_organic` (headline, lower bound); `key_event_rate` of the AI vs the organic channel — when `key_events_recorded` is false there is no rate: say key events are not set up (`key_events_note`). If the user compares with the GA4 UI (default channel group, not the site rules), pull <!--cap:ga4.channels-->`analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges)<!--/cap--> for the same windows (recorded) and show both.
 6. **AI-shaped queries (heuristic).** `data/genai.json` — the tool uses its own lookback to the latest data: set that section's `window` note. Patterns only — never the headline.
 7. **Citation recipe.** `data/cited_facts.json` (top 3 cited pages): compare `first_45_words` (direct answer?), `tables`, `jsonld.types`, `has_sameAs`, `has_author_or_reviewer` — that pattern is this site's citation recipe. A page that could not be fetched → <!--cap:web.extract-->`tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls)<!--/cap--> (record it).
 8. **Misses.** `computed/misses.json` → the 5 pages with the most organic clicks and zero AI referrals — restructure them toward the recipe.
@@ -101,8 +101,8 @@ Provenance line first. **Verdict**: AI share of organic (lower bound), trend, to
 <!--/include-->
 
 ## Fallbacks
-- GA4 unavailable → crawler access + AI-shaped queries + the citation recipe (step 7) on the top 3 pages by organic clicks (the plan switches to `computed/organic_top.json` by itself); the report is labelled **heuristic, not measured**. <!--cap:gsc.analytics_advanced-->`search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate)<!--/cap--> may add aggregate GA4 context but has no source breakdown — never use it for AI attribution.
-- Page fetch blocked → `web.extract`; if both fail, list the page without recipe notes.
+- GA4 unavailable → crawler access + AI-shaped queries + the citation recipe (step 7) on the top 3 pages by organic clicks (the plan switches to `computed/organic_top.json` by itself); the report is labelled **heuristic, not measured**. <!--cap:gsc.analytics_advanced-->`search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate)<!--/cap--> (record it) may add aggregate GA4 context but has no source breakdown — never use it for AI attribution.
+- Page fetch blocked → `web.extract` (record it); if both fail, list the page without recipe notes.
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): AI Overview citation checks on live SERPs are not run.
@@ -114,7 +114,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 |---|---|---|
 | AI sessions = 0 but users report AI traffic | assistant strips the referrer, or host not in the `AI assistants` rule | keep the lower-bound label; add the host to that rule in the rules file |
 | Robots verdict "VISIBILITY RISK" | a search/retrieval bot is disallowed | recommend allowing that token in robots.txt (and checking the CDN/WAF bot rules) |
-| `facts` returns status 403/503 | bot protection on the site | use `web.extract`; mention the protection, which may also block AI crawlers |
+| `facts` returns status 403/503 | bot protection on the site | use `web.extract` (record it); mention the protection, which may also block AI crawlers |
 
 ## Files
 <!--include:files-->
@@ -128,7 +128,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |

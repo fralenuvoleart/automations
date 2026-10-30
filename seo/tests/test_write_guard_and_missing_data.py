@@ -116,9 +116,47 @@ def test_gsc_row_missing_a_metric_raises_instead_of_reading_zero():
         gsc_metrics.parse_rows(payload, ["query"])
 
 
-def test_gsc_payload_without_any_metric_fields_is_flagged_not_zeroed():
-    rows = gsc_metrics.parse_rows({"rows": [{"keys": ["q"]}]}, ["query"])
-    assert rows[0]["clicks"] == 0.0  # documented: insight payloads carry no metrics at all
+def test_gsc_row_without_any_metric_field_raises_instead_of_reading_zero_traffic():
+    with raises(ValueError) as err:
+        gsc_metrics.parse_rows({"rows": [{"keys": ["q"]}]}, ["query"])
+    assert "not a Search Analytics response" in str(err.value)
+
+
+def test_gsc_unreadable_call_log_raises_instead_of_guessing_dimensions():
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / "data").mkdir()
+    f = run_dir / "data" / "pq.json"
+    f.write_text(json.dumps({"rows": [{"keys": ["q", URL], "clicks": 1, "impressions": 2, "ctr": 0.5, "position": 3}]}))
+    (run_dir / "context.json").write_text("{not json")
+    with raises(ValueError) as err:
+        gsc_metrics.load_rows(f, ["query", "page"])
+    assert "unreadable call log" in str(err.value) and str(run_dir) in str(err.value)
+
+
+def test_ga4_blank_value_is_not_reported_not_zero_and_garbage_raises():
+    def resp(value):
+        return {"dimension_headers": [{"name": "landingPage"}, {"name": "sessionSourceMedium"}],
+                "metric_headers": [{"name": "sessions"}, {"name": "keyEvents"}],
+                "rows": [{"dimension_values": [{"value": "/"}, {"value": "google / organic"}],
+                          "metric_values": [{"value": "10"}, {"value": value}]}]}
+    assert ga4_metrics.parse_rows(resp(""))[0]["keyEvents"] is None
+    assert ga4_metrics.parse_rows(resp("0"))[0]["keyEvents"] == 0.0
+    with raises(ValueError):
+        ga4_metrics.parse_rows(resp("n/a"))
+
+
+def test_ga4_all_zero_key_events_give_no_rate_and_a_note():
+    rows = [{"landingPage": "/", "sessionSourceMedium": "google / organic", "sessions": 40.0,
+             "engagedSessions": 20.0, "keyEvents": 0.0},
+            {"landingPage": "/ru/", "sessionSourceMedium": "(direct) / (none)", "sessions": 10.0,
+             "engagedSessions": 5.0, "keyEvents": 0.0}]
+    out = ga4_metrics.breakdown(R, rows, "channel")
+    assert out["key_events_tracked"] is True and out["key_events_recorded"] is False
+    assert all(r["key_event_rate"] is None for r in out["rows"]) and "set up in GA4" in out["key_events_note"]
+    rows[1]["keyEvents"] = 2.0  # one key event anywhere: rates are real, including a measured 0 %
+    out = ga4_metrics.breakdown(R, rows, "channel", organic_only=False)
+    org = next(r for r in out["rows"] if r["channel"] == "Organic search")
+    assert out["key_events_recorded"] is True and org["key_event_rate"] == 0.0 and "key_events_note" not in out
 
 
 def test_ga4_absent_metric_is_none_not_zero():
@@ -138,8 +176,8 @@ def test_ga4_key_event_rate_is_none_when_events_are_not_tracked():
     rows = [{"landingPage": "/", "sessionSourceMedium": "google / organic",
              "sessions": "10", "engagedSessions": "5"}]  # no keyEvents metric at all
     out = ga4_metrics.breakdown(R, rows, "channel")
-    assert out["key_events_tracked"] is False
-    assert out["rows"][0]["key_event_rate"] is None
+    assert out["key_events_tracked"] is False and out["key_events_recorded"] is False
+    assert out["rows"][0]["key_event_rate"] is None and "no key-event metric" in out["key_events_note"]
 
 
 # — A1: a pull cut at the server row limit is marked as such

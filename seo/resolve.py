@@ -37,7 +37,7 @@ MCP_JSON = ROOT / ".roo" / "mcp.json"
 SKILLS = ROOT / ".agents" / "skills"
 TOOL_SCHEMAS = HERE / "tool-schemas.json"
 COMMON = HERE / "references" / "skill-common"
-PLANS = HERE / "plans"
+PLANS = HERE / "data-plans"
 SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
 
 TOKEN_RE = re.compile(r"\{\{cap:([A-Za-z0-9_.]+)\}\}")
@@ -144,7 +144,7 @@ def caps_used(text: str) -> list[str]:
 
 
 def _plan_steps(skill: str) -> list[dict]:
-    """Steps of the skill's data plans (seo/plans/<skill>.json and its modes, e.g. <skill>.weekly.json)."""
+    """Steps of the skill's data plans (seo/data-plans/<skill>.json and its modes, e.g. <skill>.weekly.json)."""
     steps: list[dict] = []
     for f in sorted(PLANS.glob(f"{skill}.json")) + sorted(PLANS.glob(f"{skill}.*.json")):
         steps += json.loads(f.read_text()).get("steps", [])

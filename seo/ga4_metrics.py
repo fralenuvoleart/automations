@@ -31,11 +31,14 @@ METRICS = ("sessions", "engagedSessions", "keyEvents")
 NOT_SET = "(not set)"
 
 
-def _num(v) -> float:
+def _value(v, field: str) -> float | None:
+    """A metric value as GA4 sent it: blank or absent → None (not reported), unreadable → error (A2)."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
     try:
         return float(v)
     except (TypeError, ValueError):
-        return 0.0
+        raise ValueError(f"GA4 row has an unreadable '{field}' value: {v!r}") from None
 
 
 def parse_rows(payload) -> list[dict]:
@@ -43,7 +46,7 @@ def parse_rows(payload) -> list[dict]:
     import gsc_metrics
     payload = gsc_metrics._unwrap(payload)
     if isinstance(payload, list):
-        return [{k: (_num(v) if k in METRICS else v) for k, v in r.items()} for r in payload if isinstance(r, dict)]
+        return [{k: (_value(v, k) if k in METRICS else v) for k, v in r.items()} for r in payload if isinstance(r, dict)]
     if not isinstance(payload, dict):
         raise ValueError("unrecognised GA4 response shape")
     dh = payload.get("dimension_headers") or payload.get("dimensionHeaders") or []
@@ -54,7 +57,7 @@ def parse_rows(payload) -> list[dict]:
         dv = r.get("dimension_values") or r.get("dimensionValues") or []
         mv = r.get("metric_values") or r.get("metricValues") or []
         row = {d: v.get("value") for d, v in zip(dims, dv)}
-        row.update({m: _num(v.get("value")) for m, v in zip(mets, mv)})
+        row.update({m: _value(v.get("value"), m) for m, v in zip(mets, mv)})
         out.append(row)
     if out and not dims:
         raise ValueError("GA4 response has rows but no dimension headers")
@@ -126,11 +129,18 @@ def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = N
     names = [n for n in order if n in cur or (prev and n in prev)]
     names += sorted(n for n in set(cur) | set(prev or {}) if n not in names)
 
+    # a metric is tracked when the response carries it; key events are *recorded* only when the property
+    # logged at least one in either period — an all-zero column usually means none are set up in GA4
+    every = list(rows) + list(prev_rows or [])
+    tracked = {m: any(r.get(m) is not None for r in every) for m in METRICS}
+    recorded = tracked["keyEvents"] and sum(r.get("keyEvents") or 0.0 for r in every) > 0
+
     def line(name, c, p):
-        c = c or {**dict.fromkeys(METRICS, 0.0), "engagementRate": None}
+        # a group with no rows had no sessions (GA4 omits empty rows): 0 where the metric is tracked
+        c = c or {**{m: (0.0 if tracked[m] else None) for m in METRICS}, "engagementRate": None}
         row = {by: name, **{k: (round(v, 1) if isinstance(v, float) and k in METRICS else v) for k, v in c.items()}}
         if prev is not None:
-            row["prev_sessions"] = round(p["sessions"] or 0.0, 1) if p else 0
+            row["prev_sessions"] = (None if p["sessions"] is None else round(p["sessions"], 1)) if p else 0
             row["sessions_change_pct"] = _pct(c["sessions"], p["sessions"]) if p else None
             row["prev_engagementRate"] = p["engagementRate"] if p else None
         return row
@@ -143,11 +153,13 @@ def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = N
         row["session_share"] = (round(row["sessions"] / total_sessions, 4)
                                 if total_sessions and row["sessions"] is not None else None)
         row["key_event_rate"] = (round(row["keyEvents"] / row["sessions"], 4)
-                                 if row.get("sessions") and row.get("keyEvents") is not None else None)
-        row["key_events_tracked"] = row.get("keyEvents") is not None
+                                 if recorded and row.get("sessions") and row.get("keyEvents") is not None else None)
     out = {"by": by, "organic_only": organic_only, "rows": out_rows, "total": line("Total", tot_c, tot_p),
-           # false here means the property reported no key-event metric at all: a 0% rate would be an artefact
-           "key_events_tracked": any(r.get("keyEvents") is not None for r in out_rows)}
+           "key_events_tracked": tracked["keyEvents"], "key_events_recorded": recorded}
+    if not recorded:  # never a confident 0 %: say why there is no rate
+        out["key_events_note"] = ("the report has no key-event metric" if not tracked["keyEvents"] else
+                                  "no key event recorded in either period — check that key events are set up in GA4; "
+                                  "key-event rates are not reported")
     if by == "channel":  # headline of the AI sections: AI sessions ÷ organic sessions (a lower bound)
         ai, org = rules.data["channels"]["ai_channel"], organic
 

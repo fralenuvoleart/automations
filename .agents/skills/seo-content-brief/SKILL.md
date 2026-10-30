@@ -62,10 +62,10 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`facts`), [`seo/
 <!--include:evidence flags=--input_keyword="<keyword>"-->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-content-brief --site <domain> --input keyword="<keyword>"`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-content-brief.json`](../../../seo/plans/seo-content-brief.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-content-brief --site <domain> --input keyword="<keyword>"`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-content-brief.json`](../../../seo/data-plans/seo-content-brief.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
@@ -103,7 +103,7 @@ Provenance line first. **Verdict**: create vs expand (and which page), and the w
 
 ## Fallbacks
 - No DataForSEO → web-search SERP, labelled approximate; no SERP-feature target.
-- Planner unavailable, `RESOURCE_EXHAUSTED`, or no `ads_customer_id` → `gsc.keywords_related` volumes labelled estimates (the planner server already retried; do not loop).
+- Planner unavailable, `RESOURCE_EXHAUSTED`, or no `ads_customer_id` → `gsc.keywords_related` (record it) volumes labelled estimates (the planner server already retried; do not loop).
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): Google's real order and SERP features.
@@ -115,7 +115,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 |---|---|---|
 | Planner error "Too many keywords" | more than 20 seeds | batch seeds in groups of ≤ 20 |
 | `topic` returns nothing | terms too specific or wrong script | use 1–2 stem terms in the page's language (prefix match handles inflection) |
-| Top pages unreachable | bot protection | `web.extract`, else list the URL without structure notes |
+| Top pages unreachable | bot protection | `web.extract` (record it), else list the URL without structure notes |
 
 ## Files
 <!--include:files-->
@@ -129,7 +129,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
