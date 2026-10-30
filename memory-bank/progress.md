@@ -21,6 +21,7 @@
 - Run folder + cache + structured actions + weekly `seo-brief` (2026-10-30).
 - SEO-sheet practices ported (2026-10-30): target pages + wrong-page check, top countries per keyword, Monday–Sunday weekly mode with 8-week trends, GA4 by the site rules + Search Console vs GA4 check, report definitions.
 - CI gate `seo/check.sh` (`--check` + `--validate-live` + all tests) — 14 test suites green.
+- **2026-10-30 architecture audit** — [`plans/seo-architecture-audit-2026-10-30.md`](../plans/seo-architecture-audit-2026-10-30.md): 8.1/10 systems-design grade; taxonomy matrix (44 caps / 6 servers / T0–T6 tiers), per-domain scores, anti-pattern teardown, P0–P3 refactor blueprint.
 - **2026-10-30 audit fixes applied (all 51 issues + optional items)** — evidence recording + gate, deterministic GSC/crawl/DFS/Ads analysis modules, registry v7 (rowLimit/engine pinned, `keyEvents`, profile-driven AI filter), marker-based re-rendering with shared includes, planner API limits + historical metrics, offline-portable CI (`--validate-cached`). 18 SEO test suites + report-export green.
 
 ## In Progress
