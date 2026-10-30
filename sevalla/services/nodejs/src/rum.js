@@ -52,6 +52,18 @@ const CLIENT_JS = `(function () {
       seq: 0,
       path: location.pathname.slice(0, 150),
       qs: location.search ? 1 : 0,
+      // Which ad / tracking parameters the URL has (names only). Google Ads adds
+      // gclid (or gbraid / wbraid) to every click, and those URLs skip the edge cache.
+      qk: (function () {
+        if (!location.search) return 'none';
+        var keys = location.search.slice(1).split('&').map(function (p) { return p.split('=')[0].toLowerCase(); });
+        var groups = { gclid: ['gclid'], gbraid: ['gbraid', 'wbraid'], gad: ['gad_source', 'gad_campaignid'], utm: ['utm_'], fbclid: ['fbclid'], msclkid: ['msclkid'] };
+        var found = [];
+        for (var g in groups) {
+          if (keys.some(function (k) { return groups[g].some(function (x) { return x === 'utm_' ? k.indexOf('utm_') === 0 : k === x; }); })) found.push(g);
+        }
+        return found.length ? found.join(',') : 'other';
+      })(),
       ref: document.referrer ? (function () { try { return new URL(document.referrer).hostname; } catch (e) { return ''; } })() : '',
       nt: nav.type,
       proto: nav.nextHopProtocol || '',
@@ -86,18 +98,20 @@ const CLIENT_JS = `(function () {
       }).observe({ type: 'largest-contentful-paint', buffered: true });
     } catch (e) {}
 
-    // Contact form (WS Form events fire on document via jQuery)
+    // Contact form. WS Form triggers its events on document as "wsf-<name>"
+    // (the docs list them as "wsft-<name>"), so both prefixes are listened to.
     var hookForm = function () {
       d.form = document.querySelector('.wsf-form') ? 1 : 0;
       if (d.form && document.querySelector('.wsf-form input, .wsf-form textarea')) d.frender = d.frender || -1;
       var $ = window.jQuery;
       if (!$ || hookForm.done) return;
       hookForm.done = 1;
-      $(document).on('wsft-rendered', function () { d.frender = r(performance.now()); });
-      $(document).on('wsft-submit-before', function () { d.fsubmit++; });
-      $(document).on('wsft-submit-validate-fail', function () { d.fvfail++; });
-      $(document).on('wsft-submit-success', function () { d.fok++; send(); });
-      $(document).on('wsft-submit-error', function () { d.ferr++; send(); });
+      var ev = function (name) { return 'wsf-' + name + ' wsft-' + name; };
+      $(document).on(ev('rendered'), function () { d.frender = r(performance.now()); });
+      $(document).on(ev('submit-before'), function () { d.fsubmit++; });
+      $(document).on(ev('submit-validate-fail'), function () { d.fvfail++; });
+      $(document).on(ev('submit-success'), function () { d.fok++; send(); });
+      $(document).on(ev('submit-error'), function () { d.ferr++; send(); });
     };
     document.addEventListener('focusin', function (e) {
       if (!d.fstart && e.target.closest && e.target.closest('.wsf-form')) d.fstart = r(performance.now());
@@ -174,7 +188,7 @@ const FIELDS = {
   v: 'n', pv: 's', seq: 'n', path: 's', qs: 'n', ref: 's', nt: 's', proto: 's', ttfb: 'n', wait: 'n',
   size: 'n', mob: 'n', net: 's', fcp: 'n', lcp: 'n', dcl: 'n', load: 'n', colo: 's', loc: 's',
   edge: 's', origin: 's', age: 'n', form: 'n', frender: 'n', fstart: 'n', fsubmit: 'n', fvfail: 'n',
-  fok: 'n', ferr: 'n', tg: 'n', wa: 'n', tel: 'n', mail: 'n', ck: 's', nck: 'n',
+  fok: 'n', ferr: 'n', tg: 'n', wa: 'n', tel: 'n', mail: 'n', ck: 's', nck: 'n', qk: 's',
 };
 
 function clean(input) {
@@ -360,6 +374,7 @@ function summary(days) {
   out.by_cloudflare_location = by(all, 'colo', 15);
   out.by_page = by(all, 'path', 15);
   out.by_cookie = cookieReport(all);
+  out.by_query = by(all, 'qk', 10);
   out.by_hour = hourReport(all);
   return out;
 }
