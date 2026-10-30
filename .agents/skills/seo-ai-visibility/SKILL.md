@@ -38,7 +38,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 ## Requires
 - **Required:** `search-console`.
 - **Optional (headline):** `analytics` (GA4) with the service account on the property. Without it the report is **heuristic-only** (crawler access + AI-shaped queries), stated in Data availability. Rule: [`data-source-map.md`](../../../seo/references/data-source-map.md).
-- Profile `ai_sources` (<!--site:ai_sources-->`python3 seo/site_profile.py --site <domain> --get ai_sources`<!--/site-->) — the single list of assistant referrer hosts (subdomains match).
+- The `AI assistants` channel rule in the site rules (`seo/config/rules/<domain>.json`) — the single list of assistant referrers (substring match on `sessionSource`, as in the SEO sheet).
 
 ## Data Sources
 <!--include:datasources-->
@@ -112,7 +112,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| AI sessions = 0 but users report AI traffic | assistant strips the referrer, or host not in `ai_sources` | keep the lower-bound label; add the host to the profile |
+| AI sessions = 0 but users report AI traffic | assistant strips the referrer, or host not in the `AI assistants` rule | keep the lower-bound label; add the host to that rule in the rules file |
 | Robots verdict "VISIBILITY RISK" | a search/retrieval bot is disallowed | recommend allowing that token in robots.txt (and checking the CDN/WAF bot rules) |
 | `facts` returns status 403/503 | bot protection on the site | use `web.extract`; mention the protection, which may also block AI crawlers |
 

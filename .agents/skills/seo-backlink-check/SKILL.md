@@ -76,7 +76,7 @@ Local tools: [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`anchor-mix`, 
 
 ## Determinism
 - GA4 window: 28 days vs the previous 28 (`--source ga4`, ends `today − 2`); DataForSEO calls are live snapshots labelled per section.
-- Anchor buckets and the gap list come from `dfs_metrics.py`; brand matching uses the profile `brand_terms`.
+- Anchor buckets and the gap list come from `dfs_metrics.py`; brand matching uses the `Brand` category of the site rules.
 
 ## Output
 Provenance line first. **Verdict**: profile strength and, if asked, the gap vs the competitor. Then: profile summary, top referring domains, anchor mix (with the risk flag, labelled heuristic), new/lost trend, link-gap outreach list (domain, rank), and the GA4 referral table. Every third-party number labelled as an index estimate (`"estimate": true`).

@@ -58,7 +58,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 
 <!--/include-->
 
-Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `curve`, `value`), [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`keyword-gap`), [`seo/coverage.py`](../../../seo/coverage.py).
+Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `curve`, `value`), [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`keyword-gap`), [`seo/coverage.py`](../../../seo/coverage.py), [`seo/rules.py`](../../../seo/rules.py) (`keywords`).
 
 ## Workflow
 <!--include:evidence days=90 flags=--->
@@ -78,7 +78,8 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `c
 6. **Competitor gap (optional).** Competitor named or in <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->; DataForSEO configured → <!--cap:dfs.ranked_keywords-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live"} (supply: data)<!--/cap--> ([payloads](../../../seo/references/dataforseo-payloads.md)) → `python3 seo/dfs_metrics.py keyword-gap --ranked {run_dir}/data/ranked.json --query {run_dir}/data/query_cur.json` → their keywords where the site has no impressions.
 7. **Roadmap.** Tier 1 = footholds with value (on-page refresh + internal links); Tier 2 = gap keywords matching a service line (new pages); Tier 3 = long-tail questions from expansion (supporting articles). Drop off-topic terms regardless of volume.
 8. **Coverage.** `python3 seo/coverage.py --site <domain> --gsc {run_dir}/data/query_cur.json` → `findings.coverage` (priority keywords with/without impressions).
-9. <!--include:history-->
+9. **Tracked set.** `python3 seo/rules.py --site <domain> keywords --query {run_dir}/data/query_cur.json` → the tracked keywords the SEO sheet would pick from this window (Core, Brand, Proven, Opportunity, Generic) and `unclassified_to_review` (queries no category rule matches). Propose rule or Core-keyword changes to the user; never edit `seo/config/rules/<domain>.json` without confirmation.
+10. <!--include:history-->
 
 **Action history.** Before recommending, read `python3 seo/site_profile.py --site <domain> --history`: never re-recommend a `[done]` action; list open `[recommended]` ones as "previously recommended, still open". After the run, record each *new* recommendation with `--append-history "<action>" --status recommended` (exact duplicates are ignored). Use `--status done` only when the user confirms an action was carried out.
 
@@ -89,7 +90,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `c
 - Values come only from `gsc_metrics.py value`; the CTR source (site vs heuristic) is shown per row.
 
 ## Output
-Provenance line first. **Verdict**: highest-value cluster and the total estimated value of Tier 1. Then: Tier 1 table (query, position, volume, est. clicks gain, est. value, CTR source), Tier 2 gap table, Tier 3 topics, and per-language notes. All planner/value numbers labelled estimates (`"estimate": true`).
+Provenance line first. **Verdict**: highest-value cluster and the total estimated value of Tier 1. Then: Tier 1 table (query, position, volume, est. clicks gain, est. value, CTR source), Tier 2 gap table, Tier 3 topics, per-language notes, and proposed changes to the tracked set / category rules. All planner/value numbers labelled estimates (`"estimate": true`).
 
 <!--include:pipeline-->
 
@@ -137,7 +138,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 <!--/include-->
 
-Skill-specific: `seo/gsc_metrics.py`, `seo/dfs_metrics.py`, `seo/coverage.py`, `seo/site_profile.py` (Execute).
+Skill-specific: `seo/gsc_metrics.py`, `seo/dfs_metrics.py`, `seo/coverage.py`, `seo/rules.py`, `seo/site_profile.py` (Execute).
 
 ## Related / Delegation
 - One keyword's brief → `seo-content-brief`.

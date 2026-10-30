@@ -24,7 +24,7 @@ name: seo-demo
 ## Workflow
 {{include:evidence days=28 flags=--compare}}
 
-1. Pull {{cap:gsc.page}} then {{cap:gsc.query}}; profile {{site:brand_terms}}.
+1. Pull {{cap:gsc.page}} then {{cap:gsc.query}}; profile {{site:priority_pages}}.
 
 ## Configuration
 {{include:configuration}}

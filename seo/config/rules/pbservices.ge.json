@@ -1,0 +1,109 @@
+{
+  "$comment": "Single source of truth for classification, shared by the SEO skills (seo/rules.py) and the 'PBS - SEO Rankings' sheet. Ported from the sheet's Rules and Keyword Setup tabs on 2026-10-30. Regexes must stay portable (Python re, JavaScript, RE2): no lookarounds or backreferences. In every rule list the first match wins.",
+  "domain": "pbservices.ge",
+  "query_categories": {
+    "match": "lowercased query",
+    "default": "Generic",
+    "default_note": "Queries no rule matches (and not tracked) count as Generic and are listed as unclassified, to review.",
+    "rules": [
+      {"category": "Brand", "regex": "(^|[^a-z])pb($|[^a-z])|pb ?services?|pbservices|bp ?services?|ფიბი|(^| )პბ( |$)|пи би", "note": "Checked first so brand queries never fall into other categories."},
+      {"category": "Generic", "regex": "праздн|выходн|календар|holiday|mariamoba|нерабоч|bayram", "note": "Holidays and calendar. Checked early so 'bank holiday' doesn't count as Bank account."},
+      {"category": "Tax", "regex": "налогов[а-я]* резидент|tax residen|резидентств[а-я]* налог", "note": "Tax residency. Checked before Residency so it stays in Tax."},
+      {"category": "Residency", "regex": "внж|вид на жительство|резидентств|residence|residency|resident permit|resident card|visa|виз[аыуе]|визов|безвиз", "note": "Residence permits and visas (EN/RU). Before IE, so 'внж по ип' counts here."},
+      {"category": "IE", "regex": "individual entrepreneur|sole proprietor|sole trader|индивидуальн|предпринимател|(^| )(ип|ie)( |$)|мал[а-я]* бизнес|small business", "note": "Includes small business status (an IE regime). Matches 'ип' and 'ie' only as whole words, so 'ипотека' is not caught."},
+      {"category": "Legal & Accounting", "regex": "бухгалтер|accountant|accounting|annual accounts|bookkeep|аудит|audit", "note": "Accounting and audit. Lawyer searches are in a later rule."},
+      {"category": "Tax", "regex": "налог|ндс|(^| )vat( |$)|tax", "note": "Before Company, so 'corporate tax' counts as Tax."},
+      {"category": "Crypto & PSP licensing", "regex": "crypto|крипто|kripto|vasp|(^| )psp( |$)|payment system|платежн|(^| )aml( |$)|комплаенс|e-money|электронн[а-я]* денег", "note": "Before Company and Bank account, so 'llc new payment system' counts here."},
+      {"category": "Apostille", "regex": "apostil|апостил|legali[sz]|легализ", "note": "Apostille and document legalisation."},
+      {"category": "Marriage", "regex": "marriage|брак|wedding|свадьб|married|evlilik", "note": "Marriage registration and weddings for foreigners."},
+      {"category": "Company", "regex": "llc|ооо|compan|incorporat|компани|юрлиц|юридическ[а-я]* (лиц|адрес)|offshore|оффшор|virtual zone|фирм", "note": "Generic 'llc' queries (e.g. US states) also land here."},
+      {"category": "Bank account", "regex": "bank|banca|банк|счет|счёт|вклад|银行|开户|,fyr", "note": "Bank accounts and banks. Includes Chinese (银行, 开户) and Russian typed on an English keyboard (,fyr = бан)."},
+      {"category": "Real estate", "regex": "ипотек|недвижим|apartment|квартир|mortgage|property|real estate", "note": "After Tax, so 'property tax' counts as Tax. Before the lawyer rule, so real estate lawyer searches count here."},
+      {"category": "Legal & Accounting", "regex": "юрист|адвокат|lawyer|attorney|law firm|legal (advice|services?|consult|help|support)|юридическ[а-я]* (услуг|помощ|консульт|сопровожд)", "note": "Lawyer and legal-services searches. After the other services, so 'юрист по недвижимости' counts under that service."},
+      {"category": "Generic", "regex": "2026|район|district|areas? (of|in) tbilisi|дигоми|сабуртало|ваке|cost of living|стоимость жизни|сколько стоит жи|дорого ли жить|yaşam maliyeti|pahal|ucuz|fiyat|(^| )rent|аренд|коворкинг|cowork|weather|погод|temperature|insurance|страхов|ค่าครองชีพ|въезд|посольств|embassy|travel|universit|университет|alte univ|(^| )alte( |$)|(^| )seu( |$)|тгу|üniversite|جامعة", "note": "Searches with 2026, living in Georgia, travel and universities. After the service categories, so 'ип в грузии 2026' stays in IE."}
+    ]
+  },
+  "page_tags": {
+    "match": "cleaned page URL",
+    "default": "Other pages",
+    "rules": [
+      {"tag": "Services", "regex": "/services/|/ru/uslugi/|/ar/offers/|/zh/fuwu/", "note": "One path per language: EN, RU, AR, ZH."},
+      {"tag": "Blog", "regex": "/blog/|/ru/blog/|/ar/blog/|/zh/blog/", "note": "One path per language: EN, RU, AR, ZH."},
+      {"tag": "Homepage", "regex": "^https://pbservices\\.ge/(ru/|ar/|zh/)?(\\?.*)?$", "note": "Root and language home pages (/ru/, /ar/, /zh/)."}
+    ]
+  },
+  "page_languages": {
+    "match": "cleaned page URL",
+    "default": "EN",
+    "default_note": "Any page without a language folder.",
+    "rules": [
+      {"language": "RU", "regex": "^https?://[^/]+/ru(/|$|\\?)", "note": "Pages under /ru/."},
+      {"language": "AR", "regex": "^https?://[^/]+/ar(/|$|\\?)", "note": "Pages under /ar/."},
+      {"language": "ZH", "regex": "^https?://[^/]+/zh(/|$|\\?)", "note": "Pages under /zh/."}
+    ]
+  },
+  "channels": {
+    "match": "lowercased GA4 'source / medium'",
+    "default": "Other",
+    "default_note": "Anything that matches no rule (email, social, untagged links).",
+    "ai_channel": "AI assistants",
+    "rules": [
+      {"channel": "AI assistants", "regex": "ai-assistant|chatgpt|openai|perplexity|gemini|copilot|claude|deepseek|grok|meta\\.ai|mistral|you\\.com", "note": "Visits from AI chat tools. Checked first, so 'chatgpt.com / referral' counts here. grok, meta.ai, mistral and you.com added from the skills' former ai_sources list."},
+      {"channel": "Organic search", "regex": "/ organic$", "note": "Unpaid search results: Google, Bing, Yandex, DuckDuckGo."},
+      {"channel": "Paid search", "regex": "/ (cpc|ppc|paid.*)$", "note": "Google Ads and Yandex Direct."},
+      {"channel": "Direct", "regex": "^\\(direct\\)", "note": "Typed address, bookmarks, untracked apps."},
+      {"channel": "Referral", "regex": "/ referral$", "note": "Links from other websites."}
+    ]
+  },
+  "keywords": {
+    "tracked": [
+      {"keyword": "ип в грузии", "category": "IE", "type": "Core"},
+      {"keyword": "открыть ип в грузии", "category": "IE", "type": "Core"},
+      {"keyword": "individual entrepreneur georgia", "category": "IE", "type": "Core"},
+      {"keyword": "внж грузии", "category": "Residency", "type": "Core"},
+      {"keyword": "внж грузии по ип", "category": "Residency", "type": "Core"},
+      {"keyword": "residence permit georgia", "category": "Residency", "type": "Core"},
+      {"keyword": "налоговое резидентство грузии", "category": "Tax", "type": "Core"},
+      {"keyword": "tax residency georgia", "category": "Tax", "type": "Core"},
+      {"keyword": "статус малого бизнеса в грузии", "category": "IE", "type": "Core"},
+      {"keyword": "регистрация компании в грузии", "category": "Company", "type": "Core"},
+      {"keyword": "ооо в грузии", "category": "Company", "type": "Core"},
+      {"keyword": "company registration in georgia", "category": "Company", "type": "Core"},
+      {"keyword": "bank account georgia", "category": "Bank account", "type": "Core", "target_page": "https://pbservices.ge/services/bank-account-georgia/"},
+      {"keyword": "открытие счета в грузии", "category": "Bank account", "type": "Core"},
+      {"keyword": "открыть счет в грузии удаленно", "category": "Bank account", "type": "Core"},
+      {"keyword": "accounting services georgia", "category": "Legal & Accounting", "type": "Core"},
+      {"keyword": "бухгалтер грузия", "category": "Legal & Accounting", "type": "Core"},
+      {"keyword": "ипотека в грузии для иностранцев", "category": "Real estate", "type": "Core"},
+      {"keyword": "vasp georgia", "category": "Crypto & PSP licensing", "type": "Core"},
+      {"keyword": "apostille georgia", "category": "Apostille", "type": "Core"},
+      {"keyword": "pb services", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"},
+      {"keyword": "pb services georgia", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"},
+      {"keyword": "pbservices", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"}
+    ],
+    "auto": {
+      "lookback_days": 90,
+      "proven": {"slots": 15, "min_clicks": 2, "note": "Service searches with the most clicks."},
+      "opportunity": {"slots": 10, "min_impressions": 5, "position_from": 5, "position_to": 20, "note": "Service searches with the most impressions while ranking just below the top results."},
+      "generic": {"slots": 2, "note": "Generic searches with the most clicks."},
+      "max_words": 7,
+      "exclude_regex": "20\\d\\d|\"|solo|соло|liberty|либерти|bank of georgia|tbc|credo|atlanta|безвиз",
+      "exclude_note": "Never picked as Proven or Opportunity: years, quotes, bank names, visa-free travel.",
+      "ignored_words": ["в", "во", "по", "на", "для", "и", "с", "из", "к", "the", "in", "for", "of", "a", "an", "to", "on"],
+      "ignored_words_note": "Duplicate check: these words are ignored and words are compared by their first 5 letters, so 'внж по ип в грузии' duplicates 'внж грузии по ип'.",
+      "category_caps": {
+        "IE": 4,
+        "Residency": 4,
+        "Tax": 4,
+        "Company": 4,
+        "Bank account": 5,
+        "Legal & Accounting": 2,
+        "Real estate": 2,
+        "Crypto & PSP licensing": 2,
+        "Apostille": 1,
+        "Marriage": 1
+      },
+      "category_caps_note": "Max automatic picks (Proven + Opportunity) per service category. Categories not listed (Brand, Generic, unclassified) are never picked as Proven or Opportunity."
+    }
+  }
+}

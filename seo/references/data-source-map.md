@@ -23,7 +23,7 @@
 | `seo-audit` | `search-console` | `analytics` (engagement/AI cross-check), `dataforseo` |
 | `seo-ai-visibility` | `search-console` | `analytics` (headline AI referrals; without it the report is heuristic-only) |
 | `seo-backlink-check` | `analytics` | `dataforseo` (the backlink profile itself) |
-| `seo-brand-split` | `search-console`, profile `brand_terms` | — |
+| `seo-brand-split` | `search-console`, site rules (Brand, page languages) | — |
 | `seo-content-brief` | `search-console` | `dataforseo` (SERP), `tavily` (web-search fallback), `google-ads-planner` |
 | `seo-content-refresh` | `search-console` | `analytics` (key events), `dataforseo` (backlinks) |
 | `seo-indexation` | `search-console` | — (`site_crawl.py` is local) |

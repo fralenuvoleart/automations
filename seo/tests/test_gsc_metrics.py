@@ -76,7 +76,7 @@ def test_striking_low_ctr_and_curve():
 
 def test_brand_queries_excluded_from_curve():
     rows = [R(query="pb services", impressions=1000, clicks=600, position=1)]
-    assert G.ctr_curve(rows, ["pb services"])["1"]["source"] == "heuristic"
+    assert G.ctr_curve(rows, lambda q: q.startswith("pb"))["1"]["source"] == "heuristic"
 
 
 def test_cannibalization():
@@ -97,22 +97,13 @@ def test_decay_classes_are_exclusive_with_precedence():
     assert cls == {"rank": "ranking_loss", "demand": "demand_drop", "ctr": "ctr_loss", "gone": "vanished"}
 
 
-def test_language_of_longest_prefix_and_brand_match():
-    lp = {"EN": "/", "RU": "/ru/", "AR": "/ar/"}
-    assert G.language_of("https://x.ge/ru/внж/", lp) == "RU"
-    assert G.language_of("https://x.ge/ru", lp) == "RU"
-    assert G.language_of("https://x.ge/rules/", lp) == "EN"
-    assert G.language_of("/ar/x", {"RU": "/ru/"}) == "unknown"
-    brands = ["pb services", "пб сервис"]
-    assert G.brand_match("PB-Services Georgia", brands) and G.brand_match("pbservices.ge", brands)
-    assert G.brand_match("ПБ Сервис отзывы", brands) and not G.brand_match("services georgia", brands)
-
-
 def test_brand_split_by_language_with_unattributed():
     rows = [R(query="pb services", page="https://x.ge/", clicks=10, impressions=20, position=1),
             R(query="внж грузии", page="https://x.ge/ru/vnzh/", clicks=5, impressions=200, position=6),
             R(query="tax georgia", page="https://x.ge/tax/", clicks=3, impressions=100, position=9)]
-    out = G.brand_split(rows, ["pb services"], {"EN": "/", "RU": "/ru/"}, totals={"clicks": 30, "impressions": 400})
+    import rules
+    r = rules.load("pbservices.ge")
+    out = G.brand_split(rows, r.is_brand, r.page_language, totals={"clicks": 30, "impressions": 400})
     assert out["by_language"]["RU"]["non_brand"]["clicks"] == 5
     assert out["by_language"]["EN"]["brand"]["clicks"] == 10 and out["by_language"]["EN"]["non_brand"]["clicks"] == 3
     assert out["unattributed"]["clicks"] == 12 and out["unattributed"]["clicks_share"] == 0.4

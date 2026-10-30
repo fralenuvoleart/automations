@@ -44,7 +44,7 @@ The 12 `seo-*` skills in `.agents/skills/` run on a multi-server MCP stack; ever
 | Concern | Server | Notes |
 |---|---|---|
 | GSC (queries, pages, compare, anomalies, inspection, sitemaps, keyword estimates, AI-query heuristic, PageSpeed/schema) | `search-console` | every `analytics_query` pins `rowLimit 25000` + `engine google`; `seo_audit` is not used (ignores windows) |
-| GA4 (AI referrals, channels, organic landing pages, referrals) | `analytics` | metric `keyEvents` (not `conversions`); AI filter from profile `ai_sources` via `site_profile.py --ga4-ai-filter` |
+| GA4 (AI referrals, channels, organic landing pages, referrals) | `analytics` | metric `keyEvents` (not `conversions`); AI filter from the rules' `AI assistants` channel via `site_profile.py --ga4-ai-filter` |
 | Google Ads (GAQL) | `google-ads` | only `seo-paid-organic` |
 | Keyword Planner (ideas + historical metrics) | `google-ads-planner` | ≤20 seeds, ≤10 geos, first page only; retries only inside the server (`policy.retry 0`) |
 | SERP / backlinks / labs | `dataforseo` | optional, not configured; payloads in `seo/references/dataforseo-payloads.md` |
@@ -54,6 +54,7 @@ The 12 `seo-*` skills in `.agents/skills/` run on a multi-server MCP stack; ever
 Rules:
 - GSC: page metrics from `page` rows (include anonymized clicks), query metrics from `query` rows, `query×page` only for attribution; positions impression-weighted; truncated pulls (= row limit) never produce "lost/new".
 - Windows: GSC ends `today − 3`, GA4 `today − 2`; tools without a window get a per-section `window` note.
+- Classification has one source: `seo/config/rules/<domain>.json` (ported from the SEO sheet, which should read the same file). Brand, query category, page tag/language, channel and tracked keywords come only from `seo/rules.py`; the site profile holds facts only and derives `languages`/`sections`/`services`/`priority_keywords` from the rules. Rule regexes stay RE2/JS-portable.
 - One degradation rule ([`data-source-map.md`](../seo/references/data-source-map.md)): required missing → stop; optional missing → `findings.unavailable`; never substitute estimates or memory.
 - Side effects (Indexing API submissions, `[done]` history entries) only after explicit user confirmation.
 - CI: `bash seo/check.sh` (offline, portable); `--live` adds live schema validation on the workstation.

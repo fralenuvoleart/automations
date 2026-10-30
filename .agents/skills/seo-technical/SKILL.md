@@ -37,7 +37,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 
 ## Requires
 - **Required:** `search-console`. Local: `seo/site_crawl.py`.
-- Profile `sections` (<!--site:sections-->`python3 seo/site_profile.py --site <domain> --get sections`<!--/site-->), `language_paths` (<!--site:language_paths-->`python3 seo/site_profile.py --site <domain> --get language_paths`<!--/site-->), `priority_pages` (<!--site:priority_pages-->`python3 seo/site_profile.py --site <domain> --get priority_pages`<!--/site-->).
+- Profile `sections` (<!--site:sections-->`python3 seo/site_profile.py --site <domain> --get sections`<!--/site-->), page languages from the site rules (`python3 seo/rules.py --site <domain> classify --page <url>`), `priority_pages` (<!--site:priority_pages-->`python3 seo/site_profile.py --site <domain> --get priority_pages`<!--/site-->).
 
 ## Data Sources
 <!--include:datasources-->

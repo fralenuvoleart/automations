@@ -65,7 +65,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 
 <!--/include-->
 
-Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/coverage.py`](../../../seo/coverage.py), [`seo/site_profile.py`](../../../seo/site_profile.py).
+Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/rules.py`](../../../seo/rules.py) (`breakdown`), [`seo/coverage.py`](../../../seo/coverage.py), [`seo/site_profile.py`](../../../seo/site_profile.py).
 
 ## Workflow
 <!--include:evidence days=90 flags=--compare-->
@@ -86,6 +86,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/coverage
    - `decay --cur page_cur.json --prev page_prev.json` → **declining pages** with mutually exclusive classes (`vanished` / `ranking_loss` / `demand_drop` / `ctr_loss`); top 10 here, depth → `seo-content-refresh`.
    - `low-ctr --query query_cur.json` and `striking --query query_cur.json` → **quick wins** (top 5 of each, by impressions / missed clicks).
    - `cannibalization --page-query pq_cur.json` → apply the decision matrix in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md).
+   - **Segments** (site rules, as in the SEO sheet): `python3 seo/rules.py --site <domain> breakdown --by category --cur query_cur.json --prev query_prev.json`, then `--by page_tag` and `--by language` with `page_cur.json` / `page_prev.json` → clicks, impressions, position and change per service category, page type and language; rows flagged `low_volume` are noise — never call them trends.
    - Any output with `truncated: true` → report "beyond the row cutoff" items as such, never as movements.
 6. **Local visibility (only when profile markets ≠ WORLDWIDE).** <!--site:markets-->`python3 seo/site_profile.py --site <domain> --get markets`<!--/site--> → <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> for the current period; clicks/impressions per target country. For WORLDWIDE, skip and say so.
 7. **Indexation spot-check.** <!--cap:gsc.inspect-->`search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls)<!--/cap--> for up to 5 declining pages (`vanished` and `ranking_loss` first): coverage state, Google vs declared canonical, last crawl. <!--cap:gsc.health-->`search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl)<!--/cap-->: report only the fields it returns — site-wide indexed/excluded counts are not available via the API (→ `seo-indexation`).
@@ -104,7 +105,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/coverage
 - The aggregate delta comes from `gsc.compare_period`; every per-query/per-page number comes from `gsc_metrics.py` output.
 
 ## Output
-Provenance line first. **Verdict** (healthy or not, and the #1 issue), then sections: Performance (delta, anomalies, drop attribution, anonymized share), Declining pages, Quick wins, Cannibalization, Indexation spot-check, Engagement & AI share (when GA4 is available), and **Coverage vs site profile**. End with a prioritized 5-item action list.
+Provenance line first. **Verdict** (healthy or not, and the #1 issue), then sections: Performance (delta, anomalies, drop attribution, anonymized share), Segments (category, page type, language), Declining pages, Quick wins, Cannibalization, Indexation spot-check, Engagement & AI share (when GA4 is available), and **Coverage vs site profile**. End with a prioritized 5-item action list.
 
 <!--include:pipeline-->
 
@@ -153,7 +154,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 <!--/include-->
 
-Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/coverage.py` (Execute), `seo/site_profile.py` (Execute).
+Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute), `seo/coverage.py` (Execute), `seo/site_profile.py` (Execute).
 
 ## Related / Delegation
 - Declining pages in depth → `seo-content-refresh`; position movers → `seo-rank-tracking`.

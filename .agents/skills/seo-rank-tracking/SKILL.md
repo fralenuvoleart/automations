@@ -55,7 +55,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 
 <!--/include-->
 
-Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`).
+Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`), [`seo/rules.py`](../../../seo/rules.py) (`keywords`, `breakdown`).
 
 ## Workflow
 <!--include:evidence days=28 flags=--compare-->
@@ -71,6 +71,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`).
 1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
 2. **Rows.** For both periods: <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`query_cur`, `query_prev`). Current period: <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`pq_cur`). Aggregate: <!--cap:gsc.compare_period-->`search-console` → `analytics_compare` {"mode": "period_over_period", "engine": "google"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate)<!--/cap-->.
 3. **Movers.** `python3 seo/gsc_metrics.py movers --cur {run_dir}/data/query_cur.json --prev {run_dir}/data/query_prev.json --site <domain>` → winners/losers (position moved ≥ `mover_min_delta` on queries with ≥ `min_impressions`; losers sorted by clicks lost), new, lost, and `beyond_row_cutoff` (when a pull is truncated, these are not movements).
+3b. **Tracked keywords and categories** (site rules, as in the SEO sheet). `python3 seo/rules.py --site <domain> keywords --query {run_dir}/data/query_cur.json --prev {run_dir}/data/query_prev.json` → the tracked set (Core, Brand, then automatic Proven / Opportunity / Generic picks) with position before → after and status (`New`, `Lost`, `No impressions`; `beyond row cutoff` when a pull is truncated). `python3 seo/rules.py --site <domain> breakdown --by category --cur {run_dir}/data/query_cur.json --prev {run_dir}/data/query_prev.json` → movement per service category (`low_volume` rows are noise). Picks use this run's window; the rules' `lookback_days` is the sheet's setting.
 4. **Which page.** For the top 10 losers, the ranking pages from `pq_cur` (attribution only).
 5. **Bing divergence (optional).** Only if diagnostics shows Bing connected: <!--cap:gsc.compare_engines-->`search-console` → `compare_engines` (supply: siteUrl, dimension, startDate, endDate)<!--/cap--> with `dimension: query` for the same window.
 6. **SERP spot-check (optional).** DataForSEO configured → <!--cap:dfs.serp-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/advanced"} (supply: data)<!--/cap--> for the 3–5 most valuable losers ([payloads](../../../seo/references/dataforseo-payloads.md)); the section is a live snapshot (`window` note).
@@ -80,7 +81,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`).
 - Thresholds from `gsc_metrics.py` defaults or profile `thresholds` (<!--site:thresholds-->`python3 seo/site_profile.py --site <domain> --get thresholds`<!--/site-->); quote them.
 
 ## Output
-Provenance line first. **Verdict**: net movement and the single biggest move (and, for an update question, the before/after evidence around the dated event). Then four tables — Winners, Losers, New, Lost (query, position before → after, clicks delta, page) — plus "beyond the row cutoff" when present.
+Provenance line first. **Verdict**: net movement and the single biggest move (and, for an update question, the before/after evidence around the dated event). Then four tables — Winners, Losers, New, Lost (query, position before → after, clicks delta, page) — plus "beyond the row cutoff" when present, then Tracked keywords (type, category, position before → after, status) and Categories.
 
 <!--include:pipeline-->
 
@@ -131,7 +132,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 <!--/include-->
 
-Skill-specific: `seo/gsc_metrics.py` (Execute).
+Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute).
 
 ## Related / Delegation
 - Full audit → `seo-audit`; declining pages → `seo-content-refresh`.

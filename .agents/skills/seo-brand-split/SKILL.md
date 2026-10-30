@@ -2,7 +2,7 @@
 name: seo-brand-split
 description: Brand vs non-brand performance from Search Console — overall and per language — with the unattributable (anonymized) share stated, so non-brand growth, the real SEO signal, is visible. Use when asked "brand vs non-brand", "branded traffic", "non-brand growth" or "how much is brand".
 license: MIT
-compatibility: Requires the `search-console` MCP server and a site profile with `brand_terms` and `language_paths`. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
+compatibility: Requires the `search-console` MCP server and the site's rules file (`seo/config/rules/<domain>.json`: Brand category, page languages). Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
 ---
 
 # Brand vs Non-Brand
@@ -36,7 +36,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 - Whole-site audit → `seo-audit`; position movers → `seo-rank-tracking`
 
 ## Requires
-- **Required:** `search-console`; profile `brand_terms` (<!--site:brand_terms-->`python3 seo/site_profile.py --site <domain> --get brand_terms`<!--/site-->) and `language_paths` (<!--site:language_paths-->`python3 seo/site_profile.py --site <domain> --get language_paths`<!--/site-->). If `brand_terms` is missing or empty, **stop and ask** the user — never guess which terms are branded.
+- **Required:** `search-console`; the site rules (`python3 seo/rules.py --site <domain> validate`): brand = the `Brand` query category (first rule, plus tracked Brand keywords), language = `page_languages`. If the rules file is missing, **stop and ask** the user — never guess which terms are branded.
 
 ## Data Sources
 <!--include:datasources-->
@@ -65,7 +65,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`brand-split`)
 1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, then <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap--> → the user's domain.
 2. **Rows.** For both periods: <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`pq_cur`, `pq_prev`) and <!--cap:gsc.daily_totals-->`search-console` → `analytics_query` {"dimensions": ["date"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`totals_cur`, `totals_prev`).
 3. **Compute.** `python3 seo/gsc_metrics.py brand-split --cur {run_dir}/data/pq_cur.json --prev {run_dir}/data/pq_prev.json --totals-cur {run_dir}/data/totals_cur.json --totals-prev {run_dir}/data/totals_prev.json --site <domain>` →
-   - brand / non-brand per language: language = **longest matching path prefix** (`/ru/` beats `/`), classified per query × page row, then aggregated;
+   - brand / non-brand per language: language = the page's `page_languages` rule (default for pages without a language folder), classified per query × page row, then aggregated;
    - **unattributed** clicks (anonymized queries: in site totals, not classifiable) — always reported;
    - top non-brand queries.
 4. **Trend.** Compare current vs previous per language. The signal is **non-brand** growth; brand mostly tracks demand.
@@ -73,11 +73,11 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`brand-split`)
 
 ## Determinism
 - One window (28 vs previous 28) from `.run_state.json`.
-- Brand matching ignores case, punctuation and spacing; the brand-term list used is printed in the report so the split is reproducible.
+- Brand = the rules' `Brand` category on the lowercased query; the report names the rules file so the split is reproducible.
 - All numbers come from the `brand-split` output; nothing is re-derived by hand.
 
 ## Output
-Provenance line first. **Verdict**: is non-brand growing (overall and in which languages)? Then: table per language × brand/non-brand/unattributed (clicks, impressions, position, current vs previous), top non-brand queries, and the brand-term list used.
+Provenance line first. **Verdict**: is non-brand growing (overall and in which languages)? Then: table per language × brand/non-brand/unattributed (clicks, impressions, position, current vs previous), top non-brand queries, and the rules file used.
 
 <!--include:pipeline-->
 
@@ -91,8 +91,7 @@ Provenance line first. **Verdict**: is non-brand growing (overall and in which l
 <!--/include-->
 
 ## Fallbacks
-- No `brand_terms` → stop and ask (see Requires).
-- No `language_paths` → overall split only; add an `unavailable` entry for the per-language view.
+- No rules file → stop and ask (see Requires).
 
 ## Pending Data Sources
 - None — this skill uses only GSC and the site profile.
@@ -102,8 +101,8 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Branded share looks too low | brand variants missing (other script, misspellings) | add variants to `brand_terms` in the profile and re-run |
-| Many pages land in `unknown` language | URLs outside `language_paths` (other host/subdomain) | add the prefix to the profile or note the host |
+| Branded share looks too low | brand variants missing (other script, misspellings) | add the variant to the `Brand` rule in the rules file and re-run |
+| Many pages land in the default language | URLs outside the `page_languages` rules (other host/subdomain) | add a rule to the rules file or note the host |
 | Large unattributed share | many anonymized queries | report it; trends are still valid for the attributable part |
 
 ## Files

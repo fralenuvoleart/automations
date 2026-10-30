@@ -1,89 +1,5 @@
 {
   "domain": "pbservices.ge",
-  "languages": [
-    "EN",
-    "RU",
-    "AR",
-    "ZH"
-  ],
-  "language_paths": {
-    "EN": "/",
-    "RU": "/ru/",
-    "AR": "/ar/",
-    "ZH": "/zh/"
-  },
-  "sections": [
-    "Service pages",
-    "Blog",
-    "Homepage",
-    "Other pages"
-  ],
-  "services": [
-    "IE",
-    "Residency",
-    "Tax",
-    "Company",
-    "Bank account",
-    "Legal & Accounting",
-    "Real estate",
-    "Crypto & PSP licensing",
-    "Apostille"
-  ],
-  "priority_keywords": {
-    "ru": [
-      "ип в грузии",
-      "открыть ип в грузии",
-      "внж грузии",
-      "внж грузии по ип",
-      "налоговое резидентство грузии",
-      "статус малого бизнеса в грузии",
-      "регистрация компании в грузии",
-      "ооо в грузии",
-      "открытие счета в грузии",
-      "открыть счет в грузии удаленно",
-      "бухгалтер грузия",
-      "ипотека в грузии для иностранцев",
-      "налог на недвижимость в грузии",
-      "налог на имущество в грузии",
-      "ипотека в грузии для россиян",
-      "ипотека в грузии",
-      "как получить внж в грузии",
-      "банки грузии",
-      "it внж грузия",
-      "вклады в грузии для иностранцев",
-      "ндс в грузии",
-      "регистрация брака в грузии",
-      "рейтинг банков грузии",
-      "юрист грузия",
-      "как получить внж в грузии россиянину",
-      "регистрация ип в грузии",
-      "внж в грузии для россиян",
-      "налоговая грузии",
-      "aml комплаенс psp грузия",
-      "как открыть ип в грузии",
-      "ип в грузии для россиян",
-      "производственный календарь 2026 грузия",
-      "выходные в грузии 2026"
-    ],
-    "en": [
-      "individual entrepreneur georgia",
-      "residence permit georgia",
-      "tax residency georgia",
-      "company registration in georgia",
-      "bank account georgia",
-      "accounting services georgia",
-      "vasp georgia",
-      "apostille georgia",
-      "llc registration",
-      "apostille",
-      "annual accounts preparation georgia",
-      "bank account"
-    ],
-    "zh": [
-      "格鲁吉亚银行开户"
-    ],
-    "ar": []
-  },
   "priority_pages": [
     "https://pbservices.ge/",
     "https://pbservices.ge/about/",
@@ -98,14 +14,6 @@
     "https://pbservices.ge/zh/guanyu/",
     "https://pbservices.ge/zh/fuwu/individual-entrepreneur-georgia-zh/"
   ],
-  "brand_terms": [
-    "pb services",
-    "pb services georgia",
-    "pbservices",
-    "gecrypto",
-    "pb service",
-    "пб сервис"
-  ],
   "markets": [
     "WORLDWIDE"
   ],
@@ -115,19 +23,6 @@
     "expathub.ge",
     "gegidze.com",
     "tpsolution.ge"
-  ],
-  "ai_sources": [
-    "chatgpt.com",
-    "chat.openai.com",
-    "perplexity.ai",
-    "gemini.google.com",
-    "claude.ai",
-    "copilot.microsoft.com",
-    "deepseek.com",
-    "grok.com",
-    "meta.ai",
-    "chat.mistral.ai",
-    "you.com"
   ],
   "ads_customer_id": "596-360-9731",
   "ads_language_constants": {

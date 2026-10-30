@@ -99,11 +99,12 @@ def load(registry: Path | None = None):
 
 
 def site_keys() -> set[str]:
-    """Allowed ``{{site:<key>}}`` keys, from the site-profile schema."""
+    """Allowed ``{{site:<key>}}`` keys: schema properties plus the keys derived from the site's rules."""
     try:
-        return set(json.loads(SITE_SCHEMA.read_text()).get("properties", {}))
+        schema = json.loads(SITE_SCHEMA.read_text())
     except FileNotFoundError:
         return set()
+    return set(schema.get("properties", {})) | set(schema.get("x-derived-from-rules", {}))
 
 
 def site_display(key: str) -> str:

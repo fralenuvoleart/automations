@@ -17,6 +17,7 @@
 - Shared `report-export` — Markdown→PDF (`npx md-to-pdf`/Chromium, WeasyPrint fallback) + SMTP email; one config with per-skill subjects.
 - Senior SEO & GEO enhancements — AI crawler accessibility audits, Schema `sameAs` entity disambiguation, `hreflang` reciprocity checks, Cannibalization Decision Matrix, Quotability Scorecard, and anchor distribution profiles.
 - Physical Portfolio Consolidation (18 to 12 Power Skills) & Capability registry v6 — decoupled GSC dimensions (`gsc.query`, `gsc.page_query`, `gsc.query_full`, `gsc.geo_query`, `gsc.time_series`, `gsc.device_performance`); created `seo-keyword-strategy` and `seo-paid-organic`; absorbed `seo-serp-features`, `seo-competitor-gap`, `seo-local`, `seo-cross-engine`, and `seo-opportunity`; pruned `seo-monetisation`; removed legacy `adsense.*` capabilities; isolated `google-ads` server strictly to `seo-paid-organic`.
+- Site rules (`seo/config/rules/<domain>.json` + `seo/rules.py`) — classification shared with the SEO sheet (2026-10-30).
 - CI gate `seo/check.sh` (`--check` + `--validate-live` + all tests) — 14 test suites green.
 - **2026-10-30 audit fixes applied (all 51 issues + optional items)** — evidence recording + gate, deterministic GSC/crawl/DFS/Ads analysis modules, registry v7 (rowLimit/engine pinned, `keyEvents`, profile-driven AI filter), marker-based re-rendering with shared includes, planner API limits + historical metrics, offline-portable CI (`--validate-cached`). 18 SEO test suites + report-export green.
 
@@ -27,7 +28,8 @@ _None_
 ## Upcoming
 
 - **Security**: rotate the Sevalla, Tavily and Kinsta API keys exposed in tracked `.roo/mcp.json`; untrack the file.
-- **SEO profile data** — `ads_customer_id`, `priority_pages` and `competitors` filled (2026-10-30); `serp_locations` deliberately unset until DataForSEO is connected; confirm the added brand variants (`pb service`, `пб сервис`).
+- **SEO profile data** — `ads_customer_id`, `priority_pages` and `competitors` filled (2026-10-30); `serp_locations` deliberately unset until DataForSEO is connected; brand rule confirmed by the owner (2026-10-30): `пб сервис` and `gecrypto` are not brand terms.
+- **SEO sheet Apps Script** — switch it to read `seo/config/rules/pbservices.ge.json` (needs the script code).
 - **Tavily schema cache** — run `python3 seo/mcp_client.py tavily` locally so `--validate-cached` covers `web.*`.
 - WhatsApp bot integration (future).
 - Python AI/NLP services (future).

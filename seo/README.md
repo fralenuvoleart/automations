@@ -17,7 +17,8 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`gsc_metrics.py`](gsc_metrics.py) | All GSC analysis: movers, striking distance, low CTR, CTR curve, cannibalization, decline classes, brand/language split, value model, topic filter, truncation and anonymized share. |
 | [`site_crawl.py`](site_crawl.py) | Stdlib crawler: robots.txt verdicts per search/AI crawler, sitemaps, link graph (inlinks, depth, orphans), hreflang reciprocity, canonicals, page facts. |
 | [`dfs_metrics.py`](dfs_metrics.py) / [`ads_metrics.py`](ads_metrics.py) | DataForSEO anchor mix / link gap / keyword gap; Ads × GSC paid-organic overlap. |
-| [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site profile (+ thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
+| [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks; `breakdown` per category / page type / language. |
+| [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
 | [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate**) and `build_report.py` (refuses malformed findings). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
 | [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client and the cached tool schemas used for offline validation. |
@@ -40,7 +41,7 @@ Write tokens, then render:
 
 ```markdown
 Pull {{cap:gsc.page}} for both periods.          → <!--cap:gsc.page-->`search-console` → `analytics_query` {…}<!--/cap-->
-Brand terms: {{site:brand_terms}}                → <!--site:brand_terms-->`python3 seo/site_profile.py …`<!--/site-->
+Services: {{site:services}}                      → <!--site:services-->`python3 seo/site_profile.py …`<!--/site-->
 {{include:evidence days=90 flags=--compare}}     → shared section from references/skill-common/evidence.md
 {{include:datasources}}                          → table generated from the capabilities the skill uses
 ```
@@ -65,7 +66,7 @@ frontmatter (name/description/license/compatibility) → mechanical-vs-analytica
 | `seo-audit` | whole-site health: delta, declining pages, quick wins, cannibalization, indexation spot-check, engagement, AI share | search-console | analytics, dataforseo |
 | `seo-ai-visibility` | AI-assistant referrals, cited pages, AI share of organic, AI-crawler access | search-console | analytics (headline) |
 | `seo-backlink-check` | backlink profile, anchor mix, velocity, link gap, referral cross-check | analytics | dataforseo |
-| `seo-brand-split` | brand vs non-brand per language, unattributed share | search-console + `brand_terms` | — |
+| `seo-brand-split` | brand vs non-brand per language, unattributed share | search-console + site rules | — |
 | `seo-content-brief` | SERP-driven brief for one keyword, create vs expand | search-console | dataforseo, tavily, planner |
 | `seo-content-refresh` | declining pages with exclusive causes; evidence-gated retire | search-console | analytics, dataforseo |
 | `seo-indexation` | sampled index status, sitemaps, hreflang/canonical integrity | search-console | — |
@@ -75,18 +76,36 @@ frontmatter (name/description/license/compatibility) → mechanical-vs-analytica
 | `seo-rank-tracking` | query-level movers (or around a dated event) | search-console | dataforseo, Bing |
 | `seo-technical` | CWV on field data, accessibility, structured data, crawler access | search-console | — |
 
+## Site rules (classification — shared with the SEO sheet)
+
+One file per site in [`config/rules/`](config/rules/) — the **single source** for classification,
+ported from the "PBS - SEO Rankings" sheet (Rules + Keyword Setup tabs) and meant to be read by its
+Apps Script too: query categories (first match wins on the lowercased query; `Brand` first), page
+tags and page languages (on the cleaned URL: no `#fragment`, absolute, trailing slash), GA4 channels
+on `source / medium` (the `AI assistants` channel feeds the GA4 AI filter), tracked keywords (Core +
+Brand) and the automatic-pick settings (Proven = most clicks, Opportunity = most impressions at
+position 5–20, Generic; per-category caps, exclusions, duplicate keys). Regexes must stay portable
+(no lookarounds, inline flags or backreferences) — `rules.py validate` enforces it.
+
+```bash
+python3 seo/rules.py --site pbservices.ge validate
+python3 seo/rules.py --site pbservices.ge classify --query "внж по ип в грузии"
+python3 seo/rules.py --site pbservices.ge breakdown --by category --cur query_cur.json --prev query_prev.json
+python3 seo/rules.py --site pbservices.ge keywords --query query_cur.json --prev query_prev.json
+```
+
 ## Site profiles
 
 One file per site in [`config/sites/`](config/sites/), validated against
-[`config/site-profile.schema.json`](config/site-profile.schema.json): languages + `language_paths`
-(longest prefix wins), sections, services, `priority_keywords` (per language, **non-brand only**),
-`priority_pages`, `brand_terms` (with variants), markets, competitors, `ai_sources` (single source for the
-GA4 AI filter), `ads_customer_id`, `ads_language_constants`, `ads_geo_targets`, `serp_locations`,
-`thresholds` (overrides of `gsc_metrics.DEFAULTS`). Each site has an append-only, status-tagged action
-history (`[recommended]` / `[done]`; only `[done]` suppresses re-recommendation).
+[`config/site-profile.schema.json`](config/site-profile.schema.json): site facts only — `priority_pages`,
+markets, competitors, `ads_customer_id`, `ads_language_constants`, `ads_geo_targets`, `serp_locations`,
+`thresholds` (overrides of `gsc_metrics.DEFAULTS`). `languages`, `sections`, `services` and
+`priority_keywords` (Core keywords per language) are derived from the rules file. Each site has an
+append-only, status-tagged action history (`[recommended]` / `[done]`; only `[done]` suppresses
+re-recommendation).
 
 ```bash
-python3 seo/site_profile.py --site pbservices.ge --validate
+python3 seo/site_profile.py --site pbservices.ge --validate   # profile + rules
 python3 seo/site_profile.py --site pbservices.ge --get priority_keywords --lang ru
 python3 seo/site_profile.py --site pbservices.ge --thresholds
 python3 seo/site_profile.py --site pbservices.ge --ga4-ai-filter

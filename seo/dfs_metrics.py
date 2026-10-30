@@ -47,7 +47,8 @@ def items(payload) -> list[dict]:
     return out
 
 
-def anchor_mix(anchor_items: list[dict], brand_terms: list[str], domain: str, priority_keywords: list[str]) -> dict:
+def anchor_mix(anchor_items: list[dict], is_brand, domain: str, priority_keywords: list[str]) -> dict:
+    """Anchor buckets; ``is_brand`` is the site-rules Brand classifier."""
     kws = {gsc_metrics.norm_text(k) for k in priority_keywords}
     host = _bare(domain)
     buckets = {"brand": 0.0, "url": 0.0, "generic": 0.0, "exact_match": 0.0, "other": 0.0, "empty": 0.0}
@@ -60,7 +61,7 @@ def anchor_mix(anchor_items: list[dict], brand_terms: list[str], domain: str, pr
             b = "empty"
         elif host in a.lower() or re.match(r"^(https?://|www\.)", a.lower()):
             b = "url"
-        elif gsc_metrics.brand_match(a, brand_terms):
+        elif is_brand(a):
             b = "brand"
         elif n in GENERIC_ANCHORS:
             b = "generic"
@@ -120,10 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     load = lambda p: items(json.loads(Path(p).read_text()))  # noqa: E731
     try:
         if a.command == "anchor-mix":
+            import rules
             import site_profile
-            prof = site_profile.load_profile(a.site)
             pk = site_profile.get(a.site, "priority_keywords")
-            res = anchor_mix(load(a.anchors), prof.get("brand_terms") or [], prof["domain"], pk)
+            res = anchor_mix(load(a.anchors), rules.load(a.site).is_brand, a.site, pk)
         elif a.command == "link-gap":
             res = {"link_gap": link_gap(load(a.ours), load(a.theirs), a.top or 50), "label": "estimate"}
         else:

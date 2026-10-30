@@ -6,6 +6,7 @@ The skills pull raw rows with explicit windows (``gsc.query``, ``gsc.page``,
 compute every finding here, so the numbers are reproducible and the thresholds
 are explicit. Replaces the opaque ``seo_audit`` tool (which ignores the window).
 
+Brand and page language come from the site's rules (``seo/rules.py``).
 Rules baked in (see ``seo/references/domain-knowledge.md``):
 - page metrics come from ``page`` rows (they include anonymized-query clicks);
   query metrics from ``query`` rows; ``query × page`` only for attribution;
@@ -33,7 +34,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -180,35 +180,11 @@ def norm_text(s: str) -> str:
     return " ".join(re.sub(r"[\W_]+", " ", str(s).casefold()).split())
 
 
-def brand_match(query: str, brand_terms: list[str]) -> bool:
-    q = norm_text(query)
-    qc = q.replace(" ", "")
-    for b in brand_terms:
-        bn = norm_text(b)
-        if bn and f" {bn} " in f" {q} ":
-            return True
-        bc = bn.replace(" ", "")
-        if len(bc) >= 6 and bc in qc:
-            return True
-    return False
-
-
-def language_of(url: str, language_paths: dict) -> str:
-    """Longest matching path prefix wins ('/' only catches what no other prefix claims)."""
-    path = unquote(urlparse(url).path if "://" in str(url) else str(url)) or "/"
-    best, best_len = "unknown", -1
-    for lang, prefix in language_paths.items():
-        pre = prefix if prefix.endswith("/") else prefix + "/"
-        if (path == pre.rstrip("/") or path.startswith(pre) or pre == "/") and len(pre) > best_len:
-            best, best_len = lang, len(pre)
-    return best
-
-
 # ----------------------------------------------------------------- analyses ---
-def ctr_curve(query_rows: list[dict], brand_terms: list[str] | None = None, thr: dict | None = None) -> dict:
-    """Site's own non-brand CTR by position bucket; heuristic fill for empty top buckets."""
+def ctr_curve(query_rows: list[dict], is_brand=None, thr: dict | None = None) -> dict:
+    """Site's own non-brand CTR by position bucket (``is_brand``: rules predicate); heuristic fill for empty top buckets."""
     thr = {**DEFAULTS, **(thr or {})}
-    rows = [r for r in query_rows if not (brand_terms and brand_match(r["query"], brand_terms))]
+    rows = [r for r in query_rows if not (is_brand and is_brand(r["query"]))]
 
     def bucket(r):
         p = r["position"]
@@ -349,21 +325,19 @@ def decay(cur_rows: list[dict], prev_rows: list[dict], thr: dict | None = None) 
                      "thresholds": {k: thr[k] for k in ("decay_pct", "pos_drop", "imp_drop_pct", "min_impressions")}}}
 
 
-def brand_split(page_query_rows: list[dict], brand_terms: list[str], language_paths: dict,
-                totals: dict | None = None) -> dict:
-    """Brand vs non-brand per language (language from the page path, longest prefix)."""
-    def key(r):
-        return (language_of(r["page"], language_paths), "brand" if brand_match(r["query"], brand_terms) else "non_brand")
+def brand_split(page_query_rows: list[dict], is_brand, lang_of, totals: dict | None = None) -> dict:
+    """Brand vs non-brand per page language; ``is_brand``/``lang_of`` are the site-rules classifiers."""
+    def kind(r):
+        return "brand" if is_brand(r["query"]) else "non_brand"
 
-    agg = aggregate(page_query_rows, key)
+    agg = aggregate(page_query_rows, lambda r: (lang_of(r["page"]), kind(r)))
     by_lang: dict = {}
-    for (lang, kind), m in sorted(agg.items()):
-        by_lang.setdefault(lang, {})[kind] = _r(m)
-    overall = {kind: _r(m) for kind, m in aggregate(page_query_rows,
-               lambda r: "brand" if brand_match(r["query"], brand_terms) else "non_brand").items()}
-    nb = aggregate([r for r in page_query_rows if not brand_match(r["query"], brand_terms)], lambda r: r["query"])
+    for (lang, k), m in sorted(agg.items()):
+        by_lang.setdefault(lang, {})[k] = _r(m)
+    overall = {k: _r(m) for k, m in aggregate(page_query_rows, kind).items()}
+    nb = aggregate([r for r in page_query_rows if not is_brand(r["query"])], lambda r: r["query"])
     top_nb = sorted(({"query": q, **_r(m)} for q, m in nb.items()), key=lambda r: -r["clicks"])[:20]
-    out = {"by_language": by_lang, "overall": overall, "top_non_brand": top_nb, "brand_terms": brand_terms}
+    out = {"by_language": by_lang, "overall": overall, "top_non_brand": top_nb}
     if totals:
         attributed = sum(r["clicks"] for r in page_query_rows)
         attributed_imp = sum(r["impressions"] for r in page_query_rows)
@@ -421,12 +395,13 @@ def value_model(planner_items: list[dict], query_rows: list[dict], curve: dict, 
 
 
 # --------------------------------------------------------------------- CLI ---
-def _thresholds(site: str | None) -> tuple[dict, dict]:
+def _site(site: str | None):
+    """(thresholds, rules) for --site; defaults and no rules without it."""
     if not site:
-        return dict(DEFAULTS), {}
+        return dict(DEFAULTS), None
+    import rules
     import site_profile
-    prof = site_profile.load_profile(site)
-    return {**DEFAULTS, **(prof.get("thresholds") or {})}, prof
+    return site_profile.thresholds(site), rules.load(site)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -439,8 +414,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--target", type=int, default=None)
     a = ap.parse_args(argv)
     try:
-        thr, prof = _thresholds(a.site)
-        brand = prof.get("brand_terms") or []
+        thr, site_rules = _site(a.site)
+        brand = site_rules.is_brand if site_rules else None
         if a.command == "truncation":
             rows = load_rows(a.file, ["query"])
             res = {"rows": len(rows), "truncated": is_truncated(rows), "row_limit": ROW_LIMIT}
@@ -471,13 +446,13 @@ def main(argv: list[str] | None = None) -> int:
         elif a.command == "decay":
             res = decay(load_rows(a.cur, ["page"]), load_rows(a.prev, ["page"]), thr)
         elif a.command == "brand-split":
-            if not brand:
-                raise ValueError("site profile has no brand_terms — ask the user to add them (do not guess)")
-            lp = prof.get("language_paths") or {}
-            res = {"current": brand_split(load_rows(a.cur, ["query", "page"]), brand, lp,
+            if not site_rules:
+                raise ValueError("brand-split needs --site (brand and language come from the site's rules)")
+            lang = site_rules.page_language
+            res = {"current": brand_split(load_rows(a.cur, ["query", "page"]), brand, lang,
                                           totals_of(load_rows(a.totals_cur, ["date"])) if a.totals_cur else None)}
             if a.prev:
-                res["previous"] = brand_split(load_rows(a.prev, ["query", "page"]), brand, lp,
+                res["previous"] = brand_split(load_rows(a.prev, ["query", "page"]), brand, lang,
                                               totals_of(load_rows(a.totals_prev, ["date"])) if a.totals_prev else None)
         else:  # value
             q = load_rows(a.query, ["query"])

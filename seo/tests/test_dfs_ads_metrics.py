@@ -25,7 +25,8 @@ def test_anchor_mix_buckets_and_risk():
     items = [{"anchor": "PB Services", "backlinks": 50}, {"anchor": "https://pbservices.ge", "backlinks": 20},
              {"anchor": "подробнее", "backlinks": 10}, {"anchor": "bank account georgia", "backlinks": 15},
              {"anchor": "", "backlinks": 5}]
-    out = D.anchor_mix(items, ["pb services"], "pbservices.ge", ["bank account georgia"])
+    import rules
+    out = D.anchor_mix(items, rules.load("pbservices.ge").is_brand, "pbservices.ge", ["bank account georgia"])
     s = out["shares"]
     assert s["brand"] == 0.5 and s["url"] == 0.2 and s["generic"] == 0.1 and s["exact_match"] == 0.15
     assert out["exact_match_risk"] is True and "heuristic" in out["label"]

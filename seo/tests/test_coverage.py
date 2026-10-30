@@ -14,25 +14,25 @@ _spec.loader.exec_module(coverage)
 
 
 def test_compute_flattened_and_by_language():
-    out = coverage.compute("pbservices.ge", ["ип в грузии", "bank account"], [])
-    assert len(out["priority_keywords"]) == 46  # brand terms live in brand_terms only
+    out = coverage.compute("pbservices.ge", ["ип в грузии", "bank account georgia"], [])
+    assert len(out["priority_keywords"]) == 20  # Core tracked keywords from the rules (brand excluded)
     assert "ип в грузии" in out["covered"]
-    assert "bank account" in out["covered"]
-    assert out["by_language"]["ru"]["total"] == 33
+    assert "bank account georgia" in out["covered"]
+    assert out["by_language"]["ru"]["total"] == 12
     assert out["by_language"]["ru"]["covered"] == 1
     assert out["by_language"]["en"]["covered"] == 1
-    assert out["by_language"]["zh"]["missing"] == 1
+    assert out["by_language"]["zh"]["total"] == 0
 
 
 def test_matching_is_case_and_space_insensitive():
-    out = coverage.compute("pbservices.ge", ["  Bank   Account  "], [])
-    assert "bank account" in out["covered"]
+    out = coverage.compute("pbservices.ge", ["  Bank   Account Georgia "], [])
+    assert "bank account georgia" in out["covered"]
 
 
 def test_missing_is_complement():
     out = coverage.compute("pbservices.ge", [], [])
     assert out["covered"] == []
-    assert len(out["missing"]) == 46
+    assert len(out["missing"]) == 20
 
 
 def test_read_list_accepts_json_and_csv():

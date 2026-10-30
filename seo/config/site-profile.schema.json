@@ -1,48 +1,115 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SEO Site Profile",
-  "description": "Personalised SEO/GEO criteria for one site. Data only — selects and prioritises, never invents metrics. Consumed by skills via {{site:<key>}} tokens and by seo/gsc_metrics.py, seo/coverage.py, seo/site_crawl.py.",
+  "description": "Site facts for one site (data only — selects and prioritises, never invents metrics). Classification (query categories incl. brand, page tags, page languages, channels incl. AI assistants, tracked keywords) lives in seo/config/rules/<domain>.json (seo/rules.py); `x-derived-from-rules` keys are computed from it by seo/site_profile.py. Consumed by skills via {{site:<key>}} tokens.",
   "type": "object",
-  "required": ["domain", "languages", "sections", "services", "priority_keywords"],
+  "required": [
+    "domain"
+  ],
   "additionalProperties": false,
   "properties": {
-    "domain": { "type": "string", "description": "Canonical domain, e.g. pbservices.ge" },
-    "languages": { "type": "array", "items": { "type": "string" }, "description": "Content language codes (e.g. EN, RU)" },
-    "language_paths": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Language code -> URL path prefix starting and ending with '/' (e.g. {\"EN\": \"/\", \"RU\": \"/ru/\"}). Language = longest matching prefix." },
-    "sections": { "type": "array", "items": { "type": "string" }, "description": "Site sections / page templates, e.g. Service pages, Blog, Homepage" },
-    "services": { "type": "array", "items": { "type": "string" }, "description": "Service lines the site sells" },
-    "priority_keywords": {
-      "type": "object",
-      "description": "Non-brand keywords that matter most, grouped by language code (keys must be in `languages`). Brand terms belong in brand_terms only.",
-      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    "domain": {
+      "type": "string",
+      "description": "Canonical domain, e.g. pbservices.ge"
     },
-    "priority_pages": { "type": "array", "items": { "type": "string" }, "description": "Absolute URLs that matter most" },
-    "brand_terms": { "type": "array", "items": { "type": "string" }, "description": "Brand terms incl. spelling/script variants; matching is case-, punctuation- and spacing-insensitive" },
-    "markets": { "type": "array", "items": { "type": "string" }, "description": "Target markets (ISO country codes, or the sentinel WORLDWIDE)" },
-    "competitors": { "type": "array", "items": { "type": "string" }, "description": "Competitor domains" },
-    "ai_sources": { "type": "array", "items": { "type": "string" }, "description": "AI-assistant referrer hosts; subdomains match too. Single source for the GA4 AI filter (site_profile.py --ga4-ai-filter)." },
-    "ads_customer_id": { "type": "string", "pattern": "^[0-9]{3}-?[0-9]{3}-?[0-9]{4}$", "description": "Google Ads customer ID used for Keyword Planner calls" },
-    "ads_language_constants": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^languageConstants/[0-9]+$" }, "description": "Language code -> Keyword Planner language resource. Verify with GAQL: SELECT language_constant.id, language_constant.code FROM language_constant" },
-    "ads_geo_targets": { "type": "array", "maxItems": 10, "items": { "type": "string", "pattern": "^geoTargetConstants/[0-9]+$" }, "description": "Keyword Planner geo targets (max 10); empty = all locations (use for WORLDWIDE)" },
-    "serp_locations": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "Language code -> DataForSEO location_code for live SERP checks. Unset = ask the user which market to sample." },
+    "priority_pages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Absolute URLs that matter most"
+    },
+    "markets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Target markets (ISO country codes, or the sentinel WORLDWIDE)"
+    },
+    "competitors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Competitor domains"
+    },
+    "ads_customer_id": {
+      "type": "string",
+      "pattern": "^[0-9]{3}-?[0-9]{3}-?[0-9]{4}$",
+      "description": "Google Ads customer ID used for Keyword Planner calls"
+    },
+    "ads_language_constants": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^languageConstants/[0-9]+$"
+      },
+      "description": "Language code -> Keyword Planner language resource. Verify with GAQL: SELECT language_constant.id, language_constant.code FROM language_constant"
+    },
+    "ads_geo_targets": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "pattern": "^geoTargetConstants/[0-9]+$"
+      },
+      "description": "Keyword Planner geo targets (max 10); empty = all locations (use for WORLDWIDE)"
+    },
+    "serp_locations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "description": "Language code -> DataForSEO location_code for live SERP checks. Unset = ask the user which market to sample."
+    },
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
       "description": "Per-site overrides of seo/gsc_metrics.py DEFAULTS (see domain-knowledge.md for meaning).",
       "properties": {
-        "min_impressions": { "type": "number" },
-        "mover_min_delta": { "type": "number" },
-        "striking_min": { "type": "number" },
-        "striking_max": { "type": "number" },
-        "low_ctr_max_position": { "type": "number" },
-        "low_ctr_ratio": { "type": "number" },
-        "cannibal_min_share": { "type": "number" },
-        "decay_pct": { "type": "number" },
-        "pos_drop": { "type": "number" },
-        "imp_drop_pct": { "type": "number" },
-        "value_target_position": { "type": "integer" },
-        "curve_min_impressions": { "type": "number" }
+        "min_impressions": {
+          "type": "number"
+        },
+        "mover_min_delta": {
+          "type": "number"
+        },
+        "striking_min": {
+          "type": "number"
+        },
+        "striking_max": {
+          "type": "number"
+        },
+        "low_ctr_max_position": {
+          "type": "number"
+        },
+        "low_ctr_ratio": {
+          "type": "number"
+        },
+        "cannibal_min_share": {
+          "type": "number"
+        },
+        "decay_pct": {
+          "type": "number"
+        },
+        "pos_drop": {
+          "type": "number"
+        },
+        "imp_drop_pct": {
+          "type": "number"
+        },
+        "value_target_position": {
+          "type": "integer"
+        },
+        "curve_min_impressions": {
+          "type": "number"
+        }
       }
     }
+  },
+  "x-derived-from-rules": {
+    "languages": "page language codes (rules page_languages: default first)",
+    "sections": "page tags (rules page_tags) plus the default tag",
+    "services": "service categories (rules query categories except Brand/Generic, in category_caps order)",
+    "priority_keywords": "Core tracked keywords grouped by language code"
   }
 }

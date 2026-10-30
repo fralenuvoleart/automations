@@ -5,8 +5,10 @@ Profiles live in ``seo/config/sites/<domain>.json`` and are validated against
 ``seo/config/site-profile.schema.json``. Skills reference profile values as
 ``{{site:<key>}}`` tokens, rendered to the retrieval command below.
 
-``priority_keywords`` is grouped by language; ``--get priority_keywords``
-flattens across languages, ``--lang <code>`` returns one language.
+Classification lives in ``seo/config/rules/<domain>.json`` (see ``seo/rules.py``);
+``languages``, ``sections``, ``services`` and ``priority_keywords`` (Core keywords, grouped
+by language) are derived from it. ``--get priority_keywords`` flattens across languages,
+``--lang <code>`` returns one language.
 
 Usage:
     python3 seo/site_profile.py --list
@@ -14,7 +16,7 @@ Usage:
     python3 seo/site_profile.py --site pbservices.ge --validate
     python3 seo/site_profile.py --site pbservices.ge --dump
     python3 seo/site_profile.py --site pbservices.ge --thresholds          # defaults merged with overrides
-    python3 seo/site_profile.py --site pbservices.ge --ga4-ai-filter       # GA4 dimension_filter from ai_sources
+    python3 seo/site_profile.py --site pbservices.ge --ga4-ai-filter       # GA4 dimension_filter from the AI-assistants rule
     python3 seo/site_profile.py --site pbservices.ge --history [--status done]
     python3 seo/site_profile.py --site pbservices.ge --append-history "text" --status recommended|done
 Exit codes: 0 = ok, 1 = error.
@@ -44,11 +46,19 @@ def profile_path(domain: str) -> Path:
     return SITES / f"{domain}.json"
 
 
-def load_profile(domain: str) -> dict:
+def load_profile(domain: str, derived: bool = True) -> dict:
+    """Profile JSON plus the values derived from the site's rules (``derived=False``: raw file)."""
     p = profile_path(domain)
     if not p.exists():
         raise FileNotFoundError(f"no profile for '{domain}' ({p})")
-    return json.loads(p.read_text())
+    prof = json.loads(p.read_text())
+    if not derived:
+        return prof
+    sys.path.insert(0, str(HERE))
+    import rules
+    r = rules.load(domain)
+    return {**prof, "languages": r.languages(), "sections": r.sections(), "services": r.services(),
+            "priority_keywords": r.priority_keywords()}
 
 
 def list_sites() -> list[str]:
@@ -109,10 +119,6 @@ def _type_ok(val, t: str) -> bool:
     return True
 
 
-def _norm(s: str) -> str:
-    return " ".join(re.sub(r"[\W_]+", " ", str(s).casefold()).split())
-
-
 def _check_value(key: str, val, spec: dict, issues: list[str]) -> None:
     t = spec.get("type")
     if t and not _type_ok(val, t):
@@ -141,8 +147,8 @@ def _check_value(key: str, val, spec: dict, issues: list[str]) -> None:
                 issues.append(f"{key}: unknown key '{k}'")
 
 
-def validate(profile: dict, schema: dict | None = None) -> list[str]:
-    """Return a list of human-readable issues (empty == valid)."""
+def validate(profile: dict, schema: dict | None = None, languages: list[str] | None = None) -> list[str]:
+    """Issues in a raw profile (empty == valid); per-language map keys must be in ``languages``."""
     schema = schema or load_schema()
     issues: list[str] = []
     for key in schema.get("required", []):
@@ -156,27 +162,26 @@ def validate(profile: dict, schema: dict | None = None) -> list[str]:
             continue
         _check_value(key, val, spec, issues)
 
-    langs_val = profile.get("languages")
-    langs = {str(x).lower() for x in langs_val} if isinstance(langs_val, list) else set()
-    for field in ("priority_keywords", "language_paths", "ads_language_constants", "serp_locations"):
+    langs = {str(x).lower() for x in languages or []}
+    for field in ("ads_language_constants", "serp_locations"):
         v = profile.get(field)
         if isinstance(v, dict) and langs:
             for k in v:
                 if k.lower() not in langs:
-                    issues.append(f"{field}.{k}: not in languages {sorted(langs)}")
-    lp = profile.get("language_paths")
-    if isinstance(lp, dict):
-        for k, prefix in lp.items():
-            if isinstance(prefix, str) and not (prefix.startswith("/") and prefix.endswith("/")):
-                issues.append(f"language_paths.{k}: prefix {prefix!r} must start and end with '/'")
-    brands = {_norm(b) for b in profile.get("brand_terms") or [] if isinstance(b, str)}
-    pk = profile.get("priority_keywords")
-    if isinstance(pk, dict) and brands:
-        for lang, items in pk.items():
-            for kw in items if isinstance(items, list) else []:
-                if isinstance(kw, str) and _norm(kw) in brands:
-                    issues.append(f"priority_keywords.{lang}: '{kw}' is a brand term — keep brand terms only in brand_terms")
+                    issues.append(f"{field}.{k}: not in the rules' languages {sorted(langs)}")
     return issues
+
+
+def validate_site(domain: str) -> list[str]:
+    """Profile + rules issues for one site."""
+    sys.path.insert(0, str(HERE))
+    import rules
+    rp = rules.rules_path(domain)
+    if not rp.exists():
+        return [f"missing rules file {rp.relative_to(HERE.parent)}"] + validate(load_profile(domain, derived=False))
+    rule_issues = [f"rules: {i}" for i in rules.validate(json.loads(rp.read_text()), domain)]
+    langs = None if rule_issues else rules.load(domain).languages()
+    return rule_issues + validate(load_profile(domain, derived=False), languages=langs)
 
 
 # ------------------------------------------------------------------ access ---
@@ -212,13 +217,12 @@ def thresholds(domain: str) -> dict:
 
 
 def ga4_ai_filter(domain: str) -> dict:
-    """GA4 Data API dimension_filter matching every profile `ai_sources` host and its subdomains."""
-    hosts = [h.strip().lower() for h in load_profile(domain).get("ai_sources") or [] if h.strip()]
-    if not hosts:
-        raise KeyError(f"profile '{domain}' has no ai_sources")
-    alt = "|".join(re.escape(h) for h in sorted(set(hosts)))
+    """GA4 Data API dimension_filter on sessionSource from the rules' AI-assistants channel (substring match)."""
+    sys.path.insert(0, str(HERE))
+    import rules
+    rx = rules.load(domain).ai_regex()
     return {"filter": {"field_name": "sessionSource",
-                       "string_filter": {"match_type": "FULL_REGEXP", "value": f"^(.*\\.)?({alt})$",
+                       "string_filter": {"match_type": "FULL_REGEXP", "value": f".*({rx}).*",
                                          "case_sensitive": False}}}
 
 
@@ -253,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
             print(read_history(args.site, args.status), end="")
             return 0
         if args.validate:
-            issues = validate(load_profile(args.site))
+            issues = validate_site(args.site)
             for i in issues:
                 print(f"ERROR {i}")
             print("OK — profile valid" if not issues else f"{len(issues)} issue(s)")
@@ -268,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(get(args.site, args.get, args.lang), ensure_ascii=False, indent=2))
             return 0
         if args.dump:
-            print(json.dumps(load_profile(args.site), ensure_ascii=False, indent=2))
+            print(json.dumps(load_profile(args.site), ensure_ascii=False, indent=2))  # incl. derived values
             return 0
     except (FileNotFoundError, KeyError, ValueError) as e:
         print(f"ERROR {e}")

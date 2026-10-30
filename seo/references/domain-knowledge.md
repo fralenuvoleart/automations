@@ -90,10 +90,10 @@ wins, so labels are mutually exclusive (`gsc_metrics.py decay`):
 Never recommend retiring a page on GSC data alone; prefer 301 to deletion.
 
 ## Brand vs non-brand
-- Brand match: profile `brand_terms` (include script/spelling variants); matching ignores case,
-  punctuation and spacing.
-- Language: from the page path, **longest matching prefix** of `language_paths` (`/` only catches
-  what no other prefix claims). Classify query × page rows, then aggregate.
+- Brand match: the `Brand` query category of the site rules (`seo/config/rules/<domain>.json`,
+  first rule, on the lowercased query; include script/spelling variants in its regex).
+- Language: the page's `page_languages` rule (pages without a language folder get the default).
+  Classify query × page rows, then aggregate.
 - Anonymized queries cannot be classified: report them as "unattributed" (site totals − rows).
 - The signal that matters is **non-brand** growth; brand tracks demand.
 

@@ -20,7 +20,7 @@ Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json
 - `runtime` args are the ones you supply (e.g. `siteUrl`, `date_ranges`); fixed `args` are
   already set — do not override them. `record.py` rejects non-runtime args and off-window dates.
 - GA4 AI-source filters: `dimension_filter` = output of
-  `python3 seo/site_profile.py --site <domain> --ga4-ai-filter` (single source: profile `ai_sources`).
+  `python3 seo/site_profile.py --site <domain> --ga4-ai-filter` (single source: the rules' `AI assistants` channel).
 - GA4 `date_ranges`: `[{"start_date": "<startDate>", "end_date": "<endDate>"}]` (+ the comparison
   range when the run has one).
 

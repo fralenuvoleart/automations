@@ -285,15 +285,8 @@ def sitemap_urls(site: str, fetch=http_fetch, limit: int = 5000) -> list[str]:
 
 
 # ------------------------------------------------------------------- crawl ---
-def _lang_of(url: str, language_paths: dict) -> str | None:
-    if not language_paths:
-        return None
-    import gsc_metrics
-    return gsc_metrics.language_of(url, language_paths)
-
-
 def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
-          language_paths: dict | None = None, sitemap: list[str] | None = None, sleep=time.sleep) -> dict:
+          lang_of=None, sitemap: list[str] | None = None, sleep=time.sleep) -> dict:
     start = norm_url(site if site.endswith("/") else site + "/")
     host = (urlparse(start).hostname or "").lower()
     pages: dict[str, dict] = {}
@@ -379,7 +372,7 @@ def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
         can = e.get("canonical")
         if can and can != url:
             item = {"page": url, "canonical": can}
-            if language_paths and _lang_of(can, language_paths) != _lang_of(url, language_paths):
+            if lang_of and lang_of(can) != lang_of(url):
                 item["issue"] = "canonical points to another language version"
             else:
                 item["issue"] = "canonicalised to another URL"
@@ -407,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--url", action="append", default=[])
     ap.add_argument("--limit", type=int, default=300)
     ap.add_argument("--delay", type=float, default=0.5)
-    ap.add_argument("--profile", help="site-profile domain (enables language-aware canonical checks)")
+    ap.add_argument("--profile", help="site domain with a rules file (enables language-aware canonical checks)")
     a = ap.parse_args(argv)
     if a.command in ("robots", "sitemap", "crawl") and not a.site:
         ap.error("--site is required")
@@ -416,11 +409,11 @@ def main(argv: list[str] | None = None) -> int:
     elif a.command == "sitemap":
         res = {"urls": sitemap_urls(a.site, limit=a.limit)}
     elif a.command == "crawl":
-        lp = None
+        lang_of = None
         if a.profile:
-            import site_profile
-            lp = site_profile.load_profile(a.profile).get("language_paths")
-        res = crawl(a.site, a.limit, a.delay, language_paths=lp, sitemap=sitemap_urls(a.site))
+            import rules
+            lang_of = rules.load(a.profile).page_language
+        res = crawl(a.site, a.limit, a.delay, lang_of=lang_of, sitemap=sitemap_urls(a.site))
     else:
         if not a.url:
             ap.error("--url is required for facts")

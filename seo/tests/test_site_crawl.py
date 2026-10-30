@@ -63,7 +63,7 @@ def test_sitemap_index_is_followed():
 
 
 def test_crawl_graph_hreflang_canonicals_orphans():
-    res = C.crawl("https://x.ge", limit=50, delay=0, fetch=fake, language_paths={"EN": "/", "RU": "/ru/"},
+    res = C.crawl("https://x.ge", limit=50, delay=0, fetch=fake, lang_of=lambda u: "RU" if "/ru/" in u else "EN",
                   sitemap=C.sitemap_urls("https://x.ge", fake))
     pages = res["pages"]
     assert pages["https://x.ge/a/"]["inlinks"] == 1 and pages["https://x.ge/a/"]["depth"] == 1

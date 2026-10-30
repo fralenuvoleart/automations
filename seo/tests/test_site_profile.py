@@ -12,10 +12,24 @@ def test_schema_loads():
     assert "properties" in s and "required" in s
 
 
-def test_all_profiles_valid():
+def test_all_profiles_and_rules_valid():
     for domain in site_profile.list_sites():
-        issues = site_profile.validate(site_profile.load_profile(domain))
+        issues = site_profile.validate_site(domain)
         assert not issues, f"{domain}: {issues}"
+
+
+def test_list_sites_ignores_rules_and_history():
+    assert site_profile.list_sites() == ["pbservices.ge"]
+
+
+def test_classification_keys_are_derived_from_rules_not_stored():
+    raw = site_profile.load_profile("pbservices.ge", derived=False)
+    for k in ("languages", "sections", "services", "priority_keywords"):
+        assert k not in raw, f"{k} must live in the rules file only"
+    p = site_profile.load_profile("pbservices.ge")
+    assert p["languages"] == ["EN", "RU", "AR", "ZH"]
+    assert p["sections"] == ["Services", "Blog", "Homepage", "Other pages"]
+    assert p["services"][:5] == ["IE", "Residency", "Tax", "Company", "Bank account"] and "Brand" not in p["services"]
 
 
 def test_pbservices_profile_has_expected_keys():
@@ -39,7 +53,7 @@ def test_get_flattens_and_filters_by_lang():
     ru = site_profile.get("pbservices.ge", "priority_keywords", lang="ru")
     ru_upper = site_profile.get("pbservices.ge", "priority_keywords", lang="RU")
     en = site_profile.get("pbservices.ge", "priority_keywords", lang="en")
-    assert isinstance(flat, list) and len(flat) == len(ru) + len(en) + 1  # +1 zh, ar empty
+    assert isinstance(flat, list) and len(flat) == len(ru) + len(en) == 20  # Core keywords; zh, ar have none
     assert ru == ru_upper
     assert "ип в грузии" in ru
     assert "individual entrepreneur georgia" in en
@@ -61,27 +75,20 @@ def test_unknown_key_raises():
 
 
 def test_validate_rejects_bad_type():
-    issues = site_profile.validate({
-        "domain": 1, "languages": [], "sections": [],
-        "services": [], "priority_keywords": {},
-    })
+    issues = site_profile.validate({"domain": 1})
     assert any("domain" in i for i in issues)
 
 
-def test_validate_rejects_unknown_key():
-    issues = site_profile.validate({
-        "domain": "x", "languages": [], "sections": [],
-        "services": [], "priority_keywords": {}, "bogus": 1,
-    })
-    assert any("unknown key" in i for i in issues)
+def test_validate_rejects_unknown_and_moved_keys():
+    issues = site_profile.validate({"domain": "x", "bogus": 1, "brand_terms": ["x"]})
+    assert any("unknown key: bogus" in i for i in issues)
+    assert any("unknown key: brand_terms" in i for i in issues)  # classification lives in the rules file
 
 
 def test_validate_rejects_language_key_not_in_languages():
-    issues = site_profile.validate({
-        "domain": "x", "languages": ["EN"], "sections": [],
-        "services": [], "priority_keywords": {"de": ["x"]},
-    })
-    assert any("not in languages" in i for i in issues)
+    issues = site_profile.validate({"domain": "x", "ads_language_constants": {"DE": "languageConstants/1001"}},
+                                   languages=["EN", "RU"])
+    assert any("not in the rules' languages" in i for i in issues)
 
 
 def test_history_append_and_read():
@@ -99,17 +106,8 @@ def test_history_append_and_read():
             p.unlink()
 
 
-def test_validate_rejects_brand_terms_in_priority_keywords_and_bad_prefixes():
-    prof = site_profile.load_profile("pbservices.ge")
-    prof = {**prof, "priority_keywords": {**prof["priority_keywords"], "en": ["PB Services", "tax residency georgia"]},
-            "language_paths": {**prof["language_paths"], "RU": "ru/"}}
-    issues = site_profile.validate(prof)
-    assert any("is a brand term" in i for i in issues)
-    assert any("must start and end with '/'" in i for i in issues)
-
-
 def test_validate_checks_thresholds_and_ads_fields():
-    prof = site_profile.load_profile("pbservices.ge")
+    prof = site_profile.load_profile("pbservices.ge", derived=False)
     bad = {**prof, "thresholds": {"decay_pct": "30", "bogus": 1}, "ads_geo_targets": ["2840"],
            "ads_customer_id": "12-34"}
     issues = site_profile.validate(bad)
@@ -125,15 +123,16 @@ def test_thresholds_merge_defaults():
     assert thr["decay_pct"] == gsc_metrics.DEFAULTS["decay_pct"]
 
 
-def test_ga4_ai_filter_matches_hosts_and_subdomains_only():
+def test_ga4_ai_filter_comes_from_the_ai_channel_rule():
     import re
     f = site_profile.ga4_ai_filter("pbservices.ge")["filter"]
     assert f["field_name"] == "sessionSource" and f["string_filter"]["match_type"] == "FULL_REGEXP"
-    rx = re.compile(f["string_filter"]["value"])
-    for host in ("chatgpt.com", "www.perplexity.ai", "chat.deepseek.com", "claude.ai", "copilot.microsoft.com"):
-        assert rx.match(host), host
-    for host in ("notchatgpt.com", "chatgpt.com.evil.io", "google.com"):
-        assert not rx.match(host), host
+    rx = re.compile(f["string_filter"]["value"])  # GA4 FULL_REGEXP = whole-value match
+    for host in ("chatgpt.com", "www.perplexity.ai", "chat.deepseek.com", "claude.ai", "copilot.microsoft.com",
+                 "gemini.google.com", "grok.com", "meta.ai", "chat.mistral.ai", "you.com"):
+        assert rx.fullmatch(host), host
+    for host in ("google", "bing.com", "youtube.com", "facebook.com"):
+        assert not rx.fullmatch(host), host
 
 
 def test_site_token_expansion():
