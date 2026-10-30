@@ -22,7 +22,7 @@
 
 ## In Progress
 
-- Branch `seo-hardening-2026-10-30` — awaiting merge into `main`.
+- None.
 
 ## Upcoming
 

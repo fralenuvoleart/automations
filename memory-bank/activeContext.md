@@ -34,6 +34,7 @@
 
 - Plan files → `plans/`. Audit documents there have been removed once actioned — don't link to them from durable docs (the repo-wide link test fails on dead links).
 - Read this memory bank before every task; update `activeContext.md` + `progress.md` after significant changes.
+- `Recent Changes` is a short current-state summary, not a changelog: fold older entries into the Review status table and `progress.md`, and never re-add entries a pull already brought in.
 - Skill contract + CI: `systemPatterns.md` and [`seo/README.md`](../seo/README.md). `kinsta-logs` is not to be used or edited.
 
 ## Review status (SEO toolkit)
@@ -49,8 +50,5 @@
 
 ## Recent Changes
 
-- **2026-10-30 — hardening** (branch `seo-hardening-2026-10-30`): `seo-backlink-check` fails closed without DataForSEO (`requires_servers`); robots.txt verdicts per priority page (`blocked_paths`) and the crawler respects robots.txt for every fetch (`skipped_by_robots`; unreachable robots.txt = nothing fetched); temporary failures retried (`policy.retry`, default 2; never writes; crashed servers restarted) with `retries` and per-step `seconds` in `pipeline.json`; findings validated with jsonschema against a strengthened `findings-schema.json` (hand-written checks only for cross-field rules); repo-wide Markdown link test; `run_root` = `~/Documents/seo-reports`; memory bank tidied.
-- **2026-10-30 — v8 review fixes** (merged): row-limit completion (split/page, re-fetch of cut cache entries, `truncated`/`tainted` + number-check refusal), absent ≠ 0 in both readers + untracked key events, write guard (`policy.write`, `"confirm": true`, `--allow-write`), record instructions for every agent call, strict call log, `seo/plans/` → `seo/data-plans/`.
-- **2026-10-30 — scripted data layer + number check** (merged): `seo/pipeline.py` + 14 data plans, skills' workflows reduced to interpretation, `mcp_client.Session`, `number_check.py`, new computes (totals, inspection, unseen, top pages, AI share, underlinked, SERP URLs, representatives); CTR curve = run window → site's last 12 months → dated post-AI-Overviews benchmark (`config/ctr-benchmark.json`).
-- **2026-10-30 — earlier**: fixed run folder + shared cache + structured actions + `seo-brief`; SEO-sheet practices ported (target pages, top countries, Monday–Sunday weeks, GA4 by the rules, Search Console vs GA4 check, report definitions); the sheet's Rules + Keyword Setup tabs ported to `seo/config/rules/pbservices.ge.json`.
-- **2026-10-29**: toolkit built and consolidated from 18 to 12 report skills; AdSense removed; `google-ads` isolated to `seo-paid-organic`.
+- **2026-10-30 — hardening** (merged to `main`): `seo-backlink-check` fails closed without DataForSEO (`requires_servers`); robots.txt verdicts per priority page (`blocked_paths`) and the crawler respects robots.txt for every fetch (`skipped_by_robots`; unreachable robots.txt = nothing fetched); temporary failures retried (`policy.retry`, default 2; never writes; crashed servers restarted) with `retries` and per-step `seconds` in `pipeline.json`; findings validated with jsonschema against a strengthened `findings-schema.json`; repo-wide Markdown link test; `run_root` = `~/Documents/seo-reports`.
+- Earlier 2026-10-30 work (v8 review fixes, scripted data layer + number check, run folder/cache/`seo-brief`, SEO-sheet practices) and the 2026-10-29 build/consolidation are summarised in the Review status table above and in `progress.md`.
