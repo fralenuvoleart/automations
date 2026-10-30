@@ -384,5 +384,63 @@ def test_an_incomplete_cached_pull_is_fetched_again():
     assert any(a.get("dimensions") == ["query", "page"] for _, t, a in fake.calls if t == "analytics_query")
 
 
+def test_ga4_paging_follows_the_reported_total_when_pages_are_smaller_than_the_limit():
+    class SmallPages(FakeClients):  # a server that returns 1,000 rows per call whatever `limit` says
+        def call(self, server, tool, args):
+            if tool == "run_report":
+                self.calls.append((server, tool, args))
+                off, total = int(args.get("offset") or 0), 2500
+                n = max(0, min(1000, total - off))
+                return _text({"dimension_headers": [{"name": "sessionSource"}],
+                              "metric_headers": [{"name": "sessions"}], "row_count": total,
+                              **({"rows": [{"dimension_values": [{"value": f"s{off + i}"}],
+                                            "metric_values": [{"value": "1"}]} for i in range(n)]} if n else {})})
+            return super().call(server, tool, args)
+
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / ".run_state.json").write_text(json.dumps({"window": {"source": "ga4"}}))
+    fake = SmallPages()
+    ctx = P.Context(SITE, run_dir, {}, fake, resolve.load()[1])
+    raw, info = ctx.fetch("ga4.ai_cited_pages", {"property_id": "1", "date_ranges": [{"start_date": "2026-09-01",
+                                                                                       "end_date": "2026-09-28"}]})
+    assert info == {"rows": 2500, "calls": 3}, info
+    assert P._payload(raw)["_pipeline"]["complete"] is True
+
+
+def test_a_split_pull_that_stayed_incomplete_is_reused_from_cache_and_stays_flagged():
+    class Always(FakeClients):
+        def call(self, server, tool, args):
+            if tool == "analytics_query" and args.get("dimensions") == ["query", "page"]:
+                self.calls.append((server, tool, args))
+                return _text({"rows": [{"keys": [f"q{i}", f"{U}/"], "clicks": 1, "impressions": 9, "ctr": 0.1,
+                                        "position": 3} for i in range(25000)]})
+            return super().call(server, tool, args)
+
+    saved = P.MAX_CALLS_PER_PULL
+    P.MAX_CALLS_PER_PULL = 3
+    try:
+        with _isolated_cache():
+            _run("seo-brand-split", Always())
+            again = Always()
+            _, s = _run("seo-brand-split", again)
+    finally:
+        P.MAX_CALLS_PER_PULL = saved
+    pq = next(st for st in s["steps"] if st["name"] == "pq_cur")
+    assert pq["status"] == "cached" and pq["truncated"] is True, pq
+    assert not [a for _, t, a in again.calls if t == "analytics_query" and a.get("dimensions") == ["query", "page"]]
+    assert "pq_cur" in s["truncated"] and "computed/brand_split.json" in s["tainted"]
+
+
+def test_merge_reads_metrics_like_the_analysis_and_refuses_missing_ones():
+    merged = P._merge_gsc([{"rows": [{"keys": ["a"], "clicks": "1,000", "impressions": "2,000", "position": "2"}]},
+                           {"rows": [{"keys": ["a"], "clicks": 500, "impressions": 2000, "position": 4}]}], ["query"])
+    assert merged == [{"keys": ["a"], "clicks": 1500.0, "impressions": 4000.0, "ctr": 0.375, "position": 3.0}]
+    try:
+        P._merge_gsc([{"rows": [{"keys": ["a"], "clicks": 1}]}], ["query"])
+        raise AssertionError("a row without impressions must not be merged as zero")
+    except ValueError as e:
+        assert "absent is not 0" in str(e)
+
+
 if __name__ == "__main__":
     main(globals())

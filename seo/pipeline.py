@@ -282,13 +282,20 @@ class Context:
         pl = _payload(first)
         key = _rows_key(pl)
         rows, calls, complete = list(pl[key]), 1, False
+        total = pl.get("row_count", pl.get("rowCount"))
+        total = total if isinstance(total, (int, float)) else None
         while calls < MAX_CALLS_PER_PULL:
             nxt = _payload(self.call_raw(cap, {**args, "offset": len(rows)}))
-            page = (nxt or {}).get(_rows_key(nxt) or key) or []
+            if not isinstance(nxt, dict):
+                raise StepFailed(f"{cap}: page at offset {len(rows)} is not a JSON report")
+            page = nxt.get(_rows_key(nxt) or key) or []  # GA4 omits "rows" when a page is empty
             rows += page
             calls += 1
-            total = pl.get("row_count", pl.get("rowCount"))
-            if len(page) < limit or (isinstance(total, (int, float)) and len(rows) >= total):
+            if total is not None:  # the reported total decides; the server's page size may be below `limit`
+                if len(rows) >= total or not page:
+                    complete = len(rows) >= total
+                    break
+            elif len(page) < limit:
                 complete = True
                 break
         merged = {**pl, key: rows, META: {"complete": complete, "pages": calls, "rows": len(rows)}}
@@ -311,6 +318,8 @@ class Context:
             for lo, hi in ((a, mid), (mid + dt.timedelta(days=1), b)):
                 r = self.call_raw(cap, {**args, "startDate": lo.isoformat(), "endDate": hi.isoformat()})
                 calls += 1
+                if not isinstance(_payload(r), dict):
+                    raise StepFailed(f"{cap}: chunk {lo}–{hi} is not a JSON report")
                 if _complete(r, c, full):
                     done.append(_payload(r))
                     chunks.append([lo.isoformat(), hi.isoformat()])
@@ -580,16 +589,18 @@ def _complete(raw, cap: dict, full_args: dict) -> bool:
 
 
 def _merge_gsc(payloads: list, dims: list[str]) -> list[dict]:
-    """Rows of date-split GSC responses summed per key; position impression-weighted, CTR recomputed."""
+    """Rows of date-split GSC responses summed per key; position impression-weighted, CTR recomputed.
+    Metrics are read like the analysis reads them (gsc_metrics._metric): a missing one stops the pull."""
+    import gsc_metrics
     acc: dict = {}
     for pl in payloads:
         for r in pl.get(_rows_key(pl)) or []:
             key = tuple(r["keys"]) if isinstance(r.get("keys"), list) else tuple(r.get(d) for d in dims)
             a = acc.setdefault(key, {"r": r, "clicks": 0.0, "impressions": 0.0, "pos_w": 0.0})
-            imp = float(r.get("impressions") or 0)
-            a["clicks"] += float(r.get("clicks") or 0)
+            imp = gsc_metrics._metric(r.get("impressions"), "impressions")
+            a["clicks"] += gsc_metrics._metric(r.get("clicks"), "clicks")
             a["impressions"] += imp
-            a["pos_w"] += float(r.get("position") or 0) * imp
+            a["pos_w"] += gsc_metrics._metric(r.get("position"), "position") * imp
     out = []
     for a in acc.values():
         r = {k: v for k, v in a["r"].items() if k not in ("clicks", "impressions", "ctr", "position")}
@@ -629,9 +640,15 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 c = ctx.caps[st["cap"]]
                 full = {**(c.get("args") or {}), **args}
                 hit = record.cached(ctx.run_dir, st["cap"], args)
-                if hit is not None and _complete(hit["response"], c, full):  # an incomplete cached pull is re-fetched
+                hit_pl = _payload(hit["response"]) if hit is not None else None
+                meta = hit_pl.get(META) if isinstance(hit_pl, dict) else None
+                # reuse a cached pull unless it is a plain response cut at the limit (re-fetched and completed);
+                # one the pipeline already split/paged is reused even if still incomplete — refetching cannot help
+                if hit is not None and (isinstance(meta, dict) or _complete(hit["response"], c, full)):
                     record.record_from_cache(ctx.run_dir, name, st["cap"], args, st.get("allow_window"))
                     entry.update({"status": "cached", "rows": _rows_returned(hit["response"])})
+                    if isinstance(meta, dict) and not meta.get("complete"):
+                        entry["truncated"] = True
                     continue
                 record.record(ctx.run_dir, name, "{}", st["cap"], args=args, allow_window=st.get("allow_window"),
                               dry_run=True)  # guards (runtime args, window) before any call
@@ -659,8 +676,9 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
             continue
         argv, out = _script(ctx, run)
         entry["run"] = [st["run"][0], *argv]
-        tainted = sorted({e["name"] for e in report if e.get("truncated")
-                          and str(ctx.run_dir / "data" / f"{e['name']}.json") in argv})
+        bad_files = {str(ctx.run_dir / "data" / f"{e['name']}.json") for e in report if e.get("truncated")}
+        bad_files |= {str(ctx.run_dir / e["file"]) for e in report if e.get("tainted_by") and e.get("file")}
+        tainted = sorted({Path(a).stem for a in argv if a in bad_files})
         if tainted:  # built on data cut at the row limit: its figures cannot be reported (validate_report.py)
             entry["tainted_by"] = tainted
         if kind == "local":
@@ -752,7 +770,8 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
     for e in report:
         if e.get("truncated"):
             lim = _row_limit(ctx.caps[e["cap"]], {**(ctx.caps[e["cap"]].get("args") or {}), **(e.get("args") or {})})
-            unavailable.append({"source": f"{ctx.caps[e['cap']]['server']} ({e['cap']}, {e['name']}) — cut at {lim:,} rows",
+            cut = f"cut at {lim:,} rows" if lim else "cut at the row limit"
+            unavailable.append({"source": f"{ctx.caps[e['cap']]['server']} ({e['cap']}, {e['name']}) — {cut}",
                                 "affects": "figures from this pull and the analyses built on it (incomplete data)"})
     summary = {"skill": skill, "mode": mode, "site": site, "status": status, "steps": report,
                "unavailable": unavailable, "computed": sorted(p.name for p in (run_dir / "computed").glob("*.json"))
