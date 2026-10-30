@@ -12,7 +12,8 @@
 | `seo/site_crawl.py` | local (stdlib) | live HTML | public pages only; robots.txt-level checks |
 
 ## The rule (one rule, every skill)
-1. **Required source missing** → stop before any analysis and name the missing connection.
+1. **Required source missing** → stop before any analysis and name the missing connection
+   (`seo/pipeline.py` enforces it: a plan's `requires_servers` refuses to start, a required step's failure stops the run).
 2. **Optional source missing or failing** → continue; add one `findings.unavailable` entry
    (`source`, `affects`, `reason`) and skip only what depended on it.
 3. **Never substitute** an estimate for the site's own data, and never fill a gap from memory.
@@ -22,7 +23,7 @@
 |---|---|---|
 | `seo-audit` | `search-console` | `analytics` (engagement/AI cross-check), `dataforseo` |
 | `seo-ai-visibility` | `search-console` | `analytics` (headline AI referrals; without it the report is heuristic-only) |
-| `seo-backlink-check` | `analytics` | `dataforseo` (the backlink profile itself) |
+| `seo-backlink-check` | `dataforseo` (the backlink profile itself), `analytics` | — |
 | `seo-brand-split` | `search-console`, site rules (Brand, page languages) | — |
 | `seo-brief` | `search-console` (KPIs) | the other skills' latest reports (missing/old ones are listed as due) |
 | `seo-content-brief` | `search-console` | `dataforseo` (SERP), `tavily` (web-search fallback), `google-ads-planner` |

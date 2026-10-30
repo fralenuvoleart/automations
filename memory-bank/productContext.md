@@ -11,7 +11,7 @@
 
 ## SEO/GEO skills toolkit
 
-A set of Agent Skills (`.agents/skills/`) that produce SEO/GEO reports from the site's own data (Google Search Console, GA4, Google Ads) plus optional third-party sources. The toolkit is **deterministic** (capability registry + resolver, site profiles, coverage) and **degrades gracefully** when a source is missing. Reports target the site owner/marketer, not developers.
+A set of Agent Skills (`.agents/skills/`) that produce SEO/GEO reports from the site's own data (Google Search Console, GA4, Google Ads) plus optional third-party sources. The toolkit is **deterministic** (capability registry + resolver, scripted data plans, site profiles, coverage), **degrades gracefully** when an optional source is missing, and **fails closed** when a skill's core source is missing. Reports target the site owner/marketer, not developers.
 
 ## Audience
 

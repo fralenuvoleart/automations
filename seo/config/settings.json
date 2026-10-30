@@ -1,6 +1,6 @@
 {
-  "$comment": "Toolkit settings (no secrets). run_root: where every SEO run and the shared data cache live — an absolute path is used as is (outside the repo: nothing can be committed); a relative path is from the repo root and must be git-ignored (orchestrate.py refuses otherwise). cadence_days: how often each report should be refreshed; seo-brief flags reports older than this.",
-  "run_root": "/home/francesco/Documents/seo-reports",
+  "$comment": "Toolkit settings (no secrets). run_root: where every SEO run and the shared data cache live — `~` is the user's home; an absolute path is used as is (outside the repo: nothing can be committed); a relative path is from the repo root and must be git-ignored (orchestrate.py refuses otherwise). cadence_days: how often each report should be refreshed; seo-brief flags reports older than this.",
+  "run_root": "~/Documents/seo-reports",
   "retention_days": 180,
   "cache": true,
   "brief_max_age_days": 45,

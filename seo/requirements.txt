@@ -1,5 +1,8 @@
-# Runtime dependencies for seo/mcp-servers/google-ads-planner/server.py
-# (resolve.py and mcp_client.py are stdlib-only).
+# SEO toolkit: seo/report/validate_report.py (and build_report.py, digest.py) validate findings against
+# references/findings-schema.json with jsonschema (Draft 7). Everything else under seo/ is stdlib-only.
+jsonschema>=4.18,<5
+
+# Runtime dependencies for seo/mcp-servers/google-ads-planner/server.py.
 # Pinned from the planner server venv (`pip freeze`); install into its own venv.
 # Pin these to reproduce the server environment.
 fastmcp==4.1.4

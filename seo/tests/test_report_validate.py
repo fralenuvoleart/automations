@@ -178,5 +178,24 @@ def test_structured_actions_are_validated():
         assert part in msg, part
 
 
+def test_the_schema_is_the_structural_contract():
+    import jsonschema
+    schema = json.loads(V.SCHEMA_PATH.read_text())
+    jsonschema.Draft7Validator.check_schema(schema)
+    assert V.validate_structure(GOOD) == []
+    cases = {
+        "missing required key: verdict": {k: v for k, v in GOOD.items() if k != "verdict"},
+        "as_of: must be YYYY-MM-DD": {**GOOD, "as_of": "2026/10/29"},
+        "single-line heading": {**GOOD, "sections": [{"heading": "a\nb", "body": "x"}]},
+        "table cells must be scalars": {**GOOD, "sections": [{"heading": "H", "body": "b", "table": [{"a": {"n": 1}}]}]},
+        "missing required key: affects": {**GOOD, "unavailable": [{"source": "x"}]},
+        "both compareStartDate and compareEndDate": {**GOOD, "window": {**GOOD["window"], "compareStartDate": "2026-09-01"}},
+        "not a real date": {**GOOD, "as_of": "2026-13-01"},
+    }
+    for expect, findings in cases.items():
+        issues = V.validate_structure(findings)
+        assert any(expect in i for i in issues), (expect, issues)
+
+
 if __name__ == "__main__":
     main(globals())

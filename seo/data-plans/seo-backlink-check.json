@@ -11,6 +11,9 @@
    "desc": "competitor domain for the link gap"
   }
  },
+ "requires_servers": {
+  "dataforseo": "backlink data comes only from DataForSEO — without it there is no backlink report"
+ },
  "steps": [
   {
    "pull": "ga4_properties",
@@ -26,12 +29,7 @@
       "include_subdomains": true
      }
     ]
-   },
-   "optional": true,
-   "when": [
-    "server:dataforseo"
-   ],
-   "affects": "backlink profile (DataForSEO)"
+   }
   },
   {
    "pull": "rd_ours",
@@ -46,12 +44,7 @@
       ]
      }
     ]
-   },
-   "optional": true,
-   "when": [
-    "server:dataforseo"
-   ],
-   "affects": "referring domains (DataForSEO)"
+   }
   },
   {
    "pull": "anchors",

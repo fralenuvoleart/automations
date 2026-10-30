@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -71,9 +72,13 @@ class MCPClients:
         return server in self.servers
 
     def call(self, server: str, tool: str, args: dict) -> dict:
-        if server not in self.sessions:
-            self.sessions[server] = mcp_client.Session(self.servers[server], self.timeout)
-        return self.sessions[server].call_tool(tool, args, self.timeout)
+        s = self.sessions.get(server)
+        if s is not None and s.proc.poll() is not None:  # the server process died: start a fresh one
+            s.close()
+            s = None
+        if s is None:
+            s = self.sessions[server] = mcp_client.Session(self.servers[server], self.timeout)
+        return s.call_tool(tool, args, self.timeout)
 
     def close(self) -> None:
         for s in self.sessions.values():
@@ -98,6 +103,11 @@ class DryRunClient:
         pass
 
 
+def server_ok(clients, server: str) -> bool:
+    """The server is in .roo/mcp.json and the registry marks it configured."""
+    return clients.available(server) and resolve.load()[0]["servers"].get(server, {}).get("configured", True)
+
+
 # ------------------------------------------------------------------ plans ---
 def plan_path(skill: str, mode: str | None = None) -> Path:
     return PLANS / (f"{skill}.{mode}.json" if mode else f"{skill}.json")
@@ -117,6 +127,10 @@ def plan_caps(plan: dict) -> list[str]:
 def validate_plan(plan: dict, caps: dict | None = None) -> list[str]:
     caps = caps if caps is not None else resolve.load()[1]
     issues, names = [], set()
+    known = set(resolve.load()[0]["servers"])
+    for srv in plan.get("requires_servers") or {}:
+        if srv not in known:
+            issues.append(f"requires_servers: unknown server {srv!r}")
     w = plan.get("window") or {}
     if not isinstance(w, dict) or not ({"days", "weeks"} & set(w) or w.get("source") == "snapshot"):
         issues.append("window needs days, weeks or source snapshot")
@@ -209,6 +223,8 @@ class Context:
         self._gsc_property = self.profile.get("gsc_property")
         self.dry_run = False
         self.write_ok = False  # set by execute(allow_write=...): a write capability refuses without it
+        self.retries = 0       # temporary failures retried in this run (pipeline.json)
+        self.sleep = time.sleep
 
     # values
     def scalar(self, name: str, item=None, i: int | None = None):
@@ -252,16 +268,28 @@ class Context:
         return self._gsc_property
 
     def call_raw(self, cap: str, args: dict, confirm: bool = False) -> dict:
+        """One tool call; temporary failures (timeouts, rate limits, 5xx, a crashed server) are retried with
+        growing waits — `policy.retry` times (default DEFAULT_RETRY), never for a write capability."""
         c = self.caps[cap]
-        if (c.get("policy") or {}).get("write") and not (confirm and self.write_ok):
+        pol = c.get("policy") or {}
+        if pol.get("write") and not (confirm and self.write_ok):
             # A3: the one capability that changes state outside this workspace needs explicit approval
             raise StepFailed(f"{cap} changes state outside this workspace: it needs \"confirm\": true "
                              "on the step and a run started with --allow-write")
-        res = self.clients.call(c["server"], c["tool"], {**(c.get("args") or {}), **args})
-        if not isinstance(res, dict) or res.get("isError"):
-            text = " ".join(x.get("text", "") for x in (res or {}).get("content", []) if isinstance(x, dict))
-            raise StepFailed(text[:300] or "MCP tool returned an error")
-        return res
+        retries = 0 if pol.get("write") else int(pol.get("retry", DEFAULT_RETRY))
+        for attempt in range(retries + 1):
+            try:
+                res = self.clients.call(c["server"], c["tool"], {**(c.get("args") or {}), **args})
+                if not isinstance(res, dict) or res.get("isError"):
+                    text = " ".join(x.get("text", "") for x in (res or {}).get("content", []) if isinstance(x, dict))
+                    raise StepFailed(text[:300] or "MCP tool returned an error")
+                return res
+            except (StepFailed, TimeoutError, RuntimeError) as e:
+                if attempt >= retries or not _transient(e):
+                    raise
+                self.retries += 1
+                self.sleep(RETRY_BASE_S * 3 ** attempt)
+        raise AssertionError("unreachable")
 
     def fetch(self, cap: str, args: dict, confirm: bool = False) -> tuple[dict, dict]:
         """One logical pull, made complete: a GSC window cut at the row limit is split by date until every
@@ -459,8 +487,7 @@ class Context:
             neg = c.startswith("!")
             k = c[1:] if neg else c
             if k.startswith("server:"):
-                srv = k[7:]
-                ok = self.clients.available(srv) and resolve.load()[0]["servers"].get(srv, {}).get("configured", True)
+                ok = server_ok(self.clients, k[7:])
             elif k.startswith("profile:"):
                 key, _, bad = k[8:].partition("!=")
                 v = self.profile.get(key)
@@ -528,9 +555,25 @@ def _items(ctx: Context, st: dict) -> list:
     return [("item", v) for v in vals]
 
 
+DEFAULT_RETRY = 2           # retries of a temporary failure when the capability sets no policy.retry
+RETRY_BASE_S = 2.0          # waits 2 s, then 6 s
+TRANSIENT_RE = re.compile(r"\b(429|500|502|503|504)\b|too many requests|rate.?limit|timed? ?out|timeout|temporar"
+                          r"|unavailable|deadline exceeded|try again|backend error|connection reset|exited with code",
+                          re.I)
 GA4_DEFAULT_LIMIT = 10000   # GA4 runReport returns at most this many rows when no limit is given
 MAX_CALLS_PER_PULL = 64     # splitting / paging budget for one pull
 META = "_pipeline"          # completeness marker the pipeline adds to a merged response
+
+
+def _timed(entry: dict, t0: float, retries: int) -> None:
+    entry["seconds"] = round(time.monotonic() - t0, 2)
+    if retries:
+        entry["retries"] = retries
+
+
+def _transient(e: Exception) -> bool:
+    """Worth retrying: a timeout, or an error whose text names a temporary condition (never bad args/auth)."""
+    return isinstance(e, TimeoutError) or bool(TRANSIENT_RE.search(str(e)))
 
 
 def _payload(raw):
@@ -628,6 +671,7 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
             name = ctx.value(st["pull"], it if tag == "item" else None, i)
             entry = {"name": name, "kind": "pull", "cap": st["cap"]}
             report.append(entry)
+            t0, r0 = time.monotonic(), ctx.retries
             try:
                 args = ctx.period_args(st["cap"], "window" if st.get("period") == "weeks" else st.get("period"),
                                        it if tag == "week" else None, st.get("lookback_days"))
@@ -661,6 +705,8 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 if not ((st.get("optional") or ctx.dry_run) and len(items) > 1):
                     raise
                 entry.update({"status": "failed", "error": str(e)[:300], "affects": st.get("affects")})  # one item; go on
+            finally:
+                _timed(entry, t0, ctx.retries - r0)
         return
     for i, (tag, it) in enumerate(_items(ctx, st), 1):
         name = ctx.value(st[kind], it, i)
@@ -674,7 +720,11 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 entry["run"] = [run[0], f"<{e}>"]
             entry.update({"status": "skipped", "reason": "dry run: not executed"})
             continue
-        argv, out = _script(ctx, run)
+        t0 = time.monotonic()
+        try:
+            argv, out = _script(ctx, run)
+        finally:
+            _timed(entry, t0, 0)
         entry["run"] = [st["run"][0], *argv]
         bad_files = {str(ctx.run_dir / "data" / f"{e['name']}.json") for e in report if e.get("truncated")}
         bad_files |= {str(ctx.run_dir / e["file"]) for e in report if e.get("tainted_by") and e.get("file")}
@@ -720,13 +770,19 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
     for req in plan.get("requires") or []:
         if not prof.get(req):
             raise PlanError(f"profile '{req}' must be set for {skill} (seo/config/sites/{site}.json)")
+    own = clients is None
+    clients = clients or MCPClients()
+    for srv, why in (plan.get("requires_servers") or {}).items():  # fail closed: no report without its core source
+        if not server_ok(clients, srv):
+            if own:
+                clients.close()
+            raise PlanError(f"{skill} needs the '{srv}' server ({why}): add it to .roo/mcp.json and mark it "
+                            f"configured in seo/capabilities.json → servers.{srv}")
     w = plan["window"]
     run_dir = orchestrate.seed(
         skill, site, days=days or w.get("days", 28), weeks=weeks if weeks is not None else (None if days else w.get("weeks")),
         source=w.get("source", "gsc"), compare=w.get("compare", False) if compare is None else compare, yoy=yoy,
         as_of=as_of, tag=tag if tag is not None else (mode or None), out_dir=out_dir, force=force)
-    own = clients is None
-    clients = clients or MCPClients()
     ctx = Context(site, run_dir, inputs, clients, caps)
     ctx.dry_run = dry_run
     ctx.write_ok = allow_write
@@ -779,6 +835,7 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
                # A1: pulls still cut at the row limit after splitting/paging, and the outputs built on them;
                # validate_report.py refuses figures found only there
                "truncated": [e["name"] for e in report if e.get("truncated")],
+               "retries": ctx.retries,
                "tainted": [e["file"] for e in report if e.get("tainted_by") and e.get("file")]}
     (run_dir / "pipeline.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
     fp = run_dir / "findings.json"

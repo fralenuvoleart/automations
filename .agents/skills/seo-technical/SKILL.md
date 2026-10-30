@@ -73,7 +73,7 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`facts`, `robots
 3. **Accessibility.** `data/a11y_*.json` (mobile) → failing audits per template (contrast, alt text, labels, headings, ARIA).
 4. **Structured data & entities.** `data/schema_*.json` + `data/facts.json` → JSON-LD types, `sameAs`, author/reviewer, invalid blocks. Expected types per [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md); FAQ/HowTo markup earns no Google rich result — never recommend it for that purpose.
 5. **Index/canonical state.** `computed/inspection.json` for the representative URLs — coverage state, Google vs declared canonical (last crawl per URL in `data/inspect.json`).
-6. **Crawl health & AI crawlers.** `data/health.json` (fields returned only) and `data/robots.json` → search/retrieval vs training bots table.
+6. **Crawl health & AI crawlers.** `data/health.json` (fields returned only) and `data/robots.json` → search/retrieval vs training bots table (homepage + priority pages; `blocked_paths` per bot).
 7. **Assemble.** Rank issues by severity × number of templates (and languages) affected.
 
 ## Determinism

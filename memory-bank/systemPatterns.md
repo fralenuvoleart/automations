@@ -39,7 +39,7 @@ The 13 `seo-*` skills in `.agents/skills/` (12 reports + the weekly `seo-brief`)
 
 **Registry + rendering.** [`seo/capabilities.json`](../seo/capabilities.json) is the single source of truth (server, tool, fixed `args`, `runtime`, `desc`, `policy`). Skills are authored with `{{cap:id}}`, `{{site:key}}` and `{{include:name}}` tokens; `python3 seo/resolve.py --write` renders them into `<!--cap:…-->…<!--/cap-->` blocks and **re-renders every block on each run** (registry edits and tool renames propagate). Never edit inside a block or hard-code tool names. Shared skill sections live in `seo/references/skill-common/`.
 
-**Run pipeline (mandatory).** `seo/pipeline.py --skill S --site D` runs the skill's data plan (`seo/data-plans/<skill>[.<mode>].json`): seeds the run (`orchestrate.py`, window in `.run_state.json`), makes every MCP call cache-first through `mcp_client.Session` and records it (`record.py`: `context.json` + `data/`), runs the analysis scripts into `computed/`, writes `pipeline.json` and the `unavailable` list. The agent only interprets: findings JSON → `validate_report.py --data context.json` (URLs and every figure checked against `data/` + `computed/`) → `build_report.py` → validate the report. Extra (judgment) calls and derived figures are recorded with `record.py`.
+**Run pipeline (mandatory).** `seo/pipeline.py --skill S --site D` runs the skill's data plan (`seo/data-plans/<skill>[.<mode>].json`): seeds the run (`orchestrate.py`, window in `.run_state.json`), makes every MCP call cache-first through `mcp_client.Session` and records it (`record.py`: `context.json` + `data/`), runs the analysis scripts into `computed/`, writes `pipeline.json` and the `unavailable` list. The agent only interprets: findings JSON → `validate_report.py --data context.json` (structure against `findings-schema.json` with jsonschema; URLs and every figure checked against `data/` + `computed/`) → `build_report.py` → validate the report. Extra (judgment) calls and derived figures are recorded with `record.py`.
 
 | Concern | Server | Notes |
 |---|---|---|
@@ -47,21 +47,25 @@ The 13 `seo-*` skills in `.agents/skills/` (12 reports + the weekly `seo-brief`)
 | GA4 (AI referrals, channels, organic landing pages, referrals) | `analytics` | metric `keyEvents` (not `conversions`); AI filter from the rules' `AI assistants` channel via `site_profile.py --ga4-ai-filter` |
 | Google Ads (GAQL) | `google-ads` | only `seo-paid-organic` |
 | Keyword Planner (ideas + historical metrics) | `google-ads-planner` | ≤20 seeds, ≤10 geos, first page only; retries only inside the server (`policy.retry 0`) |
-| SERP / backlinks / labs | `dataforseo` | optional, not configured; payloads in `seo/references/dataforseo-payloads.md` |
+| SERP / backlinks / labs | `dataforseo` | not configured; optional in most plans, required by `seo-backlink-check` (`requires_servers`: refuses to start); payloads in `seo/references/dataforseo-payloads.md` |
 | Web search / extract fallback | `tavily` | approximate; never Google's order |
-| Link graph, hreflang, robots, page facts | local `seo/site_crawl.py` | stdlib, no key |
+| Link graph, hreflang, robots, page facts | local `seo/site_crawl.py` | stdlib, no key; respects robots.txt on every fetch (unreachable robots.txt = fetch nothing); AI-crawler verdicts per priority page |
 
 Rules:
 - GSC: page metrics from `page` rows (include anonymized clicks), query metrics from `query` rows, `query×page` only for attribution; positions impression-weighted; truncated pulls (= row limit) never produce "lost/new".
 - Windows: GSC ends `today − 3`, GA4 `today − 2`; tools without a window get a per-section `window` note. Weekly runs use Monday–Sunday weeks (`--weeks N`, listed in `window.weeks`, one pull per week — 8-week date-dimension pulls truncate on this site).
-- Run folders are fixed: `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in `seo/config/settings.json` = `/home/francesco/Documents/seo-reports`, outside the repo; a root inside the repo must be git-ignored — `orchestrate.py` refuses one that could be committed). `seo/runs.py` lists, finds the latest report and prunes by `retention_days`.
+- Run folders are fixed: `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in `seo/config/settings.json` = `~/Documents/seo-reports`, outside the repo; a root inside the repo must be git-ignored — `orchestrate.py` refuses one that could be committed). `seo/runs.py` lists, finds the latest report and prunes by `retention_days`.
 - Shared cache (`record.py`): keyed by capability + full args per site; dated windows immutable, live tools per `policy.cache_ttl_days`, errors and undated live data never cached; `--from-cache` before each call.
 - Findings actions are objects (`action`, `impact`, `effort`, `page`/`keyword`, `why`, `est_clicks`); `seo-brief` (`seo/digest.py`) merges the latest report of every skill, drops `[done]` history items, ranks impact × effort and tracks first-seen dates in `brief_state.json`.
 - Page-level analyses merge `#fragment` jump links into their page (clicks summed, impressions from the largest variant) — `rules.collapse_fragments`.
 - Classification has one source: `seo/config/rules/<domain>.json` (ported from the SEO sheet, which should read the same file). Brand, query category, page tag/language, channel and tracked keywords come only from `seo/rules.py`; the site profile holds facts only and derives `languages`/`sections`/`services`/`priority_keywords` from the rules. Rule regexes stay RE2/JS-portable. GA4 channels/page types/languages are classified with the same rules (`ga4_metrics.py`, capability `ga4.landing_source`).
-- One degradation rule ([`data-source-map.md`](../seo/references/data-source-map.md)): required missing → stop; optional missing → `findings.unavailable`; never substitute estimates or memory.
-- Side effects (Indexing API submissions, `[done]` history entries) only after explicit user confirmation.
-- CI: `bash seo/check.sh` (offline, portable); `--live` adds live schema validation on the workstation.
+- One degradation rule ([`data-source-map.md`](../seo/references/data-source-map.md)): required missing → stop; optional missing → `findings.unavailable`; never substitute estimates or memory. A plan lists the servers a skill cannot run without in `requires_servers` (fail closed before any call).
+- Row limits: a pull at the server limit is completed by the pipeline (Search Console: date range halved until each chunk is under 25,000 rows, rows summed per key; GA4: paged with `offset`, following `row_count`); what stays cut is `truncated` in `pipeline.json`, outputs built on it are `tainted`, and the number check refuses figures found only there.
+- Absent is never zero: a Search Console row missing a metric, or an unreadable call log, stops the run; GA4 blanks stay `None`; no key event recorded → no key-event rate.
+- Retries live in one layer (`pipeline.py`): temporary failures (timeout, 429, 5xx, crashed server) retried `policy.retry` times (default 2); never bad requests or writes; the planner server retries itself (`retry: 0`).
+- Side effects (Indexing API submissions, `[done]` history entries) only after explicit user confirmation. `gsc.indexing` carries `policy.write`: a plan step needs `"confirm": true` and the run `--allow-write`.
+- Findings structure has one source: `seo/references/findings-schema.json` (enforced with jsonschema; `x-message` = the error text). Hand-written checks only for cross-field rules (date order, overlap, weeks inside the window, endDate before as_of).
+- CI: `bash seo/check.sh` (offline, portable; needs `jsonschema`); `--live` adds live schema validation on the workstation. Every relative Markdown link in the repo must resolve (`seo/tests/test_repo_links.py`; `kinsta-logs` excluded).
 
 ---
 

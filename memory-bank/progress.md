@@ -9,35 +9,28 @@
 - `docs/WARMER.md` documents warmer logic, cache-header semantics, and the warmer-vs-Kinsta-Analytics discrepancy.
 
 ### SEO/GEO skills toolkit (`.agents/skills/` + `seo/`)
-- 12 consolidated `seo-*` power skills + `kinsta-logs` + `report-export` + `web-to-pdf`.
-- Capability registry + resolver (`{{cap:}}` / `{{site:}}` tokens), live-schema validation, semantic dimension/metric checks.
-- Site Profile layer — per-site criteria (`config/sites/<domain>.json`) + append-only action history (`.history.md`); per-language priority keywords.
-- Deterministic coverage (`coverage.py`) rendered as a per-language report block.
-- Report pipeline — findings JSON → `build_report.py` → mandatory `validate_report.py`; `unavailable` + `coverage` blocks for graceful degradation; hardened against missing `lag`, missing `compareEndDate`, missing `context.json`, and table pipe/newline injection.
+- 13 `seo-*` skills (12 reports + weekly `seo-brief`) + `kinsta-logs` + `report-export` + `web-to-pdf`.
+- Capability registry v8 + resolver (rendered cap/site/include blocks, generated Data Sources tables, live/cached schema validation, semantic dimension/metric checks).
+- Scripted data layer: `seo/pipeline.py` + `seo/data-plans/` — cache-first pulls, evidence recording, analysis into `computed/`; row limits completed (split/page), temporary failures retried, write guard, fail-closed `requires_servers`.
+- Report gate: findings validated against `findings-schema.json` (jsonschema) + cross-field rules; every URL and figure checked against evidence and computed outputs (`number_check.py`); figures from data still cut at the row limit refused.
+- Site rules (`seo/config/rules/<domain>.json` + `seo/rules.py`) — classification shared with the SEO sheet; site profiles + status-tagged action history. Profile data filled (`ads_customer_id`, `priority_pages`, `competitors`, `gsc_property`, `ga4_property`); brand rule confirmed by the owner: `пб сервис` and `gecrypto` are not brand terms.
+- Analysis modules: GSC (movers, striking distance, low CTR with own-data CTR curve, cannibalization, decay classes, brand/language split, value model, totals, inspection summary), GA4 by the rules (channels, page types, languages, AI share, Search Console vs GA4), crawler (robots per path, sitemaps, link graph, hreflang, canonicals, page facts; robots.txt respected), DataForSEO and Ads helpers, coverage.
+- Fixed run folders + shared cache in `~/Documents/seo-reports`; weekly `seo-brief` merges and ranks actions across reports.
 - Shared `report-export` — Markdown→PDF (`npx md-to-pdf`/Chromium, WeasyPrint fallback) + SMTP email; one config with per-skill subjects.
-- Senior SEO & GEO enhancements — AI crawler accessibility audits, Schema `sameAs` entity disambiguation, `hreflang` reciprocity checks, Cannibalization Decision Matrix, Quotability Scorecard, and anchor distribution profiles.
-- Physical Portfolio Consolidation (18 to 12 Power Skills) & Capability registry v6 — decoupled GSC dimensions (`gsc.query`, `gsc.page_query`, `gsc.query_full`, `gsc.geo_query`, `gsc.time_series`, `gsc.device_performance`); created `seo-keyword-strategy` and `seo-paid-organic`; absorbed `seo-serp-features`, `seo-competitor-gap`, `seo-local`, `seo-cross-engine`, and `seo-opportunity`; pruned `seo-monetisation`; removed legacy `adsense.*` capabilities; isolated `google-ads` server strictly to `seo-paid-organic`.
-- Site rules (`seo/config/rules/<domain>.json` + `seo/rules.py`) — classification shared with the SEO sheet (2026-10-30).
-- Scripted data pulls (`seo/pipeline.py` + `seo/data-plans/`) and the number check in `validate_report.py` — the agent only interprets (2026-10-30).
-- Run folder + cache + structured actions + weekly `seo-brief` (2026-10-30).
-- SEO-sheet practices ported (2026-10-30): target pages + wrong-page check, top countries per keyword, Monday–Sunday weekly mode with 8-week trends, GA4 by the site rules + Search Console vs GA4 check, report definitions.
-- CI gate `seo/check.sh` (`--check` + `--validate-live` + all tests) — 14 test suites green.
-- **2026-10-30 architecture audit** (8.1/10 systems design; removed from `plans/`, superseded by the v8 audit below).
-- **2026-10-30 audit fixes applied (all 51 issues + optional items)** — evidence recording + gate, deterministic GSC/crawl/DFS/Ads analysis modules, registry v7 (rowLimit/engine pinned, `keyEvents`, profile-driven AI filter), marker-based re-rendering with shared includes, planner API limits + historical metrics, offline-portable CI (`--validate-cached`). 18 SEO test suites + report-export green.
-- **Fresh architecture audit on registry v8** — [`plans/seo-architecture-audit-v8.md`](../plans/seo-architecture-audit-v8.md): 8.1/10 weighted on a new rubric; 44 capabilities × 6 servers × function-class matrix, 13-skill pull-overlap matrix, 9 anti-patterns (A1–A9) with file references, P0–P3 blueprint, residual risk register. Supersedes the 2026-10-30 audit.
-- v8 audit follow-up (2026-10-30): A1 (split/paged pulls + truncation gate), A2 (absent ≠ 0 in both readers, untracked key events), A3 (write guard), A4 (record every agent call), A8 (strict call log), A9 (`seo/data-plans/`) done; A5–A7 rejected with reasons in `activeContext.md`.
+- CI gate `seo/check.sh`: resolve check, cached schemas, data plans, CTR-benchmark age (warning), profiles, compile, all test suites (incl. repo-wide Markdown links).
+- Reviews actioned: 2026-10-29 audit, 2026-10-30 audit (C/H/M/L), architecture audit v8 (A1–A4, A8, A9), external findings A-01…A-08 — status table in `activeContext.md`.
 
 ## In Progress
 
-_None_
+- Branch `seo-hardening-2026-10-30` — awaiting merge into `main`.
 
 ## Upcoming
 
-- **Security**: rotate the Sevalla, Tavily and Kinsta API keys exposed in tracked `.roo/mcp.json`; untrack the file.
-- **SEO profile data** — `ads_customer_id`, `priority_pages` and `competitors` filled (2026-10-30); `serp_locations` deliberately unset until DataForSEO is connected; brand rule confirmed by the owner (2026-10-30): `пб сервис` and `gecrypto` are not brand terms.
+- **Security**: rotate the Sevalla, Tavily and Kinsta API keys exposed in tracked `.roo/mcp.json`; untrack the file. Review its auto-approve lists (`sevalla.deployments.start` is auto-approved).
+- **DataForSEO** — connect (`.roo/mcp.json` + `servers.dataforseo.configured` in `seo/capabilities.json`) to enable `seo-backlink-check` and the SERP/competitor sections; then set `serp_locations` in the profile.
+- **Search Console bulk export to BigQuery** — owner decision; only route to history beyond 16 months (no backfill: starts when enabled).
+- **Move earlier runs** from the repo's `.output/seo/` into `~/Documents/seo-reports` to keep their cache and history.
 - **SEO sheet Apps Script** — switch it to read `seo/config/rules/pbservices.ge.json` (needs the script code).
 - **Tavily schema cache** — run `python3 seo/mcp_client.py tavily` locally so `--validate-cached` covers `web.*`.
-- WhatsApp bot integration (future).
-- Python AI/NLP services (future).
-- **DataForSEO** (optional) — connect to unlock backlink / competitor / SERP enrichment.
 - **Google Business Profile** — connect to unlock map-pack analysis for local markets (`seo-audit`).
+- WhatsApp bot integration (future); Python AI/NLP services (future).

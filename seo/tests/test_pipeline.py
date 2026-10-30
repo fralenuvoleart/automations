@@ -219,6 +219,8 @@ def test_every_plan_dry_runs_without_calls_or_crawls():
             inputs = {"keyword": "внж грузии"} if skill == "seo-content-brief" else {}
             fake = P.DryRunClient(available_servers={"search-console", "analytics", "dataforseo", "tavily",
                                                      "google-ads", "google-ads-planner"})
+            if any(not P.server_ok(fake, srv) for srv in P.load_plan(skill, mode or None).get("requires_servers") or {}):
+                continue  # covered by test_backlink_check_refuses_to_run_without_dataforseo
             _, s = _run(skill, fake, mode=mode or None, inputs=inputs, dry_run=True)
             for st in s["steps"]:
                 if st["kind"] == "local":
@@ -440,6 +442,113 @@ def test_merge_reads_metrics_like_the_analysis_and_refuses_missing_ones():
         raise AssertionError("a row without impressions must not be merged as zero")
     except ValueError as e:
         assert "absent is not 0" in str(e)
+
+
+def test_backlink_check_refuses_to_run_without_dataforseo():
+    with _isolated_cache():
+        fake = FakeClients(servers=("search-console", "analytics"))
+        out = Path(tempfile.mkdtemp()) / "run"
+        try:
+            P.execute("seo-backlink-check", SITE, clients=fake, as_of=AS_OF, out_dir=str(out))
+            raise AssertionError("must fail closed")
+        except P.PlanError as e:
+            assert "dataforseo" in str(e) and "no backlink report" in str(e)
+        assert fake.calls == [] and not out.exists()  # nothing called, no run folder seeded
+    plan = P.load_plan("seo-backlink-check")
+    core = {st["pull"]: st for st in plan["steps"] if st.get("pull") in ("summary", "rd_ours")}
+    assert not any(st.get("optional") for st in core.values())  # a DataForSEO error stops the run
+    assert P.validate_plan({**plan, "requires_servers": {"nope": "x"}}, resolve.load()[1])[0].startswith("requires_servers")
+
+
+# — temporary failures are retried (policy.retry, default 2), never writes or bad requests
+
+class _Flaky(FakeClients):
+    def __init__(self, fail_times, text, **kw):
+        super().__init__(**kw)
+        self.left, self.text = fail_times, text
+
+    def call(self, server, tool, args):
+        if tool == "analytics_query" and self.left:
+            self.left -= 1
+            self.calls.append((server, tool, args))
+            return {"content": [{"type": "text", "text": self.text}], "isError": True}
+        return super().call(server, tool, args)
+
+
+def _retry_ctx(clients):
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / ".run_state.json").write_text(json.dumps({"window": {"source": "gsc"}}))
+    ctx = P.Context(SITE, run_dir, {}, clients, resolve.load()[1])
+    waits = []
+    ctx.sleep = waits.append
+    return ctx, waits
+
+
+def test_temporary_failures_are_retried_with_growing_waits():
+    ctx, waits = _retry_ctx(_Flaky(2, "HTTP 503: backend unavailable"))
+    args = {"siteUrl": f"{U}/", "startDate": "2026-10-01", "endDate": "2026-10-07"}
+    assert ctx.call_raw("gsc.query", args)["isError"] is False
+    assert waits == [2.0, 6.0] and ctx.retries == 2
+    ctx, waits = _retry_ctx(_Flaky(3, "HTTP 429 Too Many Requests"))
+    try:
+        ctx.call_raw("gsc.query", args)
+        raise AssertionError("3 failures exceed the default 2 retries")
+    except P.StepFailed as e:
+        assert "429" in str(e) and waits == [2.0, 6.0]
+
+
+def test_bad_requests_writes_and_self_retrying_servers_are_not_retried():
+    ctx, waits = _retry_ctx(_Flaky(1, "Invalid argument: dimension 'foo' does not exist"))
+    try:
+        ctx.call_raw("gsc.query", {"siteUrl": f"{U}/", "startDate": "2026-10-01", "endDate": "2026-10-07"})
+        raise AssertionError("not transient")
+    except P.StepFailed:
+        assert waits == []
+    caps = resolve.load()[1]
+    assert caps["planner.ideas"]["policy"]["retry"] == 0  # the planner server retries itself: one layer only
+
+    class Down(FakeClients):
+        def call(self, server, tool, args):
+            self.calls.append((server, tool, args))
+            return {"content": [{"type": "text", "text": "503 unavailable"}], "isError": True}
+    clients = Down()
+    ctx, waits = _retry_ctx(clients)
+    ctx.write_ok = True
+    try:
+        ctx.call_raw("gsc.indexing", {"siteUrl": f"{U}/", "urls": [f"{U}/"]}, confirm=True)
+        raise AssertionError("write fails")
+    except P.StepFailed:
+        assert len(clients.calls) == 1 and waits == []  # a write is never repeated
+
+
+def test_pipeline_json_records_seconds_and_retries():
+    with _isolated_cache():
+        fake = _Flaky(1, "deadline exceeded")
+        saved = P.RETRY_BASE_S
+        P.RETRY_BASE_S = 0
+        try:
+            _, s = _run("seo-brand-split", fake)
+        finally:
+            P.RETRY_BASE_S = saved
+    assert s["status"] == "ok" and s["retries"] == 1
+    assert all("seconds" in st for st in s["steps"] if st.get("status") in ("ok", "cached"))
+    assert any(st.get("retries") == 1 for st in s["steps"])
+
+
+def test_a_crashed_server_is_restarted_on_the_next_call():
+    sys.path.insert(0, str(SEO / "tests"))
+    import test_mcp_client as M
+    clients = P.MCPClients(timeout=10)
+    clients.servers = {"fake": M._spec()}
+    try:
+        try:
+            clients.call("fake", "crash", {})
+            raise AssertionError("crash should raise")
+        except RuntimeError as e:
+            assert "exited" in str(e) and P._transient(e)
+        assert clients.call("fake", "echo", {"x": 1})["isError"] is False  # fresh process
+    finally:
+        clients.close()
 
 
 if __name__ == "__main__":

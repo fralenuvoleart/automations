@@ -91,5 +91,65 @@ def test_norm_url():
     assert C.norm_url("https://x.ge") == "https://x.ge/"
 
 
+def test_robots_verdicts_cover_every_checked_page_not_just_the_homepage():
+    site = {"https://y.ge/robots.txt": (200, "text/plain",
+                                        "User-agent: GPTBot\nDisallow: /blog/\nUser-agent: OAI-SearchBot\nDisallow: /ru/\n")}
+    def f(url):
+        status, ctype, text = site.get(url, (404, H, ""))
+        return status, url, ctype, text
+
+    rep = C.robots_report("https://y.ge", f, urls=["https://y.ge/blog/post/", "https://y.ge/ru/uslugi/", "https://y.ge/about/"])
+    v = {b["token"]: b for b in rep["bots"]}
+    assert rep["paths_checked"] == ["/", "/blog/post/", "/ru/uslugi/", "/about/"]
+    assert v["GPTBot"]["homepage_allowed"] is True and v["GPTBot"]["blocked_paths"] == ["/blog/post/"]
+    assert "1 of 4 checked pages" in v["GPTBot"]["verdict"] and "training" in v["GPTBot"]["verdict"]
+    assert v["OAI-SearchBot"]["verdict"].startswith("VISIBILITY RISK") and v["OAI-SearchBot"]["blocked_paths"] == ["/ru/uslugi/"]
+    assert v["Googlebot"]["verdict"] == "ok"
+
+
+def test_crawler_respects_robots_txt_and_lists_what_it_skipped():
+    site = dict(SITE)
+    site["https://x.ge/robots.txt"] = (200, "text/plain", "User-agent: *\nDisallow: /ru/\nSitemap: https://x.ge/sm.xml\n")
+    fetched = []
+
+    def f(url):
+        fetched.append(url)
+        status, ctype, text = site.get(url, (404, H, ""))
+        return status, url, ctype, text
+
+    res = C.crawl("https://x.ge", limit=50, delay=0, fetch=f)
+    assert "https://x.ge/ru/a/" not in fetched and "https://x.ge/ru/a/" not in res["pages"]
+    assert res["skipped_by_robots"] == [{"url": "https://x.ge/ru/a/", "reason": "disallowed by robots.txt for this crawler"}]
+    assert "https://x.ge/a/" in res["pages"]
+
+
+def test_unreachable_robots_txt_means_nothing_is_fetched():
+    calls = []
+
+    def f(url):
+        calls.append(url)
+        return (503, url, "text/plain", "") if url.endswith("/robots.txt") else (200, url, H, page("x"))
+
+    res = C.crawl("https://z.ge", limit=5, delay=0, fetch=f)
+    assert calls == ["https://z.ge/robots.txt"] and res["pages"] == {}
+    assert "unreachable" in res["skipped_by_robots"][0]["reason"]
+
+
+def test_facts_gate_checks_each_host_once():
+    seen = []
+
+    def f(url):
+        seen.append(url)
+        if url == "https://other.com/robots.txt":
+            return 200, url, "text/plain", "User-agent: *\nDisallow: /private/\n"
+        return 404, url, "text/plain", ""
+
+    gate = C.RobotsGate(f)
+    assert gate.check("https://other.com/private/x")[0] is False
+    assert gate.check("https://other.com/public/y") == (True, None)
+    assert gate.check("https://third.net/a") == (True, None)  # 404 robots.txt = no rules
+    assert seen == ["https://other.com/robots.txt", "https://third.net/robots.txt"]
+
+
 if __name__ == "__main__":
     main(globals())

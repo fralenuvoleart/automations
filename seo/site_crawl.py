@@ -2,11 +2,12 @@
 """Stdlib site crawler for the SEO skills: link graph, hreflang, canonicals, robots, page facts.
 
 No third-party service and no API key: it fetches public pages directly (polite
-delay, identifying User-Agent) so internal-link, hreflang and AI-crawler findings
-rest on observed HTML instead of approximations.
+delay, identifying User-Agent, robots.txt respected for every fetch — disallowed URLs are
+listed under ``skipped_by_robots``, never fetched) so internal-link, hreflang and AI-crawler
+findings rest on observed HTML instead of approximations.
 
 Commands (all print JSON):
-    robots   --site https://example.com                   # robots.txt verdict per search/AI crawler
+    robots   --site https://example.com [--url U …]       # robots.txt verdict per search/AI crawler, homepage + U
     sitemap  --site https://example.com [--limit 5000]    # URLs from robots.txt Sitemap: / sitemap.xml
     crawl    --site https://example.com [--limit 300] [--delay 0.5] [--profile example.com]
              # BFS from the homepage: inlinks, click depth, orphans vs sitemap,
@@ -234,29 +235,65 @@ def page_facts(url: str, fetch=http_fetch) -> dict:
 
 
 # ------------------------------------------------------------------ robots ---
-def robots_report(site: str, fetch=http_fetch) -> dict:
-    base = site.rstrip("/")
+def _robots(base: str, fetch=http_fetch) -> tuple[int, str, urllib.robotparser.RobotFileParser]:
     status, _, _, text = fetch(base + "/robots.txt")
     rp = urllib.robotparser.RobotFileParser()
     rp.parse(text.splitlines() if status == 200 else [])
+    return status, text, rp
+
+
+class RobotsGate:
+    """Whether this crawler may fetch a URL, per robots.txt of its host (fetched once per host).
+
+    RFC 9309: 4xx = no rules (allowed); 5xx or unreachable = assume everything is disallowed."""
+
+    def __init__(self, fetch=http_fetch, agent: str = USER_AGENT):
+        self.fetch, self.agent, self.hosts = fetch, agent, {}
+
+    def check(self, url: str) -> tuple[bool, str | None]:
+        pu = urlparse(url)
+        base = f"{pu.scheme}://{pu.netloc}"
+        if base not in self.hosts:
+            status, _, rp = _robots(base, self.fetch)
+            self.hosts[base] = (status, rp)
+        status, rp = self.hosts[base]
+        if status == 0 or status >= 500:
+            return False, f"robots.txt unreachable (status {status}): treated as disallow-all"
+        if status == 200 and not rp.can_fetch(self.agent, url):
+            return False, "disallowed by robots.txt for this crawler"
+        return True, None
+
+
+def _path(u: str) -> str:
+    pu = urlparse(u)
+    return (pu.path or "/") + (f"?{pu.query}" if pu.query else "")
+
+
+def robots_report(site: str, fetch=http_fetch, urls: list[str] | None = None) -> dict:
+    """robots.txt verdict per search/AI crawler, for the homepage and every page in ``urls``."""
+    base = site.rstrip("/")
+    status, text, rp = _robots(base, fetch)
     sitemaps = [ln.split(":", 1)[1].strip() for ln in text.splitlines()
                 if status == 200 and ln.lower().startswith("sitemap:")]
+    paths = list(dict.fromkeys(["/"] + [_path(u) for u in urls or []]))
     unreachable = status == 0 or status >= 500
     bots = []
     for token, op, purpose, kind in AI_BOTS:
         if unreachable:  # Google treats a 5xx/unreachable robots.txt as "disallow all" until it recovers
             bots.append({"token": token, "operator": op, "purpose": purpose, "kind": kind, "homepage_allowed": None,
+                         "blocked_paths": None,
                          "verdict": f"UNKNOWN — robots.txt unreachable (status {status}); crawlers may treat the site as blocked"})
             continue
-        allowed = rp.can_fetch(token, base + "/") if status == 200 else True  # 4xx = no rules = allowed
+        blocked = [p for p in paths if status == 200 and not rp.can_fetch(token, base + p)]  # 4xx = no rules
         verdict = "ok"
-        if not allowed and kind in ("search", "user"):
-            verdict = "VISIBILITY RISK — blocks a search/retrieval crawler"
-        elif not allowed:
-            verdict = "blocked (training opt-out; no direct search impact)"
+        scope = "the whole site" if "/" in blocked else f"{len(blocked)} of {len(paths)} checked pages"
+        if blocked and kind in ("search", "user"):
+            verdict = f"VISIBILITY RISK — blocks a search/retrieval crawler on {scope}"
+        elif blocked:
+            verdict = f"blocked on {scope} (training opt-out; no direct search impact)"
         bots.append({"token": token, "operator": op, "purpose": purpose, "kind": kind,
-                     "homepage_allowed": allowed, "verdict": verdict})
-    return {"robots_txt_status": status, "sitemaps": sitemaps, "bots": bots,
+                     "homepage_allowed": "/" not in blocked, "blocked_paths": blocked, "verdict": verdict})
+    return {"robots_txt_status": status, "sitemaps": sitemaps, "paths_checked": paths, "bots": bots,
             "note": "robots.txt only; WAF/CDN bot rules are not visible here — confirm them in the host's firewall."}
 
 
@@ -312,9 +349,14 @@ def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
     edges: list[dict] = []
     depth = {start: 0}
     q = deque([start])
+    gate, skipped = RobotsGate(fetch), {}
     while q and len(pages) < limit:
         url = q.popleft()
-        if url in pages or url in redirects:
+        if url in pages or url in redirects or url in skipped:
+            continue
+        ok, why = gate.check(url)
+        if not ok:  # this crawler respects robots.txt: the URL is listed, never fetched
+            skipped[url] = why
             continue
         status, final, ctype, text = fetch(url)
         final = norm_url(final)
@@ -396,7 +438,7 @@ def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
                 item["issue"] = "canonicalised to another URL"
             canonical_issues.append(item)
 
-    reached = set(pages) | set(redirects)
+    reached = set(pages) | set(redirects) | set(skipped)
     orphans = [u for u in (sitemap or []) if u not in reached and resolved(u) not in pages] if sitemap is not None else None
     ok = {u: e for u, e in pages.items() if e.get("status") == 200}
     return {
@@ -407,6 +449,7 @@ def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
         "deep_pages": sorted((u for u, e in ok.items() if e["depth"] > 3), key=lambda u: -pages[u]["depth"]),
         "hreflang_issues": hreflang_issues, "canonical_issues": canonical_issues,
         "broken_internal": sorted(u for u, e in pages.items() if e.get("status", 0) >= 400 or e.get("status") == 0),
+        "skipped_by_robots": [{"url": u, "reason": r} for u, r in skipped.items()],
     }
 
 
@@ -424,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.command in ("robots", "sitemap", "crawl") and not a.site:
         ap.error("--site is required")
     if a.command == "robots":
-        res = robots_report(a.site)
+        res = robots_report(a.site, urls=a.url)
     elif a.command == "sitemap":
         res = {"urls": sitemap_urls(a.site, limit=a.limit)}
     elif a.command == "crawl":
@@ -441,7 +484,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not a.url:
             ap.error("--url is required for facts")
-        res = {"pages": [page_facts(u) for u in a.url]}
+        gate, pages = RobotsGate(), []
+        for u in a.url:  # third-party pages too (SERP competitors): respect each host's robots.txt
+            ok, why = gate.check(u)
+            pages.append(page_facts(u) if ok else {"url": u, "skipped": why})
+        res = {"pages": pages}
     print(json.dumps(res, ensure_ascii=False, indent=2))
     return 0
 

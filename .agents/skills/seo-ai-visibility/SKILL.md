@@ -72,7 +72,7 @@ Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`robots`, `facts
 
 <!--/include-->
 
-1. **Crawler access.** `data/robots.json`. Blocking a **search/retrieval** agent (Googlebot, Bingbot, OAI-SearchBot, Claude-SearchBot, PerplexityBot, user fetchers) is critical; blocking **training** agents (GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot) is a policy choice with no direct search effect. WAF/CDN rules are not visible here.
+1. **Crawler access.** `data/robots.json` — verdicts for the homepage and every priority page (`blocked_paths` names the pages a bot may not fetch). Blocking a **search/retrieval** agent (Googlebot, Bingbot, OAI-SearchBot, Claude-SearchBot, PerplexityBot, user fetchers) is critical; blocking **training** agents (GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot) is a policy choice with no direct search effect. WAF/CDN rules are not visible here.
 2. **Referrals by assistant.** `data/ai_sources.json` (current + comparison window), filtered with the profile's AI hosts — to track a new assistant, add its host to the `AI assistants` channel rule in `seo/config/rules/<domain>.json`, never edit a call spec. Label totals a **lower bound** (some AI visits arrive as direct or unlisted referrers).
 3. **Trend.** `data/ai_trend.json` — growth and spikes per assistant (a spike = something started citing a page; find which in step 4).
 4. **Cited pages.** `data/ai_cited.json` and `computed/cited_top.json` — the landing pages assistants send people to, with key events: the proven-citable pages.

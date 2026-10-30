@@ -2,7 +2,7 @@
 name: seo-backlink-check
 description: Backlink profile for the site or a competitor — referring domains, authority, anchor mix, new/lost links over time, link gap vs a competitor — plus which linking sites actually send visitors (GA4). Use when asked "check my backlinks", "backlink profile of X", "who links to them" or "link gap vs competitor".
 license: MIT
-compatibility: Requires the `analytics` MCP server (GA4). The `dataforseo` server (Backlinks API) is optional; without it only the GA4 referral cross-check runs. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
+compatibility: Requires the `dataforseo` MCP server (Backlinks API) and the `analytics` server (GA4); without DataForSEO the pipeline stops instead of producing a report with no backlinks. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
 ---
 
 # Backlink Check
@@ -10,7 +10,7 @@ compatibility: Requires the `analytics` MCP server (GA4). The `dataforseo` serve
 > **Mechanical steps** (window, capability calls, recording, computing, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
 ## Scope
-- Backlink profile, anchor mix, link velocity and link gap (DataForSEO, optional) plus the always-available GA4 referral cross-check. All third-party link data are index **estimates**.
+- Backlink profile, anchor mix, link velocity and link gap (DataForSEO, required) plus the GA4 referral cross-check. All third-party link data are index **estimates**.
 
 ## Report Audience & Purpose
 <!--include:audience-->
@@ -32,12 +32,12 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 - "who links to them", "link gap vs competitor"
 
 ## When NOT to Use
-- No `analytics` server configured (the only required source)
+- No `dataforseo` server: the pipeline stops — referral traffic alone is not a backlink report
+- No `analytics` server configured
 - Internal links → `seo-internal-links`
 
 ## Requires
-- **Required:** `analytics` (GA4) for the referral cross-check.
-- **Optional:** `dataforseo` with Backlinks API access. Without it, run only step 7 and add an `unavailable` entry naming DataForSEO — never fabricate link counts. Rule: [`data-source-map.md`](../../../seo/references/data-source-map.md).
+- **Required:** `dataforseo` with Backlinks API access (the backlink data) and `analytics` (GA4) for the referral cross-check. Without DataForSEO the pipeline stops before any call (`requires_servers` in the plan) — never fabricate link counts. Rule: [`data-source-map.md`](../../../seo/references/data-source-map.md).
 - Request payloads: [`dataforseo-payloads.md`](../../../seo/references/dataforseo-payloads.md).
 
 ## Data Sources
@@ -68,7 +68,7 @@ Local tools: [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`anchor-mix`, 
 <!--/include-->
 
 1. **Targets.** The user's domain (<!--site:domain-->`python3 seo/site_profile.py --site <domain> --get domain`<!--/site-->) and a competitor: the plan uses the first of <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->; when the user names one, rerun with `--input competitor=<domain> --force`. No competitor → no link gap (step 5).
-2. **Profile.** `data/summary.json` and `data/rd_ours.json` (top 100 referring domains by rank). These sections are live index snapshots: set their `window` note to "DataForSEO live index, <date>". DataForSEO not configured → steps 2–5 are in `unavailable`; only step 6 applies.
+2. **Profile.** `data/summary.json` and `data/rd_ours.json` (top 100 referring domains by rank). These sections are live index snapshots: set their `window` note to "DataForSEO live index, <date>". Both pulls are required: a DataForSEO error stops the run.
 3. **Anchor mix.** `computed/anchor_mix.json` → brand / URL / generic / exact-match / other shares and the heuristic exact-match risk flag. Compare with the competitor's mix (an extra <!--cap:dfs.anchors-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/anchors/live"} (supply: data)<!--/cap--> call for the competitor, recorded) rather than with a fixed ideal.
 4. **Link velocity.** `data/new_lost.json` (comparison start → window end, by month) → new vs lost referring domains; flag spikes not explained by a campaign/PR (heuristic).
 5. **Link gap.** `computed/link_gap.json` → the outreach list (strong domains linking to the competitor, not to the user).
@@ -93,11 +93,11 @@ Provenance line first. **Verdict**: profile strength and, if asked, the gap vs t
 <!--/include-->
 
 ## Fallbacks
-- DataForSEO not configured or 401/403 → step 6 only; the pipeline lists each missing DataForSEO source in `unavailable`.
+- DataForSEO not configured → the pipeline refuses to start; 401/403 on the profile pulls → the run stops with the error. Anchors, velocity and the competitor pull stay optional (listed in `unavailable` when they fail).
 - No competitor named and none in the profile → no link gap (step 5); say so.
 
 ## Pending Data Sources
-- **DataForSEO** (optional, not configured): backlink profile, anchors, velocity and gap.
+- **DataForSEO** (required, not configured in this setup): this skill cannot run until it is — add it to `.roo/mcp.json` and set `servers.dataforseo.configured` in `seo/capabilities.json`.
 - **Ahrefs / Semrush**: not connected.
 
 ## Troubleshooting
@@ -105,7 +105,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `api_request` 40x | DataForSEO credentials missing or plan lacks Backlinks API | run the GA4 part only; name the missing access |
+| `api_request` 40x | DataForSEO credentials missing or plan lacks Backlinks API | the run stops; fix the credentials or the API plan, then rerun with `--force` |
 | Summary empty | typo in target, or the domain is not in the index | verify the target; report "no data", not "zero links" |
 | `dfs_metrics.py`: unrecognised response shape | a non-JSON or error response was recorded | re-record the raw JSON body of the call |
 

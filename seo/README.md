@@ -4,7 +4,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
 > **Status (2026-10-30):** 13 `seo-*` skills (12 reports + the weekly `seo-brief`), registry v8, CI gate [`check.sh`](check.sh) ALL GREEN offline.
-> Latest architecture review: [`plans/seo-architecture-audit-v8.md`](../plans/seo-architecture-audit-v8.md) (status of its A1–A9 items in [`memory-bank/activeContext.md`](../memory-bank/activeContext.md)).
+> Review history and the status of every review item: [`memory-bank/activeContext.md`](../memory-bank/activeContext.md).
 
 ## Layout
 
@@ -21,7 +21,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
 | [`ga4_metrics.py`](ga4_metrics.py) | GA4 landing page × source/medium rows classified with the site rules: `breakdown` per channel / page type / language (sessions, engaged sessions, engagement rate, key events) and `reconcile` (Search Console clicks vs GA4 organic sessions, `(not set)` share). |
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
-| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed run folders outside git (`<run_root>/<site>/<date>/<skill>/`; `run_root` = `/home/francesco/Documents/seo-reports`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
+| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed run folders outside git (`<run_root>/<site>/<date>/<skill>/`; `run_root` = `~/Documents/seo-reports`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
 | [`digest.py`](digest.py) | The weekly brief (`seo-brief`): 8-week KPIs, actions merged and ranked across the latest reports, new vs open since, `[done]` history, due reports. |
 | [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate** for URLs and — via [`number_check.py`](report/number_check.py) — every figure) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
@@ -42,6 +42,14 @@ configured or fail become `unavailable` entries; a required one stops the run (e
   still cut (one day over the limit, or the 64-call budget spent) is listed in `pipeline.json` `truncated`,
   the outputs built on it in `tainted`, an `unavailable` entry is added, and the number check refuses
   figures found only there — at that volume use the Search Console BigQuery export.
+- **Temporary failures.** Timeouts, rate limits (429), 5xx and a crashed server are retried (`policy.retry`,
+  default 2; waits 2 s then 6 s; a crashed server is restarted). Bad requests and writes are not.
+  `pipeline.json` records `retries` and each step's `seconds`.
+- **Fail closed.** A plan can list `requires_servers`: without them the pipeline refuses to start (e.g.
+  `seo-backlink-check` without DataForSEO — no backlink report without backlink data).
+- **Robots.txt.** The crawler respects robots.txt on every fetch (disallowed URLs are listed under
+  `skipped_by_robots`, never fetched; an unreachable robots.txt means nothing is fetched), and the AI-crawler
+  verdicts cover the homepage and every priority page (`blocked_paths`).
 - **Writes.** `gsc.indexing` is the only capability that changes something outside the workspace
   (`policy.write`). A plan step using it must set `"confirm": true` (else `--check-plans` fails) and the run
   must be started with `--allow-write`; agent calls to it need the user's approval in the chat.
@@ -109,7 +117,7 @@ frontmatter (name/description/license/compatibility) → mechanical-vs-analytica
 |---|---|---|---|
 | `seo-audit` | whole-site health: delta, declining pages, quick wins, cannibalization, indexation spot-check, engagement, AI share | search-console | analytics, dataforseo |
 | `seo-ai-visibility` | AI-assistant referrals, cited pages, AI share of organic, AI-crawler access | search-console | analytics (headline) |
-| `seo-backlink-check` | backlink profile, anchor mix, velocity, link gap, referral cross-check | analytics | dataforseo |
+| `seo-backlink-check` | backlink profile, anchor mix, velocity, link gap, referral cross-check | dataforseo, analytics | — |
 | `seo-brand-split` | brand vs non-brand per language, unattributed share | search-console + site rules | — |
 | `seo-brief` | weekly one-pager: 8-week KPIs, top actions merged from every report, changes, due reports | search-console + latest reports | — |
 | `seo-content-brief` | SERP-driven brief for one keyword, create vs expand | search-console | dataforseo, tavily, planner |

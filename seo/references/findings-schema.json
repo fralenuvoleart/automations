@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SEO Findings",
-  "description": "The LLM writes this; seo/report/validate_report.py checks it (structure, dates, evidence) and seo/report/build_report.py renders it.",
+  "description": "The LLM writes this; seo/report/validate_report.py validates it against this schema (jsonschema, Draft 7) plus the cross-field rules a schema cannot express (date order, comparison overlap, weeks inside the window, endDate before as_of), then the evidence and number checks; seo/report/build_report.py renders it. `x-message` is the human-readable error for a failing keyword.",
   "type": "object",
   "required": [
     "skill",
@@ -12,10 +12,14 @@
   ],
   "properties": {
     "skill": {
-      "type": "string"
+      "type": "string",
+      "pattern": "\\S",
+      "x-message": "must be a non-empty string"
     },
     "as_of": {
       "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "x-message": "must be YYYY-MM-DD",
       "description": "YYYY-MM-DD anchor (from seo/window.py)"
     },
     "window": {
@@ -35,16 +39,24 @@
           "description": "Sets the provenance line; default gsc"
         },
         "startDate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-message": "must be YYYY-MM-DD"
         },
         "endDate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-message": "must be YYYY-MM-DD"
         },
         "compareStartDate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-message": "must be YYYY-MM-DD"
         },
         "compareEndDate": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-message": "must be YYYY-MM-DD"
         },
         "compareMode": {
           "enum": [
@@ -59,12 +71,47 @@
           "type": "integer"
         },
         "as_of": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "x-message": "must be YYYY-MM-DD"
+        },
+        "weeks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "startDate",
+              "endDate"
+            ],
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-message": "must be YYYY-MM-DD"
+              },
+              "endDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "x-message": "must be YYYY-MM-DD"
+              }
+            }
+          },
+          "description": "Monday–Sunday weeks of a --weeks run (seo/window.py)"
         }
+      },
+      "dependencies": {
+        "compareStartDate": [
+          "compareEndDate"
+        ],
+        "compareEndDate": [
+          "compareStartDate"
+        ]
       }
     },
     "verdict": {
-      "type": "string"
+      "type": "string",
+      "pattern": "\\S",
+      "x-message": "must be a non-empty string"
     },
     "sections": {
       "type": "array",
@@ -78,16 +125,29 @@
         "properties": {
           "heading": {
             "type": "string",
+            "pattern": "^[^\\n]*\\S[^\\n]*$",
+            "x-message": "needs a non-empty, single-line heading",
             "description": "single line"
           },
           "body": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S",
+            "x-message": "needs a non-empty body"
           },
           "table": {
             "type": "array",
             "items": {
               "type": "object",
-              "description": "scalar cells only"
+              "description": "scalar cells only",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ],
+                "x-message": "table cells must be scalars"
+              }
             }
           },
           "estimate": {
@@ -107,7 +167,39 @@
               "note": {
                 "type": "string"
               }
-            }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "note"
+                ],
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  }
+                }
+              },
+              {
+                "required": [
+                  "startDate",
+                  "endDate"
+                ],
+                "properties": {
+                  "startDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "x-message": "must be YYYY-MM-DD"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "x-message": "must be YYYY-MM-DD"
+                  }
+                }
+              }
+            ],
+            "x-message": "needs startDate+endDate (YYYY-MM-DD) or a note"
           }
         }
       }
@@ -118,7 +210,9 @@
       "items": {
         "oneOf": [
           {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S",
+            "x-message": "empty action"
           },
           {
             "type": "object",
@@ -131,7 +225,9 @@
             "properties": {
               "action": {
                 "type": "string",
-                "description": "What to do, one sentence, doable in the CMS / Search Console / Ads / hosting panel."
+                "description": "What to do, one sentence, doable in the CMS / Search Console / Ads / hosting panel.",
+                "pattern": "\\S",
+                "x-message": "needs a non-empty 'action'"
               },
               "impact": {
                 "enum": [
@@ -151,7 +247,9 @@
               },
               "page": {
                 "type": "string",
-                "description": "Absolute URL the action is about (must be in the recorded evidence)."
+                "description": "Absolute URL the action is about (must be in the recorded evidence).",
+                "pattern": "^https?://",
+                "x-message": "page must be an absolute URL"
               },
               "keyword": {
                 "type": "string",
@@ -186,10 +284,14 @@
         ],
         "properties": {
           "source": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S",
+            "x-message": "must be a non-empty string"
           },
           "affects": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S",
+            "x-message": "must be a non-empty string"
           },
           "reason": {
             "type": "string"
