@@ -48,40 +48,39 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `gsc.query` | `search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query-level clicks/impressions/CTR/position (anonymized queries excluded) |
-| `planner.ideas` | `google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords, language, geo_targets) | Keyword Planner ideas: volume, competition, bids (≤20 seeds per call; server retries internally) |
-| `gsc.keywords_related` | `search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country) | Related keyword expansion (volumes are estimates) |
-| `planner.historical` | `google-ads-planner` → `keyword_historical_metrics` (supply: customer_id, keywords, language, geo_targets) | Keyword Planner metrics for an exact keyword list (≤1,000 per call) |
-| `gsc.keywords_stats` | `search-console` → `seo_keywords_research` {"type": "stats", "engine": "google"} (supply: keywords, language, country) | Keyword volume estimates (planner fallback; label as estimates) |
-| `dfs.ranked_keywords` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live"} (supply: data) | Keywords a domain ranks for (estimate) *(optional, not configured)* |
 | `gsc.geo_query` | `search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query by country (align organic with ad geo-targeting) |
+| `planner.ideas` | `google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords, language, geo_targets) | Keyword Planner ideas: volume, competition, bids (≤20 seeds per call; server retries internally) |
+| `planner.historical` | `google-ads-planner` → `keyword_historical_metrics` (supply: customer_id, keywords, language, geo_targets) | Keyword Planner metrics for an exact keyword list (≤1,000 per call) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
+| `gsc.keywords_related` | `search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country) | Related keyword expansion (volumes are estimates) *(agent call, only when a step needs it)* |
+| `gsc.keywords_stats` | `search-console` → `seo_keywords_research` {"type": "stats", "engine": "google"} (supply: keywords, language, country) | Keyword volume estimates (planner fallback; label as estimates) *(agent call, only when a step needs it)* |
+| `dfs.ranked_keywords` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live"} (supply: data) | Keywords a domain ranks for (estimate) *(optional, not configured)* *(agent call, only when a step needs it)* |
 
 <!--/include-->
 
 Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `curve`, `value`), [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`keyword-gap`), [`seo/coverage.py`](../../../seo/coverage.py), [`seo/rules.py`](../../../seo/rules.py) (`keywords`).
 
 ## Workflow
-<!--include:evidence days=90 flags=--->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-keyword-strategy --site <domain> --days 90`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-keyword-strategy --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-keyword-strategy.json`](../../../seo/plans/seo-keyword-strategy.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
-2. **Footholds.** <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current) → `python3 seo/gsc_metrics.py striking --query {run_dir}/data/query_cur.json --site <domain>` and `… curve …` (the site's own non-brand CTR by position).
-3. **Expansion (per language).** Planner available and `ads_customer_id` set: <!--cap:planner.ideas-->`google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords, language, geo_targets)<!--/cap--> with seeds in batches of **≤ 20**, `language` = <!--site:ads_language_constants-->`python3 seo/site_profile.py --site <domain> --get ads_language_constants`<!--/site--> (`--lang <code>`), `geo_targets` = <!--site:ads_geo_targets-->`python3 seo/site_profile.py --site <domain> --get ads_geo_targets`<!--/site--> (empty = all locations). Otherwise <!--cap:gsc.keywords_related-->`search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country)<!--/cap--> with `language`/`country` codes → **estimates**.
-4. **Metrics for footholds.** Striking-distance queries → <!--cap:planner.historical-->`google-ads-planner` → `keyword_historical_metrics` (supply: customer_id, keywords, language, geo_targets)<!--/cap--> (≤ 1,000 per call, same language/geo); fallback <!--cap:gsc.keywords_stats-->`search-console` → `seo_keywords_research` {"type": "stats", "engine": "google"} (supply: keywords, language, country)<!--/cap--> (**estimates**).
-5. **Value.** `python3 seo/gsc_metrics.py value --planner {run_dir}/data/hist_<lang>.json --query {run_dir}/data/query_cur.json --site <domain>` → estimated monthly clicks gain and value at target position 3 (site CTR curve; heuristic only for buckets without site data; CPC = mid of top-of-page bids, account currency). Label **estimate**.
-6. **Competitor gap (optional).** Competitor named or in <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->; DataForSEO configured → <!--cap:dfs.ranked_keywords-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live"} (supply: data)<!--/cap--> ([payloads](../../../seo/references/dataforseo-payloads.md)) → `python3 seo/dfs_metrics.py keyword-gap --ranked {run_dir}/data/ranked.json --query {run_dir}/data/query_cur.json` → their keywords where the site has no impressions.
-7. **Roadmap.** Tier 1 = footholds with value (on-page refresh + internal links); Tier 2 = gap keywords matching a service line (new pages); Tier 3 = long-tail questions from expansion (supporting articles). Drop off-topic terms regardless of volume.
-8. **Coverage.** `python3 seo/coverage.py --site <domain> --gsc {run_dir}/data/query_cur.json` → `findings.coverage` (priority keywords with/without impressions).
-9. **Tracked set.** <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`geo_cur`), then `python3 seo/rules.py --site <domain> keywords --query {run_dir}/data/query_cur.json --countries {run_dir}/data/geo_cur.json` → the tracked keywords the SEO sheet would pick from this window (Core, Brand, Proven, Opportunity, Generic) with each keyword's top 3 countries (use them for the market angle of Tier 1–3: language, examples, landing page), and `unclassified_to_review` (queries no category rule matches). Propose rule or Core-keyword changes to the user; never edit `seo/config/rules/<domain>.json` without confirmation.
-10. <!--include:history-->
+1. **Footholds.** `computed/striking.json` (striking-distance queries) and `computed/curve.json` (expected non-brand CTR by position: the run window, then the site's last 12 months, then a dated benchmark — `basis` says which).
+2. **Expansion (per language).** `data/ideas_*.json` (Keyword Planner from the profile's Core keywords, seeds ≤ 20 per batch, language <!--site:ads_language_constants-->`python3 seo/site_profile.py --site <domain> --get ads_language_constants`<!--/site-->, geo <!--site:ads_geo_targets-->`python3 seo/site_profile.py --site <domain> --get ads_geo_targets`<!--/site-->); with `--input topic=<seed>`, `data/ideas_topic_*.json` instead. Planner unavailable → <!--cap:gsc.keywords_related-->`search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country)<!--/cap--> with `language`/`country` codes (record it) → **estimates**.
+3. **Metrics for footholds.** `data/hist_*.json` (Keyword Planner historical metrics for the striking-distance queries); planner unavailable → <!--cap:gsc.keywords_stats-->`search-console` → `seo_keywords_research` {"type": "stats", "engine": "google"} (supply: keywords, language, country)<!--/cap--> (record it; **estimates**).
+4. **Value.** `computed/value_*.json` → estimated monthly clicks gain and value at target position 3 (CTR curve as in step 1 — say so when the target position's CTR comes from the benchmark; CPC = mid of top-of-page bids, account currency). Label **estimate**.
+5. **Competitor gap (optional).** Competitor named or in <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->, DataForSEO configured → <!--cap:dfs.ranked_keywords-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/dataforseo_labs/google/ranked_keywords/live"} (supply: data)<!--/cap--> ([payloads](../../../seo/references/dataforseo-payloads.md)), recorded as `ranked` → `python3 seo/dfs_metrics.py keyword-gap --ranked {run_dir}/data/ranked.json --query {run_dir}/data/query_cur.json`, recorded as `--source derived` → their keywords where the site has no impressions.
+6. **Roadmap.** Tier 1 = footholds with value (on-page refresh + internal links); Tier 2 = gap keywords matching a service line (new pages); Tier 3 = long-tail questions from expansion (supporting articles). Drop off-topic terms regardless of volume.
+7. **Coverage.** `computed/coverage.json` → `findings.coverage` (priority keywords with/without impressions).
+8. **Tracked set.** `computed/keywords.json` → the tracked keywords the SEO sheet would pick from this window (Core, Brand, Proven, Opportunity, Generic) with each keyword's top 3 countries (use them for the market angle of Tier 1–3: language, examples, landing page), and `unclassified_to_review` (queries no category rule matches). Propose rule or Core-keyword changes to the user; never edit `seo/config/rules/<domain>.json` without confirmation.
+9. <!--include:history-->
 
 **Action history.** Before recommending, read `python3 seo/site_profile.py --site <domain> --history`: never re-recommend a `[done]` action; list open `[recommended]` ones as "previously recommended, still open". After the run, record each *new* recommendation with `--append-history "<action>" --status recommended` (exact duplicates are ignored). Use `--status done` only when the user confirms an action was carried out.
 
@@ -107,7 +106,7 @@ Provenance line first. **Verdict**: highest-value cluster and the total estimate
 
 ## Fallbacks
 - Planner unavailable, quota exhausted (`RESOURCE_EXHAUSTED` after the server's own retries), or no `ads_customer_id` → `gsc.keywords_related` / `gsc.keywords_stats` estimates; one `unavailable` entry. Do not loop.
-- DataForSEO not configured → skip step 6; `unavailable` = `{source: dataforseo, affects: competitor keyword gap}`.
+- DataForSEO not configured → skip step 5; add `{source: dataforseo, affects: competitor keyword gap}` to `unavailable`.
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): competitor ranked keywords and SERP difficulty.
@@ -133,8 +132,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -171,8 +171,10 @@ Skill-specific: `seo/gsc_metrics.py`, `seo/dfs_metrics.py`, `seo/coverage.py`, `
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

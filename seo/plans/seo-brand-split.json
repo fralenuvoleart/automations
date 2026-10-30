@@ -1,0 +1,61 @@
+{
+ "skill": "seo-brand-split",
+ "window": {
+  "days": 28,
+  "compare": true
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "pq_cur",
+   "cap": "gsc.page_query",
+   "period": "current"
+  },
+  {
+   "pull": "pq_prev",
+   "cap": "gsc.page_query",
+   "period": "previous"
+  },
+  {
+   "pull": "totals_cur",
+   "cap": "gsc.daily_totals",
+   "period": "current"
+  },
+  {
+   "pull": "totals_prev",
+   "cap": "gsc.daily_totals",
+   "period": "previous"
+  },
+  {
+   "compute": "totals",
+   "run": [
+    "gsc_metrics.py",
+    "totals",
+    "--cur",
+    "{data}/totals_cur.json",
+    "--prev",
+    "{data}/totals_prev.json"
+   ]
+  },
+  {
+   "compute": "brand_split",
+   "run": [
+    "gsc_metrics.py",
+    "brand-split",
+    "--cur",
+    "{data}/pq_cur.json",
+    "--prev",
+    "{data}/pq_prev.json",
+    "--totals-cur",
+    "{data}/totals_cur.json",
+    "--totals-prev",
+    "{data}/totals_prev.json",
+    "--site",
+    "{site}"
+   ]
+  }
+ ]
+}

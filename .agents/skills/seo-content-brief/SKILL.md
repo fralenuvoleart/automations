@@ -46,54 +46,49 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `dfs.serp` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/advanced"} (supply: data) | Live Google SERP incl. SERP features (featured snippet, PAA, AI Overview) *(optional, not configured)* |
 | `web.search` | `tavily` → `tavily-search` {"search_depth": "basic", "max_results": 10} (supply: query) | Web search fallback — not Google's ranking order; label as approximate |
-| `web.extract` | `tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls) | Extract page content when `site_crawl.py facts` cannot fetch a page (JS-rendered/blocked) |
 | `planner.ideas` | `google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords, language, geo_targets) | Keyword Planner ideas: volume, competition, bids (≤20 seeds per call; server retries internally) |
-| `gsc.keywords_related` | `search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country) | Related keyword expansion (volumes are estimates) |
 | `gsc.page_query` | `search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query × page attribution (anonymized queries excluded) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
+| `web.extract` | `tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls) | Extract page content when `site_crawl.py facts` cannot fetch a page (JS-rendered/blocked) *(agent call, only when a step needs it)* |
+| `gsc.keywords_related` | `search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country) | Related keyword expansion (volumes are estimates) *(agent call, only when a step needs it)* |
 
 <!--/include-->
 
 Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`facts`), [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`topic`).
 
 ## Workflow
-<!--include:evidence days=90 flags=--->
+<!--include:evidence flags=--input_keyword="<keyword>"-->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-content-brief --site <domain> --days 90`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-content-brief --site <domain> --input keyword="<keyword>"`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-content-brief.json`](../../../seo/plans/seo-content-brief.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
-2. **The SERP.**
-   - DataForSEO configured: <!--cap:dfs.serp-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/advanced"} (supply: data)<!--/cap--> with the payload in [`dataforseo-payloads.md`](../../../seo/references/dataforseo-payloads.md); `location_code` from <!--site:serp_locations-->`python3 seo/site_profile.py --site <domain> --get serp_locations`<!--/site--> for the keyword's language — if unset, ask the user which market to sample. Gives order + SERP features (featured snippet, PAA, AI Overview).
-   - Otherwise: <!--cap:web.search-->`tavily` → `tavily-search` {"search_depth": "basic", "max_results": 10} (supply: query)<!--/cap--> with the keyword → label the section "**approximate SERP (web search, not Google's order); SERP features unknown**" and add an `unavailable` entry for DataForSEO.
-3. **Top pages.** `python3 seo/site_crawl.py facts --url <top 3 organic URLs>` (record `--source site_crawl --name serp_facts`): headings, word count, first 45 words, tables, schema types. If a page cannot be fetched, <!--cap:web.extract-->`tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls)<!--/cap-->.
-4. **Keyword set.**
-   - Planner available and <!--site:ads_customer_id-->`python3 seo/site_profile.py --site <domain> --get ads_customer_id`<!--/site--> set: <!--cap:planner.ideas-->`google-ads-planner` → `generate_keyword_ideas` (supply: customer_id, keywords, language, geo_targets)<!--/cap--> with ≤ 20 seeds, `language` = <!--site:ads_language_constants-->`python3 seo/site_profile.py --site <domain> --get ads_language_constants`<!--/site--> (`--lang <code>`), `geo_targets` = <!--site:ads_geo_targets-->`python3 seo/site_profile.py --site <domain> --get ads_geo_targets`<!--/site--> (empty = all locations).
-   - Otherwise: <!--cap:gsc.keywords_related-->`search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country)<!--/cap--> with `language`/`country` codes → label volumes **estimates**.
-5. **Existing foothold.** <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current) → `python3 seo/gsc_metrics.py topic --page-query {run_dir}/data/pq_cur.json --terms "<main terms, comma-separated>"`. If one existing page already gets impressions for the cluster, recommend **expanding that page** instead of a new one (avoids cannibalization). Pages ranking for adjacent queries are the internal-link sources.
-6. **Assemble the brief:**
+1. **The SERP.** `data/serp.json` (DataForSEO; market = the keyword's language in <!--site:serp_locations-->`python3 seo/site_profile.py --site <domain> --get serp_locations`<!--/site-->) → order + SERP features (featured snippet, PAA, AI Overview). Only `data/web_serp.json` (web-search fallback) → label the section "**approximate SERP (web search, not Google's order); SERP features unknown**" (the DataForSEO gap is already in `unavailable`). Neither (no `serp_locations` entry for the language) → ask the user which market to sample.
+2. **Top pages.** `data/serp_facts.json` (top 3 organic URLs): headings, word count, first 45 words, tables, schema types. A page that could not be fetched → <!--cap:web.extract-->`tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls)<!--/cap--> (record it).
+3. **Keyword set.** `data/ideas_*.json` (Keyword Planner, seeds ≤ 20, language <!--site:ads_language_constants-->`python3 seo/site_profile.py --site <domain> --get ads_language_constants`<!--/site-->, geo <!--site:ads_geo_targets-->`python3 seo/site_profile.py --site <domain> --get ads_geo_targets`<!--/site-->). Planner unavailable → <!--cap:gsc.keywords_related-->`search-console` → `seo_keywords_research` {"type": "related", "engine": "google"} (supply: keywords, language, country)<!--/cap--> with `language`/`country` codes (record it) → label volumes **estimates**.
+4. **Existing foothold.** `computed/foothold.json` (pages with impressions on the keyword's terms). If one existing page already gets impressions for the cluster, recommend **expanding that page** instead of a new one (avoids cannibalization). Pages ranking for adjacent queries are the internal-link sources. To widen the terms: `python3 seo/gsc_metrics.py topic --page-query {run_dir}/data/pq_cur.json --terms "<main terms, comma-separated>"`, recorded as `--source derived`.
+5. **Assemble the brief:**
    - Target + secondary keywords (volumes labelled), intent and format inferred from what ranks.
-   - SERP feature target — only when features are known from step 2 (definition ≤ 45 words, table, or list). Never promise FAQ/HowTo rich results (no longer shown by Google).
+   - SERP feature target — only when features are known from step 1 (definition ≤ 45 words, table, or list). Never promise FAQ/HowTo rich results (no longer shown by Google).
    - Title (~50–60 characters, key phrase first; Google truncates by pixel width) and meta description (~150 characters).
    - H2/H3 outline, each with one line on what it must say; questions to answer (PAA if known, else question-form related keywords).
    - Table stakes (what all top pages cover) vs the differentiating angle (what none cover).
    - GEO checklist: direct answer in the first ~45 words, specific dated numbers with sources, a comparison table, entity markup (`Organization` + `sameAs`, author/reviewer) — see [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md).
-   - Internal links: 3–5 source pages from step 5 with natural anchors in the page's language.
-   - Target length: median `word_count` of the top 3 (from step 3) — match, don't pad.
+   - Internal links: 3–5 source pages from step 4 with natural anchors in the page's language.
+   - Target length: median `word_count` of the top 3 (from step 2) — match, don't pad.
 
 ## Determinism
 - GSC window: last 90 days (from `.run_state.json`). SERP and page facts are live snapshots: set the section `window` note "SERP/page snapshot, <date>".
 - Volumes: planner first, `seo_keywords_research` second (labelled estimates); never mixed in one table without a source column.
 
 ## Output
-Provenance line first. **Verdict**: create vs expand (and which page), and the winning angle. Then the brief sections from step 6, ready to hand to a writer.
+Provenance line first. **Verdict**: create vs expand (and which page), and the winning angle. Then the brief sections from step 5, ready to hand to a writer.
 
 <!--include:pipeline-->
 
@@ -134,8 +129,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -174,8 +170,10 @@ Skill-specific: `seo/site_crawl.py` (Execute), `seo/gsc_metrics.py` (Execute), [
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

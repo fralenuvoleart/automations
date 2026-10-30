@@ -37,6 +37,7 @@ MCP_JSON = ROOT / ".roo" / "mcp.json"
 SKILLS = ROOT / ".agents" / "skills"
 TOOL_SCHEMAS = HERE / "tool-schemas.json"
 COMMON = HERE / "references" / "skill-common"
+PLANS = HERE / "plans"
 SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
 
 TOKEN_RE = re.compile(r"\{\{cap:([A-Za-z0-9_.]+)\}\}")
@@ -142,7 +143,32 @@ def caps_used(text: str) -> list[str]:
     return seen
 
 
-def _gen_datasources(caps_in: list[str], data: dict) -> str:
+def _plan_steps(skill: str) -> list[dict]:
+    """Steps of the skill's data plans (seo/plans/<skill>.json and its modes, e.g. <skill>.weekly.json)."""
+    steps: list[dict] = []
+    for f in sorted(PLANS.glob(f"{skill}.json")) + sorted(PLANS.glob(f"{skill}.*.json")):
+        steps += json.loads(f.read_text()).get("steps", [])
+    return steps
+
+
+def plan_caps(skill: str) -> list[str]:
+    """Capabilities the pipeline calls for the skill, in plan order."""
+    out: list[str] = []
+    for st in _plan_steps(skill):
+        if st.get("cap") and st["cap"] not in out:
+            out.append(st["cap"])
+    if any(c.startswith("gsc.") for c in out) and "gsc.sites_list" not in out:
+        out.append("gsc.sites_list")  # the pipeline resolves the property with it when the profile has no gsc_property
+    return out
+
+
+def skill_caps(skill: str, text: str) -> list[str]:
+    """Plan capabilities first, then the ones only the SKILL.md text calls (agent judgment steps)."""
+    plan = plan_caps(skill)
+    return plan + [c for c in caps_used(text) if c not in plan]
+
+
+def _gen_datasources(caps_in: list[str], data: dict, plan: list[str] | None = None) -> str:
     caps = data["capabilities"]
     rows = ["| Capability | Call | Purpose |", "|---|---|---|"]
     for cid in caps_in:
@@ -150,7 +176,8 @@ def _gen_datasources(caps_in: list[str], data: dict) -> str:
         if not c:
             continue
         status = "" if data["servers"].get(c["server"], {}).get("configured", True) else " *(optional, not configured)*"
-        rows.append(f"| `{cid}` | {display(c)} | {c.get('desc', '')}{status} |")
+        who = "" if plan is None or cid in plan else " *(agent call, only when a step needs it)*"
+        rows.append(f"| `{cid}` | {display(c)} | {c.get('desc', '')}{status}{who} |")
     return "\n".join(rows)
 
 
@@ -172,7 +199,7 @@ def _gen_configuration(caps_in: list[str], data: dict) -> str:
     return "\n".join(lines)
 
 
-def _gen_privacy(caps_in: list[str], data: dict, text: str) -> str:
+def _gen_privacy(caps_in: list[str], data: dict, text: str, plan_scripts: bool = False) -> str:
     third = [(s, data["servers"][s]["third_party"]) for s in _servers_used(caps_in, data)
              if data["servers"].get(s, {}).get("third_party")]
     lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`."]
@@ -181,25 +208,24 @@ def _gen_privacy(caps_in: list[str], data: dict, text: str) -> str:
         lines.append(f"- Third-party calls: target domains/keywords/URLs are sent to {names} when those servers are used; everything else goes only to Google APIs via the configured MCP servers.")
     else:
         lines.append("- Third-party calls: none — capability calls go only to Google APIs via the configured MCP servers.")
-    if "seo/site_crawl.py" in text:
+    if "seo/site_crawl.py" in text or plan_scripts:
         lines.append("- `seo/site_crawl.py` fetches public pages directly from the target site (polite rate, identifying User-Agent).")
     return "\n".join(lines)
 
 
 def _render_include(name: str, attrs: dict, skill: str, text: str, data: dict) -> str:
-    caps_in = caps_used(text)
+    caps_in = skill_caps(skill, text)
     if name == "datasources":
-        return _gen_datasources(caps_in, data)
+        return _gen_datasources(caps_in, data, plan_caps(skill))
     if name == "configuration":
         return _gen_configuration(caps_in, data)
     if name == "privacy":
-        return _gen_privacy(caps_in, data, text)
+        crawls = any((st.get("run") or [""])[0] == "site_crawl.py" for st in _plan_steps(skill))
+        return _gen_privacy(caps_in, data, text, crawls)
     path = COMMON / f"{name}.md"
     if not path.exists():
         raise KeyError(f"unknown include '{name}' (no {path.relative_to(ROOT)})")
     out = path.read_text().strip("\n")
-    if "weeks" in attrs:  # weeks=8 -> "--weeks 8" instead of "--days N"
-        out = out.replace("--days <<days>>", "--weeks <<weeks>>")
     for k, v in {"skill": skill, **attrs}.items():
         if k == "flags":  # flags=--compare_--yoy -> "--compare --yoy"; flags=- -> none
             if v == "-":

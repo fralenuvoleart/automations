@@ -1,0 +1,70 @@
+{
+ "skill": "seo-internal-links",
+ "window": {
+  "days": 90
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "pull": "pq_cur",
+   "cap": "gsc.page_query",
+   "period": "current"
+  },
+  {
+   "compute": "top_pages",
+   "run": [
+    "gsc_metrics.py",
+    "top-pages",
+    "--page",
+    "{data}/page_cur.json",
+    "--by",
+    "impressions",
+    "--limit",
+    "20"
+   ]
+  },
+  {
+   "local": "crawl",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "crawl",
+    "--site",
+    "https://{domain}",
+    "--profile",
+    "{site}",
+    "--limit",
+    "500"
+   ]
+  },
+  {
+   "compute": "underlinked",
+   "run": [
+    "site_crawl.py",
+    "underlinked",
+    "--crawl",
+    "{data}/crawl.json",
+    {
+     "$each": "--url",
+     "$else": [
+      {
+       "$from": "profile:priority_pages"
+      },
+      {
+       "$from": "computed:top_pages",
+       "path": "pages[].page"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

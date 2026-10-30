@@ -4,6 +4,7 @@
     {"term": "Clicks", "match": ["click"], "text": "Clicks from Google Search results to the site (Search Console)."},
     {"term": "Impressions", "match": ["impression"], "text": "Times a link to the site was shown in Google results (Search Console)."},
     {"term": "CTR", "match": ["ctr"], "text": "Click-through rate: clicks ÷ impressions."},
+    {"term": "Expected CTR", "match": ["expected ctr"], "text": "The CTR this site usually gets at a given position, from its own non-brand Search Console data (this period, else its last 12 months); where it has too little data, a 2025+ industry study measured after Google's AI Overviews, labelled heuristic."},
     {"term": "Position", "match": ["position"], "text": "Average ranking in Google results, weighted by impressions; 1 is the top result, so lower is better."},
     {"term": "Anonymized queries", "match": ["anonymi", "unattributed"], "text": "Rare searches Google hides for privacy: counted in site totals, missing from query-level rows."},
     {"term": "Session", "match": ["session"], "text": "One visit to the site (GA4)."},

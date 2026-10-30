@@ -1,0 +1,185 @@
+{
+ "skill": "seo-ai-visibility",
+ "window": {
+  "days": 28,
+  "compare": true
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "local": "robots",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "robots",
+    "--site",
+    "https://{domain}"
+   ],
+   "optional": true,
+   "affects": "AI-crawler access"
+  },
+  {
+   "pull": "ai_sources",
+   "cap": "ga4.ai_sources",
+   "period": "both",
+   "args": {
+    "dimension_filter": {
+     "$from": "ai_filter"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "AI referrals (GA4)"
+  },
+  {
+   "pull": "ai_trend",
+   "cap": "ga4.ai_time_series",
+   "period": "current",
+   "args": {
+    "dimension_filter": {
+     "$from": "ai_filter"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "AI referral trend (GA4)"
+  },
+  {
+   "pull": "ai_cited",
+   "cap": "ga4.ai_cited_pages",
+   "period": "current",
+   "args": {
+    "dimension_filter": {
+     "$from": "ai_filter"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "cited pages (GA4)"
+  },
+  {
+   "pull": "ga4_lp",
+   "cap": "ga4.landing_source",
+   "period": "both",
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "AI share of organic (GA4)"
+  },
+  {
+   "pull": "genai",
+   "cap": "gsc.genai",
+   "args": {
+    "days": "{window_days}"
+   },
+   "optional": true,
+   "affects": "AI-shaped queries (heuristic)"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "compute": "channels",
+   "run": [
+    "ga4_metrics.py",
+    "breakdown",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ga4_lp.json",
+    "--by",
+    "channel"
+   ],
+   "when": [
+    "data:ga4_lp"
+   ]
+  },
+  {
+   "compute": "cited_top",
+   "run": [
+    "ga4_metrics.py",
+    "top-pages",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ai_cited.json",
+    "--limit",
+    "3"
+   ],
+   "when": [
+    "data:ai_cited"
+   ]
+  },
+  {
+   "compute": "misses",
+   "run": [
+    "ga4_metrics.py",
+    "misses",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ai_cited.json",
+    "--gsc-pages",
+    "{data}/page_cur.json",
+    "--limit",
+    "5"
+   ],
+   "when": [
+    "data:ai_cited"
+   ]
+  },
+  {
+   "compute": "organic_top",
+   "run": [
+    "gsc_metrics.py",
+    "top-pages",
+    "--page",
+    "{data}/page_cur.json",
+    "--limit",
+    "3"
+   ],
+   "when": [
+    "!data:ai_cited"
+   ]
+  },
+  {
+   "local": "cited_facts",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "facts",
+    {
+     "$each": "--url",
+     "$else": [
+      {
+       "$from": "computed:cited_top",
+       "path": "pages[].page"
+      },
+      {
+       "$from": "computed:organic_top",
+       "path": "pages[].page"
+      }
+     ]
+    }
+   ],
+   "optional": true,
+   "affects": "citation recipe (page facts)"
+  }
+ ]
+}

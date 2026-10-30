@@ -46,41 +46,40 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `ga4.properties` | `analytics` → `get_account_summaries` | GA4 accounts/properties (connection check) |
 | `ga4.ai_sources` | `analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges, dimension_filter) | AI-assistant referral sessions (filter from `site_profile.py --ga4-ai-filter`) |
 | `ga4.ai_time_series` | `analytics` → `run_report` {"dimensions": ["date", "sessionSource"], "metrics": ["sessions"]} (supply: property_id, date_ranges, dimension_filter) | Daily AI-assistant referral sessions (same AI filter) |
 | `ga4.ai_cited_pages` | `analytics` → `run_report` {"dimensions": ["sessionSource", "landingPagePlusQueryString"], "metrics": ["sessions", "keyEvents"]} (supply: property_id, date_ranges, dimension_filter) | Landing pages AI assistants send visitors to (same AI filter) |
-| `ga4.channels` | `analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges) | Sessions/key events by channel and source (organic baseline) |
+| `ga4.landing_source` | `analytics` → `run_report` {"dimensions": ["landingPage", "sessionSourceMedium"], "metrics": ["sessions", "engagedSessions", "keyEvents"], "limit": 25000} (supply: property_id, date_ranges) | Sessions, engaged sessions and key events by landing page × source/medium (classified with the site rules: channel, page type, language) |
 | `gsc.genai` | `search-console` → `genai_query_insights` {"engine": "google", "includePages": true} (supply: siteUrl, days) | AI-prompt-shaped GSC queries (heuristic; `days` = window length) |
-| `web.extract` | `tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls) | Extract page content when `site_crawl.py facts` cannot fetch a page (JS-rendered/blocked) |
 | `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
-| `gsc.analytics_advanced` | `search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate) | Aggregate GA4 metrics via search-console (no source breakdown) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
+| `ga4.channels` | `analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges) | Sessions/key events by channel and source (organic baseline) *(agent call, only when a step needs it)* |
+| `web.extract` | `tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls) | Extract page content when `site_crawl.py facts` cannot fetch a page (JS-rendered/blocked) *(agent call, only when a step needs it)* |
+| `gsc.analytics_advanced` | `search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate) | Aggregate GA4 metrics via search-console (no source breakdown) *(agent call, only when a step needs it)* |
 
 <!--/include-->
 
 Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`robots`, `facts`), [`seo/site_profile.py`](../../../seo/site_profile.py) (`--ga4-ai-filter`).
 
 ## Workflow
-<!--include:evidence days=28 flags=--compare-->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-ai-visibility --site <domain> --days 28 --compare`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-ai-visibility --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-ai-visibility.json`](../../../seo/plans/seo-ai-visibility.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap--> (required); <!--cap:ga4.properties-->`analytics` → `get_account_summaries`<!--/cap--> (optional — if it fails, skip steps 4–7 and add a GA4 `unavailable` entry).
-2. **Crawler access.** `python3 seo/site_crawl.py robots --site https://<domain>` (record `--source site_crawl --name robots`). Blocking a **search/retrieval** agent (Googlebot, Bingbot, OAI-SearchBot, Claude-SearchBot, PerplexityBot, user fetchers) is critical; blocking **training** agents (GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot) is a policy choice with no direct search effect. Note that WAF/CDN rules are not visible here.
-3. **AI filter.** `python3 seo/site_profile.py --site <domain> --ga4-ai-filter` (record `--source site_profile --name ai_filter`) → the `dimension_filter` for steps 4–6. To track a new assistant, add its host to the profile — never edit a call spec.
-4. **Referrals by assistant.** <!--cap:ga4.ai_sources-->`analytics` → `run_report` {"dimensions": ["sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges, dimension_filter)<!--/cap--> with `date_ranges` = current + comparison window. Label totals a **lower bound** (some AI visits arrive as direct or unlisted referrers).
-5. **Trend.** <!--cap:ga4.ai_time_series-->`analytics` → `run_report` {"dimensions": ["date", "sessionSource"], "metrics": ["sessions"]} (supply: property_id, date_ranges, dimension_filter)<!--/cap--> (current window) — growth and spikes per assistant (a spike = something started citing a page; find which in step 6).
-6. **Cited pages.** <!--cap:ga4.ai_cited_pages-->`analytics` → `run_report` {"dimensions": ["sessionSource", "landingPagePlusQueryString"], "metrics": ["sessions", "keyEvents"]} (supply: property_id, date_ranges, dimension_filter)<!--/cap--> — the landing pages assistants send people to, with key events: the proven-citable pages.
-7. **Share and quality.** <!--cap:ga4.channels-->`analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges)<!--/cap--> (current + comparison) → **AI share of organic** = AI sessions ÷ `Organic Search` sessions (headline, lower bound); key-event rate of AI vs organic sessions.
-8. **AI-shaped queries (heuristic).** <!--cap:gsc.genai-->`search-console` → `genai_query_insights` {"engine": "google", "includePages": true} (supply: siteUrl, days)<!--/cap--> with `days` = the window length (28). This tool uses its own lookback to the latest data: set that section's `window` note. Patterns only — never the headline.
-9. **Citation recipe.** `python3 seo/site_crawl.py facts --url <top 3 cited pages>` (record). Compare `first_45_words` (direct answer?), `tables`, `jsonld.types`, `has_sameAs`, `has_author_or_reviewer` — that pattern is this site's citation recipe. If a page cannot be fetched, use <!--cap:web.extract-->`tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls)<!--/cap-->.
-10. **Misses.** <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current) → the 5 pages with the most organic clicks and zero AI referrals in step 6 (same paths) — restructure toward the recipe.
+1. **Crawler access.** `data/robots.json`. Blocking a **search/retrieval** agent (Googlebot, Bingbot, OAI-SearchBot, Claude-SearchBot, PerplexityBot, user fetchers) is critical; blocking **training** agents (GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot) is a policy choice with no direct search effect. WAF/CDN rules are not visible here.
+2. **Referrals by assistant.** `data/ai_sources.json` (current + comparison window), filtered with the profile's AI hosts — to track a new assistant, add its host to the `AI assistants` channel rule in `seo/config/rules/<domain>.json`, never edit a call spec. Label totals a **lower bound** (some AI visits arrive as direct or unlisted referrers).
+3. **Trend.** `data/ai_trend.json` — growth and spikes per assistant (a spike = something started citing a page; find which in step 4).
+4. **Cited pages.** `data/ai_cited.json` and `computed/cited_top.json` — the landing pages assistants send people to, with key events: the proven-citable pages.
+5. **Share and quality.** `computed/channels.json` → **AI share of organic** = `ai_share_of_organic` (headline, lower bound); `key_event_rate` of the AI vs the organic channel. If the user compares with the GA4 UI (default channel group, not the site rules), pull <!--cap:ga4.channels-->`analytics` → `run_report` {"dimensions": ["sessionDefaultChannelGroup", "sessionSource", "sessionMedium"], "metrics": ["sessions", "keyEvents", "engagementRate"]} (supply: property_id, date_ranges)<!--/cap--> for the same windows (recorded) and show both.
+6. **AI-shaped queries (heuristic).** `data/genai.json` — the tool uses its own lookback to the latest data: set that section's `window` note. Patterns only — never the headline.
+7. **Citation recipe.** `data/cited_facts.json` (top 3 cited pages): compare `first_45_words` (direct answer?), `tables`, `jsonld.types`, `has_sameAs`, `has_author_or_reviewer` — that pattern is this site's citation recipe. A page that could not be fetched → <!--cap:web.extract-->`tavily` → `tavily-extract` {"extract_depth": "basic"} (supply: urls)<!--/cap--> (record it).
+8. **Misses.** `computed/misses.json` → the 5 pages with the most organic clicks and zero AI referrals — restructure them toward the recipe.
 
 ## Determinism
 - One window (28 days vs the previous 28) from `.run_state.json`; GA4 `date_ranges` use exactly those dates.
@@ -102,7 +101,7 @@ Provenance line first. **Verdict**: AI share of organic (lower bound), trend, to
 <!--/include-->
 
 ## Fallbacks
-- GA4 unavailable → crawler access + AI-shaped queries + citation recipe from step 9 on pages chosen by organic clicks; the report is labelled **heuristic, not measured**. <!--cap:gsc.analytics_advanced-->`search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate)<!--/cap--> may add aggregate GA4 context but has no source breakdown — never use it for AI attribution.
+- GA4 unavailable → crawler access + AI-shaped queries + the citation recipe (step 7) on the top 3 pages by organic clicks (the plan switches to `computed/organic_top.json` by itself); the report is labelled **heuristic, not measured**. <!--cap:gsc.analytics_advanced-->`search-console` → `analytics_advanced` (supply: propertyId, metricType, startDate, endDate)<!--/cap--> may add aggregate GA4 context but has no source breakdown — never use it for AI attribution.
 - Page fetch blocked → `web.extract`; if both fail, list the page without recipe notes.
 
 ## Pending Data Sources
@@ -129,8 +128,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -168,8 +168,10 @@ Skill-specific: `seo/site_crawl.py` (Execute), `seo/site_profile.py` (Execute).
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

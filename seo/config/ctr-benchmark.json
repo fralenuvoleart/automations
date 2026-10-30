@@ -1,0 +1,12 @@
+{
+ "$comment": "Last-resort expected CTR by position. Used only for positions where the site's own non-brand data (this run's window, then its last 12 months) has fewer than curve_min_impressions. Must come from a post-AI-Overviews study measured in Search Console; replace it when `python3 seo/gsc_metrics.py benchmark` reports it stale.",
+ "source": "GrowthSRC Media, Google organic CTR study 2025 (Search Console data, 30+ sites, 200K+ keywords, after the AI Overviews rollout)",
+ "reported_in": [
+  "https://www.stanventures.com/news/ai-overviews-impact-organic-ctrs-32-drop-3635/",
+  "https://marketing4ecommerce.net/en/seo-organic-positioning-no-longer-guarantees-success/"
+ ],
+ "published": "2025-08",
+ "ai_overviews": "included (blended SERPs with and without AI Overviews)",
+ "max_age_months": 18,
+ "positions": {"1": 0.19, "2": 0.126, "3": 0.1065, "4": 0.0784, "5": 0.0719}
+}

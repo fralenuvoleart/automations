@@ -1,0 +1,131 @@
+{
+ "skill": "seo-rank-tracking",
+ "window": {
+  "weeks": 8
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "query_w{i}",
+   "cap": "gsc.query",
+   "period": "weeks"
+  },
+  {
+   "pull": "page_w{i}",
+   "cap": "gsc.page",
+   "period": "weeks"
+  },
+  {
+   "pull": "pq",
+   "cap": "gsc.page_query",
+   "period": "window"
+  },
+  {
+   "pull": "geo",
+   "cap": "gsc.geo_query",
+   "period": "window"
+  },
+  {
+   "compute": "trend_category",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "trend",
+    "--by",
+    "category",
+    "--rows",
+    {
+     "$glob": "{data}/query_w*.json"
+    }
+   ]
+  },
+  {
+   "compute": "trend_keyword",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "trend",
+    "--by",
+    "keyword",
+    "--rows",
+    {
+     "$glob": "{data}/query_w*.json"
+    }
+   ]
+  },
+  {
+   "compute": "trend_page_tag",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "trend",
+    "--by",
+    "page_tag",
+    "--rows",
+    {
+     "$glob": "{data}/page_w*.json"
+    }
+   ]
+  },
+  {
+   "compute": "trend_language",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "trend",
+    "--by",
+    "language",
+    "--rows",
+    {
+     "$glob": "{data}/page_w*.json"
+    }
+   ]
+  },
+  {
+   "compute": "movers",
+   "run": [
+    "gsc_metrics.py",
+    "movers",
+    "--cur",
+    "{data}/query_w{last_week}.json",
+    "--prev",
+    "{data}/query_w{prev_week}.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "keywords",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "keywords",
+    "--query",
+    "{data}/query_w{last_week}.json",
+    "--prev",
+    "{data}/query_w{prev_week}.json",
+    "--countries",
+    "{data}/geo.json"
+   ]
+  },
+  {
+   "compute": "targets",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "targets",
+    "--page-query",
+    "{data}/pq.json"
+   ]
+  }
+ ]
+}

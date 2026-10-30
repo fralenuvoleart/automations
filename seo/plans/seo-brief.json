@@ -1,0 +1,28 @@
+{
+ "skill": "seo-brief",
+ "window": {
+  "weeks": 8
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "totals",
+   "cap": "gsc.daily_totals",
+   "period": "window"
+  },
+  {
+   "compute": "brief",
+   "run": [
+    "digest.py",
+    "--site",
+    "{site}",
+    "--run-dir",
+    "{run_dir}",
+    "--json"
+   ]
+  }
+ ]
+}

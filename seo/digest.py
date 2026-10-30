@@ -206,14 +206,30 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--site", required=True)
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--top", type=int, default=7)
+    ap.add_argument("--json", action="store_true", help="print the brief's numbers as JSON (pipeline computed output)")
     a = ap.parse_args(argv)
     try:
         f = build(a.site, Path(a.run_dir), a.top)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1
-    print(f"wrote {a.run_dir}/findings.json — {f['verdict']}")
+    if a.json:
+        print(json.dumps(numbers(f), ensure_ascii=False, indent=1))
+    else:
+        print(f"wrote {a.run_dir}/findings.json — {f['verdict']}")
     return 0
+
+
+def numbers(f: dict) -> dict:
+    """Every count and change the brief states, so the number check can trace them."""
+    sec = {s["heading"]: s for s in f["sections"]}
+    kpis = (sec.get("KPIs (last 8 weeks)") or {}).get("table") or []
+    top = (sec.get("Top actions") or {}).get("table") or []
+    out = {"kpis": kpis, "top_actions": len(top), "new_actions": sum(r.get("status") == "new" for r in top)}
+    nums = [float(x) for x in re.findall(r"[-+]?\d+(?:\.\d+)?", " ".join(s.get("body", "") for s in f["sections"])
+                                          + " " + f["verdict"])]
+    out["stated"] = nums  # the digest wrote these itself
+    return out
 
 
 if __name__ == "__main__":

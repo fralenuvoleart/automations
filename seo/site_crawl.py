@@ -12,6 +12,7 @@ Commands (all print JSON):
              # BFS from the homepage: inlinks, click depth, orphans vs sitemap,
              # hreflang reciprocity/self/x-default, cross-language canonicals
     facts    --url URL [--url URL ...]                    # title/meta/headings/first 45 words/tables/JSON-LD
+    underlinked --crawl F --url TARGET [--url …]          # targets that are orphaned, weakly linked or deep
 """
 from __future__ import annotations
 
@@ -284,6 +285,23 @@ def sitemap_urls(site: str, fetch=http_fetch, limit: int = 5000) -> list[str]:
     return [norm_url(u) for u in urls[:limit]]
 
 
+# ------------------------------------------------------------- underlinked ---
+def underlinked(crawl_res: dict, targets: list[str]) -> list[dict]:
+    """Per target: inlinks, depth and why it is under-linked (orphan / weakly linked / deep / not crawled)."""
+    pages = crawl_res.get("pages") or {}
+    orphans, weak, deep = (set(crawl_res.get(k) or []) for k in ("orphans_vs_sitemap", "weakly_linked", "deep_pages"))
+    out = []
+    for t in targets:
+        u = norm_url(t)
+        e = pages.get(u)
+        reasons = [r for r, s in (("orphan", orphans), ("weakly_linked", weak), ("deep", deep)) if u in s]
+        if e is None and u not in orphans:
+            reasons.append("not_crawled")
+        out.append({"page": u, "inlinks": (e or {}).get("inlinks"), "depth": (e or {}).get("depth"),
+                    "outlinks": len((e or {}).get("outlinks") or []), "underlinked": bool(reasons), "reasons": reasons})
+    return sorted(out, key=lambda r: (not r["underlinked"], r["inlinks"] if r["inlinks"] is not None else -1))
+
+
 # ------------------------------------------------------------------- crawl ---
 def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
           lang_of=None, sitemap: list[str] | None = None, sleep=time.sleep) -> dict:
@@ -395,7 +413,8 @@ def crawl(site: str, limit: int = 300, delay: float = 0.5, fetch=http_fetch,
 # --------------------------------------------------------------------- CLI ---
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["robots", "sitemap", "crawl", "facts"])
+    ap.add_argument("command", choices=["robots", "sitemap", "crawl", "facts", "underlinked"])
+    ap.add_argument("--crawl", help="recorded crawl JSON (underlinked)")
     ap.add_argument("--site")
     ap.add_argument("--url", action="append", default=[])
     ap.add_argument("--limit", type=int, default=300)
@@ -414,6 +433,11 @@ def main(argv: list[str] | None = None) -> int:
             import rules
             lang_of = rules.load(a.profile).page_language
         res = crawl(a.site, a.limit, a.delay, lang_of=lang_of, sitemap=sitemap_urls(a.site))
+    elif a.command == "underlinked":
+        if not a.crawl:
+            ap.error("--crawl is required for underlinked")
+        import gsc_metrics
+        res = {"targets": underlinked(gsc_metrics._unwrap(json.loads(Path(a.crawl).read_text())), a.url)}
     else:
         if not a.url:
             ap.error("--url is required for facts")

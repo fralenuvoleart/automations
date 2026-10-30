@@ -12,9 +12,10 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 |---|---|
 | [`capabilities.json`](capabilities.json) | **Single source of truth**: capability ID → MCP `server` + `tool` + fixed `args` + `runtime` + `desc` (+ `policy`). |
 | [`resolve.py`](resolve.py) | Renders skills from `{{cap:}}` / `{{site:}}` / `{{include:}}` tokens into marker blocks and **re-renders every block** on each `--write`; validates names, policies and schemas. |
+| [`pipeline.py`](pipeline.py) / [`plans/`](plans/) | **The data half of every skill**: runs `plans/<skill>[.<mode>].json` — seeds the run, makes every MCP call (cache first) through `mcp_client.py`, records it, runs every analysis script into `computed/`, and writes `pipeline.json` + the `unavailable` list. The agent only interprets. |
 | [`window.py`](window.py) / [`orchestrate.py`](orchestrate.py) | Deterministic windows per source (GSC lag 3, GA4 lag 2, snapshot; previous or YoY compare; Monday–Sunday weeks with `--weeks`) and run seeding. |
 | [`record.py`](record.py) | Records every raw tool response as run evidence (`context.json` + `data/`); rejects non-runtime args and off-window dates. |
-| [`gsc_metrics.py`](gsc_metrics.py) | All GSC analysis: movers, striking distance, low CTR, CTR curve, cannibalization, decline classes, brand/language split, value model, topic filter, truncation and anonymized share. |
+| [`gsc_metrics.py`](gsc_metrics.py) | All GSC analysis: movers, striking distance, low CTR, CTR curve (site → site's last 12 months → dated post-AI-Overviews benchmark in [`config/ctr-benchmark.json`](config/ctr-benchmark.json)), cannibalization, decline classes, brand/language split, value model, topic filter, truncation and anonymized share. |
 | [`site_crawl.py`](site_crawl.py) | Stdlib crawler: robots.txt verdicts per search/AI crawler, sitemaps, link graph (inlinks, depth, orphans), hreflang reciprocity, canonicals, page facts. |
 | [`dfs_metrics.py`](dfs_metrics.py) / [`ads_metrics.py`](ads_metrics.py) | DataForSEO anchor mix / link gap / keyword gap; Ads × GSC paid-organic overlap. |
 | [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
@@ -22,20 +23,25 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
 | [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed, git-ignored run folders (`<run_root>/<site>/<date>/<skill>/`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
 | [`digest.py`](digest.py) | The weekly brief (`seo-brief`): 8-week KPIs, actions merged and ranked across the latest reports, new vs open since, `[done]` history, due reports. |
-| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate**) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
+| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate** for URLs and — via [`number_check.py`](report/number_check.py) — every figure) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
-| [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client and the cached tool schemas used for offline validation. |
+| [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client (`Session`: one handshake, many calls; fails fast when a server exits) and the cached tool schemas used for offline validation. |
 | [`mcp-servers/google-ads-planner/`](mcp-servers/google-ads-planner/) | Local Keyword Planner server (ideas + historical metrics; API limits enforced). |
 
-## How a skill runs (Orchestrate → Record → Compute → Write → Validate → Build)
+## How a skill runs (Pipeline → Write → Validate → Build)
+
+`python3 seo/pipeline.py --skill S --site D [--mode weekly] [--input k=v]` does the first three phases in
+one command, from the skill's data plan; the agent starts at **Write**. Optional sources that are not
+configured or fail become `unavailable` entries; a required one stops the run (exit 1, details in
+`pipeline.json`). `--dry-run` shows every call with its resolved args and calls nothing.
 
 | Phase | Mechanism |
 |---|---|
 | **Orchestrate** | `orchestrate.py --site D` creates the run folder `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in [`config/settings.json`](config/settings.json), git-ignored — it refuses a root that could be committed) and fixes the window in `.run_state.json`; that is the only window tools may receive. |
 | **Record** | `record.py --from-cache` first: an identical earlier call (same capability + args, still valid) is reused from `<run_root>/<site>/_cache/`; otherwise, after the MCP/tool call, `record.py` stores the raw response, its full call spec, and a cache copy (dated windows kept; live tools per `policy.cache_ttl_days`; errors never). |
-| **Compute** | `gsc_metrics.py`, `rules.py`, `ga4_metrics.py`, `coverage.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` turn recorded data into findings-ready numbers. |
+| **Compute** | `gsc_metrics.py`, `rules.py`, `ga4_metrics.py`, `coverage.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` turn recorded data into findings-ready numbers (`computed/<name>.json`). |
 | **Write** | the LLM writes `findings.json` ([schema](references/findings-schema.json)) from those outputs; actions are objects (`action`, `impact`, `effort`, `page`/`keyword`, `why`) so `seo-brief` can merge them. |
-| **Validate** | `validate_report.py --data context.json`: structure, dates, labels, and every URL against recorded evidence. |
+| **Validate** | `validate_report.py --data context.json`: structure, dates, labels, every URL against recorded evidence and every figure against evidence + `computed/` at the precision written (small counts, years, dates, thresholds and standard constants exempt). |
 | **Build** | `build_report.py` renders Markdown; a second validation checks the rendered report. |
 
 ## Authoring skills
@@ -45,8 +51,8 @@ Write tokens, then render:
 ```markdown
 Pull {{cap:gsc.page}} for both periods.          → <!--cap:gsc.page-->`search-console` → `analytics_query` {…}<!--/cap-->
 Services: {{site:services}}                      → <!--site:services-->`python3 seo/site_profile.py …`<!--/site-->
-{{include:evidence days=90 flags=--compare}}     → shared section from references/skill-common/evidence.md
-{{include:datasources}}                          → table generated from the capabilities the skill uses
+{{include:evidence flags=-}}                     → shared "run the pipeline" section (references/skill-common/evidence.md)
+{{include:datasources}}                          → table generated from the skill's plan + the calls its text makes
 ```
 
 `python3 seo/resolve.py --write` renders all skills; every later `--write` re-renders all blocks, so a
@@ -54,6 +60,27 @@ registry edit or a tool rename (via `aliases`) propagates everywhere. **Never ed
 `--check` fails on stale blocks, leftover tokens, unknown IDs/keys, legacy names, bad policies and
 invalid or deprecated GA4/GSC names (e.g. `conversions`), and enforces `rowLimit: 25000` + `engine: google`
 on GSC queries.
+
+### Data plans ([`plans/`](plans/))
+
+One JSON file per skill (`<skill>.json`, plus modes such as `seo-rank-tracking.weekly.json`): the window
+(`days`/`weeks`, `compare`, `source`), optional `inputs` (`required`, `default`, `default_profile`) and
+`requires` (profile keys), then ordered steps:
+
+| Step | Does |
+|---|---|
+| `{"pull": name, "cap": id, "period": current\|previous\|both\|window\|weeks, "args": {…}}` | MCP call (siteUrl, property and dates filled from the profile and run window), cache first, recorded as `data/<name>.json` |
+| `{"local": name, "source": label, "run": [script, …]}` | local script whose output is evidence (crawler) |
+| `{"compute": name, "run": [script, …]}` | analysis script → `computed/<name>.json` |
+
+Modifiers: `optional` + `affects` (failure → `unavailable`), `when` (`server:`, `profile:k[!=v]`, `input:`,
+`data:`, `computed:`, `!` negates), `for_each` + `{i}` in the name (`batch` N), `skip_empty`. Values:
+`{site}`, `{domain}`, `{data}`, `{gsc_property}`, `{ga4_property}`, `{ads_customer_id}`, window keys,
+`{input:k}`, `{profile:k}`, `{item}`; `$from` (`computed:x`/`data:x` + `path` like
+`pages[class=vanished|ranking_loss].page`, `profile:k`, `ai_filter`, `serp_payload`, `planner:…`, `files`),
+`$else`, `$concat`, `$each`, `$glob`. Unset optional args are dropped. `resolve.py` lists every plan
+capability in the skill's Data Sources table; [`tests/test_pipeline.py`](tests/test_pipeline.py) checks
+that every `computed/`/`data/` file a SKILL.md names is produced by its plan.
 
 ### Skill anatomy (enforced by [`tests/test_skill_docs.py`](tests/test_skill_docs.py))
 frontmatter (name/description/license/compatibility) → mechanical-vs-analytical banner → `Scope` →
@@ -127,6 +154,8 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/resolve.py --check \| --write \| --map \| --list` | render/validate skills; regenerate [`tool-map.md`](tool-map.md) |
 | `python3 seo/resolve.py --validate-cached \| --validate-live` | tool + args vs cached / live schemas |
 | `python3 seo/mcp_client.py [server]` | refresh `tool-schemas.json` (one server keeps the others) |
+| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run]` | run a skill's data plan (seed, pull, record, compute) |
+| `python3 seo/pipeline.py --check-plans` | validate every plan (capabilities, runtime args, scripts, names) |
 | `python3 seo/orchestrate.py --skill S --site D (--days N [--compare\|--yoy] \| --weeks N) [--source gsc\|ga4\|snapshot] [--tag T] [--force]` | seed a run in the fixed run folder |
 | `python3 seo/record.py --run-dir D --cap ID --name N --args JSON (--response-file F \| --from-cache)` | record evidence (exit 3 = cache miss) |
 | `python3 seo/runs.py root \| list --site D \| latest --site D --skill S \| prune [--older-than N]` | run folders, latest report, retention |

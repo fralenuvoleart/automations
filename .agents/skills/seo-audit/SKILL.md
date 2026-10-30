@@ -47,8 +47,6 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `ga4.properties` | `analytics` → `get_account_summaries` | GA4 accounts/properties (connection check) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `gsc.compare_period` | `search-console` → `analytics_compare` {"mode": "period_over_period", "engine": "google"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate) | Aggregate period-over-period delta |
 | `gsc.daily_totals` | `search-console` → `analytics_query` {"dimensions": ["date"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Daily site totals, including anonymized queries (reconciliation baseline) |
 | `gsc.anomalies` | `search-console` → `analytics_anomalies` {"engine": "google"} (supply: siteUrl, startDate, endDate) | Day-level anomaly detection |
@@ -60,38 +58,33 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | `gsc.inspect` | `search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls) | URL Inspection: coverage state, canonicals, last crawl (quota 2,000/day/property) |
 | `gsc.health` | `search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl) | Crawl/robots/sitemap blockers (report only the fields returned; not a site-wide index count) |
 | `ga4.landing_source` | `analytics` → `run_report` {"dimensions": ["landingPage", "sessionSourceMedium"], "metrics": ["sessions", "engagedSessions", "keyEvents"], "limit": 25000} (supply: property_id, date_ranges) | Sessions, engaged sessions and key events by landing page × source/medium (classified with the site rules: channel, page type, language) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 
 <!--/include-->
 
 Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/rules.py`](../../../seo/rules.py) (`breakdown`), [`seo/ga4_metrics.py`](../../../seo/ga4_metrics.py) (`breakdown`, `reconcile`), [`seo/coverage.py`](../../../seo/coverage.py), [`seo/site_profile.py`](../../../seo/site_profile.py).
 
 ## Workflow
-<!--include:evidence days=90 flags=--compare-->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-audit --site <domain> --days 90 --compare`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-audit --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-audit.json`](../../../seo/plans/seo-audit.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap--> (required — stop if it fails). <!--cap:ga4.properties-->`analytics` → `get_account_summaries`<!--/cap--> (optional — if it fails, add a `findings.unavailable` entry for GA4 and skip steps 8–9).
-2. **Property.** <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap--> → the user's domain (`sc-domain:` preferred); ask only if ambiguous.
-3. **Baseline.** <!--cap:gsc.compare_period-->`search-console` → `analytics_compare` {"mode": "period_over_period", "engine": "google"} (supply: siteUrl, startDate, endDate, compareStartDate, compareEndDate)<!--/cap--> for the aggregate delta; <!--cap:gsc.daily_totals-->`search-console` → `analytics_query` {"dimensions": ["date"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> for both periods (`totals_cur`, `totals_prev`); <!--cap:gsc.anomalies-->`search-console` → `analytics_anomalies` {"engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> for the current period. If clicks fell, also <!--cap:gsc.compare_drop-->`search-console` → `analytics_compare` {"mode": "drop_attribution", "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap-->.
-4. **Rows.** For both periods: <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`query_cur`, `query_prev`) and <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`page_cur`, `page_prev`); for the current period: <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`pq_cur`).
-5. **Compute** (all `python3 seo/gsc_metrics.py … --site <domain>`, inputs from `{run_dir}/data/`):
-   - `anonymized --totals totals_cur.json --rows query_cur.json` → share of clicks not attributable to queries (state it).
-   - `decay --cur page_cur.json --prev page_prev.json` → **declining pages** with mutually exclusive classes (`vanished` / `ranking_loss` / `demand_drop` / `ctr_loss`); top 10 here, depth → `seo-content-refresh`.
-   - `low-ctr --query query_cur.json` and `striking --query query_cur.json` → **quick wins** (top 5 of each, by impressions / missed clicks).
-   - `cannibalization --page-query pq_cur.json` → apply the decision matrix in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md).
-   - **Segments** (site rules, as in the SEO sheet): `python3 seo/rules.py --site <domain> breakdown --by category --cur query_cur.json --prev query_prev.json`, then `--by page_tag` and `--by language` with `page_cur.json` / `page_prev.json` → clicks, impressions, position and change per service category, page type and language; rows flagged `low_volume` are noise — never call them trends.
-   - Any output with `truncated: true` → report "beyond the row cutoff" items as such, never as movements.
-6. **Local visibility (only when profile markets ≠ WORLDWIDE).** <!--site:markets-->`python3 seo/site_profile.py --site <domain> --get markets`<!--/site--> → <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> for the current period; clicks/impressions per target country. For WORLDWIDE, skip and say so.
-7. **Indexation spot-check.** <!--cap:gsc.inspect-->`search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls)<!--/cap--> for up to 5 declining pages (`vanished` and `ranking_loss` first): coverage state, Google vs declared canonical, last crawl. <!--cap:gsc.health-->`search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl)<!--/cap-->: report only the fields it returns — site-wide indexed/excluded counts are not available via the API (→ `seo-indexation`).
-8. **Engagement & channels (GA4, optional).** <!--cap:ga4.landing_source-->`analytics` → `run_report` {"dimensions": ["landingPage", "sessionSourceMedium"], "metrics": ["sessions", "engagedSessions", "keyEvents"], "limit": 25000} (supply: property_id, date_ranges)<!--/cap--> with `date_ranges` = current + comparison window (`ga4_lp`; GA4 labels them `date_range_0` / `date_range_1`). Then `python3 seo/ga4_metrics.py breakdown --site <domain> --ga4 {run_dir}/data/ga4_lp.json --by channel` (the site rules' channels, AI assistants first), `--by page_tag --organic` and `--by language --organic` → sessions, engaged sessions, engagement rate, key events and change. Join organic landing pages to declining pages; call out pages that keep rankings but lose key events.
-9. **Search Console vs GA4 check + AI share.** `python3 seo/ga4_metrics.py reconcile --site <domain> --ga4 {run_dir}/data/ga4_lp.json --gsc-totals {run_dir}/data/totals_cur.json --gsc-totals-prev {run_dir}/data/totals_prev.json` → both trends side by side; any `flags` (diverging trends, a high `(not set)` landing-page share) open the Engagement section — they can invalidate other numbers. AI share = `AI assistants` ÷ `Organic search` sessions from the step-8 channel breakdown (**lower bound**: some AI visits arrive as direct).
-10. **Coverage.** `python3 seo/coverage.py --site <domain> --gsc {run_dir}/data/query_cur.json --gsc-pages {run_dir}/data/page_cur.json` → paste as `findings.coverage`.
+1. **Performance.** `data/compare.json` → the aggregate delta (`computed/totals.json` has the same from the daily totals, anonymized queries included). `computed/anonymized.json` → the share of clicks not attributable to queries (state it). `data/anomalies.json` → day-level anomalies; if clicks fell, `data/drop.json` → which segments drove the decline.
+2. **Segments** (site rules, as in the SEO sheet). `computed/segments_category.json`, `segments_page_tag.json`, `segments_language.json` → clicks, impressions, position and change per service category, page type and language; rows flagged `low_volume` are noise — never call them trends.
+3. **Declining pages.** `computed/decay.json` → mutually exclusive classes (`vanished` / `ranking_loss` / `demand_drop` / `ctr_loss`); top 10 here, depth → `seo-content-refresh`.
+4. **Quick wins.** `computed/low_ctr.json` and `computed/striking.json` → top 5 of each, by impressions / missed clicks. Expected CTR comes from the site's own data (run window, then its last 12 months); rows with `expected_source: benchmark` are **heuristic** — label them.
+5. **Cannibalization.** `computed/cannibalization.json` → apply the decision matrix in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md). Any output with `truncated: true` → report "beyond the row cutoff" items as such, never as movements.
+6. **Local visibility.** `data/geo_cur.json` (pulled only when the profile's markets — <!--site:markets-->`python3 seo/site_profile.py --site <domain> --get markets`<!--/site--> — are not WORLDWIDE) → clicks/impressions per target country. For WORLDWIDE, say so.
+7. **Indexation spot-check.** `computed/inspection.json` — up to 5 declining pages (`vanished` and `ranking_loss` first): coverage state, Google vs declared canonical. `data/health.json`: report only the fields it returns — site-wide indexed/excluded counts are not available via the API (→ `seo-indexation`).
+8. **Engagement & channels (GA4).** `computed/ga4_channels.json` (the site rules' channels, AI assistants first), `ga4_page_tag.json` and `ga4_language.json` (organic) → sessions, engaged sessions, engagement rate, key events and change. Join organic landing pages (`data/ga4_lp.json`) to the declining pages; call out pages that keep rankings but lose key events.
+9. **Search Console vs GA4 + AI share.** `computed/reconcile.json` → both trends side by side; any `flags` (diverging trends, a high `(not set)` landing-page share) open the Engagement section — they can invalidate other numbers. AI share = `ai_share_of_organic` in `ga4_channels.json` (**lower bound**: some AI visits arrive as direct).
+10. **Coverage.** `computed/coverage.json` → paste as `findings.coverage`.
 11. <!--include:history-->
 
 **Action history.** Before recommending, read `python3 seo/site_profile.py --site <domain> --history`: never re-recommend a `[done]` action; list open `[recommended]` ones as "previously recommended, still open". After the run, record each *new* recommendation with `--append-history "<action>" --status recommended` (exact duplicates are ignored). Use `--status done` only when the user confirms an action was carried out.
@@ -118,8 +111,8 @@ Provenance line first. **Verdict** (healthy or not, and the #1 issue), then sect
 <!--/include-->
 
 ## Fallbacks
-- `gsc.compare_period` / `gsc.anomalies` / `gsc.compare_drop` fail → compute the aggregate from the two `gsc.daily_totals` pulls and add `unavailable` entries for anomalies/drop attribution.
-- GA4 unavailable → skip steps 8–9, add one `unavailable` entry ("engagement and AI share"). Never substitute third-party estimates.
+- `gsc.compare_period` / `gsc.anomalies` / `gsc.compare_drop` fail → the pipeline continues and lists them in `unavailable`; the aggregate comes from `computed/totals.json` (the two `gsc.daily_totals` pulls).
+- GA4 unavailable → steps 8–9 do not apply; the pipeline has already added the `unavailable` entry. Never substitute third-party estimates.
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): live SERP context for the worst pages is not run.
@@ -146,8 +139,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -185,8 +179,10 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute), `seo/g
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

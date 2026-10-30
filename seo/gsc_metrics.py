@@ -17,15 +17,20 @@ Rules baked in (see ``seo/references/domain-knowledge.md``):
 Commands (all print JSON; thresholds come from the site profile when --site is given):
     truncation  --file F
     anonymized  --totals F --rows F
-    curve       --query F [--site D]
+    curve       --query F [--curve-query F12] [--site D]   # F12 = the site's last 12 months of query rows
+    benchmark   [--check]                        # the fallback CTR benchmark's source and age (exit 2 = stale)
     movers      --cur F --prev F [--site D]
     striking    --query F [--site D]
-    low-ctr     --query F [--site D]
+    low-ctr     --query F [--curve-query F12] [--site D]
     cannibalization --page-query F [--site D]
     decay       --cur F --prev F [--site D]
     brand-split --cur F [--prev F] [--totals-cur F --totals-prev F] --site D
-    value       --planner F --query F [--target N] [--site D]
+    value       --planner F --query F [--curve-query F12] [--target N] [--site D]
     topic       --page-query F | --query F  --terms "term1,term2"
+    unseen      --page F --urls F [--limit N]    # listed URLs (e.g. sitemap) with zero impressions in page rows
+    top-pages   --page F [--by clicks|impressions] [--limit N]
+    inspection  --inspect F [F …]                # URL Inspection results → counts and shares per coverage state
+    totals      --cur F [--prev F]               # period totals (clicks, impressions, CTR, position) and change
 """
 from __future__ import annotations
 
@@ -54,10 +59,30 @@ DEFAULTS = {
     "value_target_position": 3,
     "curve_min_impressions": 500,   # a site CTR bucket needs this many impressions to be trusted
 }
-# Heuristic fallback only for buckets the site's own data cannot fill.
-# Backlinko CTR study (4M results, 2019; pre-AI Overviews): positions 1–4.
-HEURISTIC_CTR = {1: 0.276, 2: 0.158, 3: 0.110, 4: 0.084}
-HEURISTIC_SOURCE = "Backlinko 2019 CTR study (heuristic, pre-AI Overviews)"
+# Expected CTR by position, in order: the site's own non-brand data for this run's window → its own
+# last 12 months (--curve-query) → a dated post-AI-Overviews benchmark (config/ctr-benchmark.json).
+BENCHMARK_FILE = HERE / "config" / "ctr-benchmark.json"
+
+
+def load_benchmark(path: Path | None = None) -> dict:
+    b = json.loads((path or BENCHMARK_FILE).read_text())
+    for k in ("source", "published", "max_age_months", "positions"):
+        if k not in b:
+            raise ValueError(f"ctr-benchmark.json: missing '{k}'")
+    for pos, v in b["positions"].items():
+        if not (pos.isdigit() and isinstance(v, (int, float)) and 0 < v < 1):
+            raise ValueError(f"ctr-benchmark.json: bad position entry {pos}: {v}")
+    return b
+
+
+def benchmark_status(b: dict, today=None) -> dict:
+    """Source, age in months since publication and whether it is past max_age_months (stale)."""
+    import datetime as dt
+    today = today or dt.datetime.now(dt.timezone.utc).date()
+    y, m = (int(x) for x in b["published"].split("-")[:2])
+    age = (today.year - y) * 12 + today.month - m
+    return {"source": b["source"], "published": b["published"], "age_months": age,
+            "stale": age > int(b["max_age_months"]), "max_age_months": b["max_age_months"]}
 
 
 # ------------------------------------------------------------------ parsing ---
@@ -181,23 +206,49 @@ def norm_text(s: str) -> str:
 
 
 # ----------------------------------------------------------------- analyses ---
-def ctr_curve(query_rows: list[dict], is_brand=None, thr: dict | None = None) -> dict:
-    """Site's own non-brand CTR by position bucket (``is_brand``: rules predicate); heuristic fill for empty top buckets."""
+def ctr_curve(query_rows: list[dict], is_brand=None, thr: dict | None = None,
+              longer_rows: list[dict] | None = None, benchmark: dict | None = None) -> dict:
+    """Expected non-brand CTR per position bucket (``is_brand``: rules predicate).
+
+    Each bucket comes from the first source with ≥ ``curve_min_impressions``: this run's rows
+    (``site``), the site's own last 12 months (``site_12m``, ``longer_rows``), else the dated benchmark
+    (``benchmark``, positions it covers). Buckets none of them fill are left out ("insufficient data").
+    """
     thr = {**DEFAULTS, **(thr or {})}
-    rows = [r for r in query_rows if not (is_brand and is_brand(r["query"]))]
 
     def bucket(r):
         p = r["position"]
         return str(max(1, round(p))) if p < 10.5 else ("11-20" if p <= 20.5 else "21+")
 
     curve = {}
-    for b, m in aggregate(rows, bucket).items():
-        if m["impressions"] >= thr["curve_min_impressions"]:
-            curve[b] = {"ctr": round(m["ctr"], 4), "impressions": round(m["impressions"]), "source": "site"}
-    for pos, ctr in HEURISTIC_CTR.items():
-        curve.setdefault(str(pos), {"ctr": ctr, "impressions": 0, "source": "heuristic"})
+    for label, rows in (("site", query_rows), ("site_12m", longer_rows or [])):
+        rows = [r for r in rows if not (is_brand and is_brand(r["query"]))]
+        for b, m in aggregate(rows, bucket).items():
+            if b not in curve and m["impressions"] >= thr["curve_min_impressions"]:
+                curve[b] = {"ctr": round(m["ctr"], 4), "impressions": round(m["impressions"]), "source": label}
+    if benchmark is None:
+        try:
+            benchmark = load_benchmark()
+        except (OSError, ValueError):
+            benchmark = {"positions": {}}
+    for pos, ctr in (benchmark.get("positions") or {}).items():
+        curve.setdefault(str(pos), {"ctr": ctr, "impressions": 0, "source": "benchmark"})
     order = {"11-20": 11, "21+": 21}
     return dict(sorted(curve.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else order[kv[0]]))
+
+
+def curve_basis(curve: dict, benchmark: dict | None = None, longer: bool = False) -> dict:
+    """Which source each bucket came from, plus the benchmark's provenance when it was used."""
+    used = sorted({e["source"] for e in curve.values()})
+    out = {"sources": used, "buckets_by_source": {s: [b for b, e in curve.items() if e["source"] == s] for s in used},
+           "site_12m_supplied": longer}
+    if "benchmark" in used:
+        try:
+            st = benchmark_status(benchmark or load_benchmark())
+        except (OSError, ValueError, KeyError):
+            st = {"source": "unknown"}
+        out["benchmark"] = {**st, "label": "heuristic — external post-AI-Overviews study, not this site's data"}
+    return out
 
 
 def expected_ctr(position: float, curve: dict) -> tuple[float | None, str]:
@@ -361,6 +412,22 @@ def topic(rows: list[dict], terms: list[str]) -> list[dict]:
     return sorted(out, key=lambda r: -r["impressions"])
 
 
+def _page_key(u: str) -> str:
+    return str(u).split("#", 1)[0].rstrip("/")
+
+
+def unseen(page_rows: list[dict], urls: list[str], limit: int = 150) -> list[str]:
+    """URLs (in list order) that never got an impression in the page rows — likeliest non-indexed."""
+    seen = {_page_key(r["page"]) for r in page_rows if r["impressions"] > 0}
+    return [u for u in urls if _page_key(u) not in seen][:limit]
+
+
+def top_pages(page_rows: list[dict], by: str = "clicks", limit: int = 20) -> list[dict]:
+    """Pages (jump-link variants merged) ranked by clicks or impressions."""
+    agg = aggregate(page_rows, lambda r: str(r["page"]).split("#", 1)[0])
+    return [{"page": p, **_r(m)} for p, m in sorted(agg.items(), key=lambda kv: (-kv[1][by], kv[0]))[:limit]]
+
+
 def totals_of(rows: list[dict]) -> dict:
     return {"clicks": sum(r["clicks"] for r in rows), "impressions": sum(r["impressions"] for r in rows)}
 
@@ -394,6 +461,69 @@ def value_model(planner_items: list[dict], query_rows: list[dict], curve: dict, 
     return sorted(out, key=lambda r: -(r["est_monthly_value"] or 0))
 
 
+def period_totals(rows: list[dict]) -> dict:
+    """Clicks, impressions, CTR and impression-weighted position of a set of rows (daily totals or query rows)."""
+    clicks, impr = sum(r["clicks"] for r in rows), sum(r["impressions"] for r in rows)
+    pos = sum(r["position"] * r["impressions"] for r in rows) / impr if impr else None
+    return {"clicks": round(clicks, 2), "impressions": round(impr, 2), "ctr": round(clicks / impr, 4) if impr else None,
+            "position": round(pos, 2) if pos is not None else None, "rows": len(rows)}
+
+
+def totals_change(cur: dict, prev: dict) -> dict:
+    def pct(a, b):
+        return round((a - b) / b * 100, 1) if b else None
+    return {"clicks_delta": round(cur["clicks"] - prev["clicks"], 2), "clicks_change_pct": pct(cur["clicks"], prev["clicks"]),
+            "impressions_delta": round(cur["impressions"] - prev["impressions"], 2),
+            "impressions_change_pct": pct(cur["impressions"], prev["impressions"]),
+            "ctr_delta_pts": round((cur["ctr"] - prev["ctr"]) * 100, 2) if cur["ctr"] is not None and prev["ctr"] is not None else None,
+            "position_delta": round(cur["position"] - prev["position"], 2)
+            if cur["position"] is not None and prev["position"] is not None else None}
+
+
+def _inspections(obj, url=None, out=None) -> list[dict]:
+    """Every URL Inspection index-status result in a response, with the URL it belongs to (any wrapper shape)."""
+    out = [] if out is None else out
+    obj = _unwrap(obj)
+    if isinstance(obj, dict):
+        url = obj.get("inspectionUrl") or obj.get("url") or obj.get("inspection_url") or url
+        if "coverageState" in obj or ("verdict" in obj and "indexingState" in obj):
+            out.append({"url": url, **obj})
+            return out
+        for v in obj.values():
+            _inspections(v, url, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _inspections(v, url, out)
+    return out
+
+
+def inspection_summary(results: list[dict]) -> dict:
+    """Counts and shares per coverage state and verdict, canonical mismatches, URLs not indexed."""
+    seen, rows = set(), []
+    for r in results:
+        key = r.get("url") or id(r)
+        if key not in seen:
+            seen.add(key)
+            rows.append(r)
+    n = len(rows)
+
+    def tally(field):
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[str(r.get(field) or "unknown")] = counts.get(str(r.get(field) or "unknown"), 0) + 1
+        return [{field: k, "urls": v, "share": round(v / n, 3)} for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
+
+    mismatch = [{"url": r.get("url"), "google_canonical": r.get("googleCanonical"),
+                 "declared_canonical": r.get("userCanonical")} for r in rows
+                if r.get("googleCanonical") and r.get("userCanonical")
+                and r["googleCanonical"].rstrip("/") != r["userCanonical"].rstrip("/")]
+    not_indexed = [{"url": r.get("url"), "coverage_state": r.get("coverageState")} for r in rows
+                   if str(r.get("verdict") or "").upper() != "PASS"]
+    return {"inspected": n, "by_coverage_state": tally("coverageState"), "by_verdict": tally("verdict"),
+            "not_indexed": not_indexed, "not_indexed_share": round(len(not_indexed) / n, 3) if n else None,
+            "canonical_mismatch": mismatch}
+
+
 # --------------------------------------------------------------------- CLI ---
 def _site(site: str | None):
     """(thresholds, rules) for --site; defaults and no rules without it."""
@@ -411,15 +541,23 @@ def _site(site: str | None):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["truncation", "anonymized", "curve", "movers", "striking", "low-ctr",
-                                        "cannibalization", "decay", "brand-split", "value", "topic"])
+                                        "cannibalization", "decay", "brand-split", "value", "topic", "unseen",
+                                        "top-pages", "inspection", "totals", "benchmark"])
     for opt in ("file", "totals", "rows", "query", "cur", "prev", "page-query", "totals-cur", "totals-prev",
-                "planner", "site", "terms"):
+                "planner", "site", "terms", "page", "urls"):
         ap.add_argument(f"--{opt}")
+    ap.add_argument("--inspect", nargs="+", default=None, help="recorded gsc.inspect responses")
+    ap.add_argument("--curve-query", dest="curve_query", default=None,
+                    help="the site's last 12 months of query rows: fills CTR buckets the run window cannot")
+    ap.add_argument("--check", action="store_true", help="benchmark: exit 2 when stale")
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--by", choices=["clicks", "impressions"], default="clicks")
     ap.add_argument("--target", type=int, default=None)
     a = ap.parse_args(argv)
     try:
         thr, site_rules = _site(a.site)
         brand = site_rules.is_brand if site_rules else None
+        longer = load_rows(a.curve_query, ["query"]) if a.curve_query else None
         if a.command == "truncation":
             rows = load_rows(a.file, ["query"])
             res = {"rows": len(rows), "truncated": is_truncated(rows), "row_limit": ROW_LIMIT}
@@ -427,8 +565,13 @@ def main(argv: list[str] | None = None) -> int:
             t, r = totals_of(load_rows(a.totals, ["date"])), totals_of(load_rows(a.rows, ["query"]))
             res = {"total_clicks": t["clicks"], "attributed_clicks": r["clicks"],
                    "anonymized_clicks_share": round(1 - r["clicks"] / t["clicks"], 3) if t["clicks"] else None}
+        elif a.command == "benchmark":
+            st = benchmark_status(load_benchmark())
+            print(json.dumps(st, ensure_ascii=False, indent=2))
+            return 2 if a.check and st["stale"] else 0
         elif a.command == "curve":
-            res = ctr_curve(load_rows(a.query, ["query"]), brand, thr)
+            curve = ctr_curve(load_rows(a.query, ["query"]), brand, thr, longer)
+            res = {"curve": curve, "basis": curve_basis(curve, longer=bool(longer))}
         elif a.command == "movers":
             res = movers(load_rows(a.cur, ["query"]), load_rows(a.prev, ["query"]), thr)
         elif a.command == "striking":
@@ -436,8 +579,8 @@ def main(argv: list[str] | None = None) -> int:
                    "thresholds": {k: thr[k] for k in ("striking_min", "striking_max", "min_impressions")}}
         elif a.command == "low-ctr":
             q = load_rows(a.query, ["query"])
-            curve = ctr_curve(q, brand, thr)
-            res = {"low_ctr": low_ctr(q, curve, thr), "curve": curve}
+            curve = ctr_curve(q, brand, thr, longer)
+            res = {"low_ctr": low_ctr(q, curve, thr), "curve": curve, "basis": curve_basis(curve, longer=bool(longer))}
         elif a.command == "topic":
             terms = [t.strip() for t in (a.terms or "").split(",") if t.strip()]
             if not terms:
@@ -445,6 +588,26 @@ def main(argv: list[str] | None = None) -> int:
             src = a.page_query or a.query or a.file
             rows = load_rows(src, ["query", "page"] if a.page_query else ["query"])
             res = {"terms": terms, "rows": topic(rows, terms), "truncated": is_truncated(rows)}
+        elif a.command == "unseen":
+            listed = _unwrap(json.loads(Path(a.urls).read_text()))
+            listed = listed.get("urls", []) if isinstance(listed, dict) else listed
+            res = {"urls": unseen(load_rows(a.page, ["page"]), listed, a.limit or 150)}
+        elif a.command == "top-pages":
+            rows = load_rows(a.page, ["page"])
+            res = {"pages": top_pages(rows, a.by, a.limit or 20), "truncated": is_truncated(rows)}
+        elif a.command == "totals":
+            cur_rows = load_rows(a.cur, ["date"])
+            res = {"current": period_totals(cur_rows), "truncated": is_truncated(cur_rows)}
+            if a.prev:
+                res["previous"] = period_totals(load_rows(a.prev, ["date"]))
+                res["change"] = totals_change(res["current"], res["previous"])
+        elif a.command == "inspection":
+            if not a.inspect:
+                raise ValueError("--inspect is required")
+            found: list[dict] = []
+            for f in a.inspect:
+                _inspections(json.loads(Path(f).read_text()), out=found)
+            res = inspection_summary(found)
         elif a.command == "cannibalization":
             res = {"cannibalization": cannibalization(load_rows(a.page_query, ["query", "page"]), thr)}
         elif a.command == "decay":
@@ -465,8 +628,10 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(items, dict):
                 items = items.get("results") or items.get("ideas") or items.get("keywords") or []
             target = a.target or int(thr["value_target_position"])
-            res = {"value": value_model(items, q, ctr_curve(q, brand, thr), target),
-                   "method": "volume × (CTR at target − current CTR) × mid CPC; estimate", "curve_fallback": HEURISTIC_SOURCE}
+            curve = ctr_curve(q, brand, thr, longer)
+            res = {"value": value_model(items, q, curve, target),
+                   "method": "volume × (CTR at target − current CTR) × mid CPC; estimate",
+                   "basis": curve_basis(curve, longer=bool(longer))}
     except (ValueError, FileNotFoundError, KeyError, TypeError) as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1

@@ -47,6 +47,17 @@ def items(payload) -> list[dict]:
     return out
 
 
+def serp_urls(payload, limit: int = 3) -> list[str]:
+    """Top organic result URLs from a DataForSEO SERP (type organic) or a web-search response (results[].url)."""
+    p = gsc_metrics._unwrap(payload)
+    if isinstance(p, dict) and isinstance(p.get("results"), list):
+        rows = p["results"]
+    else:
+        rows = [x for x in items(p) if x.get("type", "organic") == "organic"]
+    urls = [str(r.get("url")) for r in rows if isinstance(r, dict) and r.get("url")]
+    return list(dict.fromkeys(urls))[:limit]
+
+
 def anchor_mix(anchor_items: list[dict], is_brand, domain: str, priority_keywords: list[str]) -> dict:
     """Anchor buckets; ``is_brand`` is the site-rules Brand classifier."""
     kws = {gsc_metrics.norm_text(k) for k in priority_keywords}
@@ -113,7 +124,8 @@ def keyword_gap(ranked: list[dict], query_rows: list[dict], top: int = 100) -> l
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["anchor-mix", "link-gap", "keyword-gap"])
+    ap.add_argument("command", choices=["anchor-mix", "link-gap", "keyword-gap", "serp-urls"])
+    ap.add_argument("--serp")
     for opt in ("anchors", "ours", "theirs", "ranked", "query", "site"):
         ap.add_argument(f"--{opt}")
     ap.add_argument("--top", type=int, default=None)
@@ -125,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
             import site_profile
             pk = site_profile.get(a.site, "priority_keywords")
             res = anchor_mix(load(a.anchors), rules.load(a.site).is_brand, a.site, pk)
+        elif a.command == "serp-urls":
+            res = {"urls": serp_urls(json.loads(Path(a.serp).read_text()), a.top or 3)}
         elif a.command == "link-gap":
             res = {"link_gap": link_gap(load(a.ours), load(a.theirs), a.top or 50), "label": "estimate"}
         else:

@@ -57,23 +57,22 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 Local tools: [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`anchor-mix`, `link-gap`).
 
 ## Workflow
-<!--include:evidence days=28 flags=--compare_--source_ga4-->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-backlink-check --site <domain> --days 28 --compare --source ga4`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-backlink-check --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-backlink-check.json`](../../../seo/plans/seo-backlink-check.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify.** <!--cap:ga4.properties-->`analytics` → `get_account_summaries`<!--/cap--> (required). Check whether `dataforseo` is configured (see [`tool-map.md`](../../../seo/tool-map.md)); if not, jump to step 7.
-2. **Targets.** The user's domain (<!--site:domain-->`python3 seo/site_profile.py --site <domain> --get domain`<!--/site-->) and a competitor if named (else <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->; if empty, skip step 6).
-3. **Profile.** <!--cap:dfs.backlinks_summary-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/summary/live"} (supply: data)<!--/cap--> and <!--cap:dfs.referring_domains-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/referring_domains/live"} (supply: data)<!--/cap--> (top 100 by rank) for the user's domain. These sections are live index snapshots: set their `window` note to "DataForSEO live index, <date>".
-4. **Anchor mix.** <!--cap:dfs.anchors-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/anchors/live"} (supply: data)<!--/cap--> → `python3 seo/dfs_metrics.py anchor-mix --anchors {run_dir}/data/anchors.json --site <domain>` → brand / URL / generic / exact-match / other shares and the heuristic exact-match risk flag. Compare with the competitor's mix when available rather than with a fixed ideal.
-5. **Link velocity.** <!--cap:dfs.backlinks_new_lost-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/timeseries_new_lost_summary/live"} (supply: data)<!--/cap--> with `date_from` = comparison start, `date_to` = window end, `group_range: month` → new vs lost referring domains; flag spikes not explained by a campaign/PR (heuristic).
-6. **Link gap (competitor).** Same <!--cap:dfs.referring_domains-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/referring_domains/live"} (supply: data)<!--/cap--> pull for the competitor → `python3 seo/dfs_metrics.py link-gap --ours {run_dir}/data/rd_ours.json --theirs {run_dir}/data/rd_comp.json` → the outreach list (strong domains linking to them, not to the user).
-7. **Referral cross-check (own site).** <!--cap:ga4.referrals-->`analytics` → `run_report` {"dimensions": ["sessionSource"], "metrics": ["sessions", "keyEvents"], "dimension_filter": {"filter": {"field_name": "sessionMedium", "string_filter": {"match_type": "EXACT", "value": "referral", "case_sensitive": false}}}} (supply: property_id, date_ranges)<!--/cap--> with `date_ranges` = current + comparison → which linking domains send sessions and key events.
+1. **Targets.** The user's domain (<!--site:domain-->`python3 seo/site_profile.py --site <domain> --get domain`<!--/site-->) and a competitor: the plan uses the first of <!--site:competitors-->`python3 seo/site_profile.py --site <domain> --get competitors`<!--/site-->; when the user names one, rerun with `--input competitor=<domain> --force`. No competitor → no link gap (step 5).
+2. **Profile.** `data/summary.json` and `data/rd_ours.json` (top 100 referring domains by rank). These sections are live index snapshots: set their `window` note to "DataForSEO live index, <date>". DataForSEO not configured → steps 2–5 are in `unavailable`; only step 6 applies.
+3. **Anchor mix.** `computed/anchor_mix.json` → brand / URL / generic / exact-match / other shares and the heuristic exact-match risk flag. Compare with the competitor's mix (an extra <!--cap:dfs.anchors-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/anchors/live"} (supply: data)<!--/cap--> call for the competitor, recorded) rather than with a fixed ideal.
+4. **Link velocity.** `data/new_lost.json` (comparison start → window end, by month) → new vs lost referring domains; flag spikes not explained by a campaign/PR (heuristic).
+5. **Link gap.** `computed/link_gap.json` → the outreach list (strong domains linking to the competitor, not to the user).
+6. **Referral cross-check (own site).** `data/referrals.json` (current + comparison) → which linking domains send sessions and key events.
 
 ## Determinism
 - GA4 window: 28 days vs the previous 28 (`--source ga4`, ends `today − 2`); DataForSEO calls are live snapshots labelled per section.
@@ -94,8 +93,8 @@ Provenance line first. **Verdict**: profile strength and, if asked, the gap vs t
 <!--/include-->
 
 ## Fallbacks
-- DataForSEO not configured or 401/403 → step 7 only; `unavailable` = `{source: dataforseo, affects: backlink profile, anchors, velocity and gap}`.
-- No competitor named and none in the profile → skip step 6 and say so.
+- DataForSEO not configured or 401/403 → step 6 only; the pipeline lists each missing DataForSEO source in `unavailable`.
+- No competitor named and none in the profile → no link gap (step 5); say so.
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): backlink profile, anchors, velocity and gap.
@@ -122,8 +121,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -159,8 +159,10 @@ Skill-specific: `seo/dfs_metrics.py` (Execute), [`seo/references/dataforseo-payl
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

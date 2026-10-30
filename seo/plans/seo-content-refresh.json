@@ -1,0 +1,100 @@
+{
+ "skill": "seo-content-refresh",
+ "window": {
+  "days": 90,
+  "compare": true
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "pull": "page_prev",
+   "cap": "gsc.page",
+   "period": "previous"
+  },
+  {
+   "pull": "totals_cur",
+   "cap": "gsc.daily_totals",
+   "period": "current"
+  },
+  {
+   "pull": "totals_prev",
+   "cap": "gsc.daily_totals",
+   "period": "previous"
+  },
+  {
+   "compute": "totals",
+   "run": [
+    "gsc_metrics.py",
+    "totals",
+    "--cur",
+    "{data}/totals_cur.json",
+    "--prev",
+    "{data}/totals_prev.json"
+   ]
+  },
+  {
+   "pull": "trends",
+   "cap": "gsc.compare_trends",
+   "period": "current",
+   "optional": true,
+   "affects": "site-wide trend"
+  },
+  {
+   "compute": "decay",
+   "run": [
+    "gsc_metrics.py",
+    "decay",
+    "--cur",
+    "{data}/page_cur.json",
+    "--prev",
+    "{data}/page_prev.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "pull": "ga4_pages",
+   "cap": "ga4.organic_landing_pages",
+   "period": "current",
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "key events per page (GA4)"
+  },
+  {
+   "pull": "rd_{i}",
+   "cap": "dfs.referring_domains",
+   "for_each": {
+    "$from": "computed:decay",
+    "path": "pages[class=demand_drop].page",
+    "limit": 10
+   },
+   "args": {
+    "data": [
+     {
+      "target": "{item}",
+      "limit": 100,
+      "order_by": [
+       "rank,desc"
+      ]
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo"
+   ],
+   "affects": "backlinks of retire candidates (DataForSEO)"
+  }
+ ]
+}

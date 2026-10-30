@@ -1,0 +1,126 @@
+{
+ "skill": "seo-rank-tracking",
+ "window": {
+  "days": 28,
+  "compare": true
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "compare",
+   "cap": "gsc.compare_period",
+   "period": "current",
+   "optional": true,
+   "affects": "period-over-period aggregate (gsc.compare_period)"
+  },
+  {
+   "pull": "query_cur",
+   "cap": "gsc.query",
+   "period": "current"
+  },
+  {
+   "pull": "query_prev",
+   "cap": "gsc.query",
+   "period": "previous"
+  },
+  {
+   "compute": "totals",
+   "run": [
+    "gsc_metrics.py",
+    "totals",
+    "--cur",
+    "{data}/query_cur.json",
+    "--prev",
+    "{data}/query_prev.json"
+   ]
+  },
+  {
+   "pull": "pq_cur",
+   "cap": "gsc.page_query",
+   "period": "current"
+  },
+  {
+   "pull": "geo_cur",
+   "cap": "gsc.geo_query",
+   "period": "current"
+  },
+  {
+   "compute": "movers",
+   "run": [
+    "gsc_metrics.py",
+    "movers",
+    "--cur",
+    "{data}/query_cur.json",
+    "--prev",
+    "{data}/query_prev.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "keywords",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "keywords",
+    "--query",
+    "{data}/query_cur.json",
+    "--prev",
+    "{data}/query_prev.json",
+    "--countries",
+    "{data}/geo_cur.json"
+   ]
+  },
+  {
+   "compute": "categories",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "breakdown",
+    "--by",
+    "category",
+    "--cur",
+    "{data}/query_cur.json",
+    "--prev",
+    "{data}/query_prev.json"
+   ]
+  },
+  {
+   "compute": "targets",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "targets",
+    "--page-query",
+    "{data}/pq_cur.json"
+   ]
+  },
+  {
+   "pull": "serp_{i}",
+   "cap": "dfs.serp",
+   "for_each": {
+    "$from": "computed:movers",
+    "path": "losers[].query",
+    "limit": 5
+   },
+   "args": {
+    "data": {
+     "$from": "serp_payload",
+     "keyword": "{item}"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo",
+    "profile:serp_locations"
+   ],
+   "affects": "who took the spot (DataForSEO SERP)"
+  }
+ ]
+}

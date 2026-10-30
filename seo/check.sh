@@ -19,6 +19,16 @@ if [ "$live" -eq 1 ]; then
   python3 seo/resolve.py --validate-live || rc=1
 fi
 
+echo "== data plans =="
+python3 seo/pipeline.py --check-plans || rc=1
+
+echo "== CTR benchmark age =="
+if ! python3 seo/gsc_metrics.py benchmark --check >/dev/null; then
+  echo "WARN seo/config/ctr-benchmark.json is older than its max_age_months — replace it with a newer post-AI-Overviews study"
+else
+  echo "OK — CTR benchmark within max_age_months"
+fi
+
 echo "== site profiles =="
 for site in $(python3 seo/site_profile.py --list); do
   python3 seo/site_profile.py --site "$site" --validate || rc=1

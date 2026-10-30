@@ -1,0 +1,178 @@
+{
+ "skill": "seo-keyword-strategy",
+ "window": {
+  "days": 90
+ },
+ "inputs": {
+  "topic": {
+   "desc": "optional seed topic instead of the Core keywords"
+  }
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "query_cur",
+   "cap": "gsc.query",
+   "period": "current"
+  },
+  {
+   "pull": "geo_cur",
+   "cap": "gsc.geo_query",
+   "period": "current"
+  },
+  {
+   "pull": "query_12m",
+   "cap": "gsc.query",
+   "period": "lookback",
+   "lookback_days": 365,
+   "allow_window": "CTR curve: the site's own last 12 months fill position buckets the run window cannot",
+   "optional": true,
+   "affects": "CTR curve from the site's last 12 months (benchmark used instead)"
+  },
+  {
+   "compute": "striking",
+   "run": [
+    "gsc_metrics.py",
+    "striking",
+    "--query",
+    "{data}/query_cur.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "curve",
+   "run": [
+    "gsc_metrics.py",
+    "curve",
+    "--query",
+    "{data}/query_cur.json",
+    "--site",
+    "{site}",
+    {
+     "$each": "--curve-query",
+     "$from": "files",
+     "glob": "{data}/query_12m.json"
+    }
+   ]
+  },
+  {
+   "compute": "keywords",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "keywords",
+    "--query",
+    "{data}/query_cur.json",
+    "--countries",
+    "{data}/geo_cur.json"
+   ]
+  },
+  {
+   "compute": "coverage",
+   "run": [
+    "coverage.py",
+    "--site",
+    "{site}",
+    "--gsc",
+    "{data}/query_cur.json"
+   ]
+  },
+  {
+   "pull": "ideas_{i}",
+   "cap": "planner.ideas",
+   "for_each": {
+    "$from": "planner:priority"
+   },
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "keywords": "{item.keywords}",
+    "language": "{item.language}",
+    "geo_targets": {
+     "$from": "profile:ads_geo_targets"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:google-ads-planner",
+    "profile:ads_customer_id",
+    "!input:topic"
+   ],
+   "affects": "keyword expansion (Keyword Planner)"
+  },
+  {
+   "pull": "ideas_topic_{i}",
+   "cap": "planner.ideas",
+   "for_each": {
+    "$from": "planner:list",
+    "keywords": [
+     "{input:topic}"
+    ]
+   },
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "keywords": "{item.keywords}",
+    "language": "{item.language}",
+    "geo_targets": {
+     "$from": "profile:ads_geo_targets"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:google-ads-planner",
+    "profile:ads_customer_id",
+    "input:topic"
+   ],
+   "affects": "keyword expansion (Keyword Planner)"
+  },
+  {
+   "pull": "hist_{i}",
+   "cap": "planner.historical",
+   "for_each": {
+    "$from": "planner:computed:striking",
+    "path": "striking_distance[].query"
+   },
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "keywords": "{item.keywords}",
+    "language": "{item.language}",
+    "geo_targets": {
+     "$from": "profile:ads_geo_targets"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:google-ads-planner",
+    "profile:ads_customer_id"
+   ],
+   "affects": "volumes and value of footholds (Keyword Planner)"
+  },
+  {
+   "compute": "value_{i}",
+   "run": [
+    "gsc_metrics.py",
+    "value",
+    "--planner",
+    "{item}",
+    "--query",
+    "{data}/query_cur.json",
+    "--site",
+    "{site}",
+    {
+     "$each": "--curve-query",
+     "$from": "files",
+     "glob": "{data}/query_12m.json"
+    }
+   ],
+   "for_each": {
+    "$from": "files",
+    "glob": "{data}/hist_*.json"
+   },
+   "optional": true
+  }
+ ]
+}

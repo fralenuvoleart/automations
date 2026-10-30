@@ -31,6 +31,64 @@ import runs  # noqa: E402
 import window  # noqa: E402
 
 
+class SeedError(Exception):
+    """The run cannot be seeded (bad name, unsafe run_root, run already exists)."""
+
+
+def seed(skill: str, site: str | None = None, days: int = 28, weeks: int | None = None, lag: int | None = None,
+         source: str = "gsc", compare: bool = False, yoy: bool = False, as_of: dt.date | None = None,
+         tag: str | None = None, out_dir: str | Path | None = None, force: bool = False) -> Path:
+    """Resolve the window and write .run_state.json, context.json, findings.json and data/. Returns the run dir."""
+    if weeks and yoy:
+        raise SeedError("--yoy is not available with --weeks")
+    win = (window.resolve_weeks(weeks, as_of, lag, compare, source) if weeks
+           else window.resolve(days, as_of, lag, compare, yoy, source))
+    try:
+        if site:
+            runs._name(site, "site")
+        if out_dir:
+            run_dir = Path(out_dir)
+        elif site:
+            run_dir = runs.run_dir(site, win["as_of"], skill, tag)
+        else:
+            raise SeedError("pass --site (fixed run folder) or --out-dir")
+    except ValueError as e:
+        raise SeedError(str(e)) from e
+    if not out_dir:
+        problem = runs.ignore_problem()
+        if problem:
+            raise SeedError(f"{problem}: add it to .gitignore or set run_root in seo/config/settings.json")
+    targets = [run_dir / n for n in (".run_state.json", "context.json", "findings.json")]
+    existing = [p for p in targets if p.exists()]
+    if existing and not force:
+        raise SeedError(f"run already seeded ({', '.join(p.name for p in existing)} exist in {run_dir}); "
+                        f"use --tag, a new --out-dir or pass --force to overwrite")
+    (run_dir / "data").mkdir(parents=True, exist_ok=True)
+
+    (run_dir / ".run_state.json").write_text(json.dumps({
+        "skill": skill,
+        "site": site,
+        "tag": tag,
+        "window": win,
+        "paths": {
+            "context": str(run_dir / "context.json"),
+            "data": str(run_dir / "data"),
+            "findings": str(run_dir / "findings.json"),
+            "report": str(run_dir / "report.md"),
+        },
+        "created": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }, indent=2) + "\n")
+    (run_dir / "context.json").write_text(json.dumps({"calls": []}, indent=2) + "\n")
+    (run_dir / "findings.json").write_text(json.dumps({
+        "skill": skill,
+        "as_of": win["as_of"],
+        "window": win,
+        "verdict": "",
+        "sections": [],
+    }, indent=2) + "\n")
+    return run_dir
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skill", required=True)
@@ -46,60 +104,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-dir", help="explicit run folder (overrides the run_root layout)")
     ap.add_argument("--force", action="store_true", help="overwrite an existing run directory's files")
     args = ap.parse_args(argv)
-
-    as_of = dt.date.fromisoformat(args.as_of) if args.as_of else None
-    if args.weeks and args.yoy:
-        ap.error("--yoy is not available with --weeks")
-    win = (window.resolve_weeks(args.weeks, as_of, args.lag, args.compare, args.source) if args.weeks
-           else window.resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source))
     if args.site:
         try:
             runs._name(args.site, "site")
         except ValueError as e:
             ap.error(str(e))
-    if args.out_dir:
-        run_dir = Path(args.out_dir)
-    elif args.site:
-        try:
-            run_dir = runs.run_dir(args.site, win["as_of"], args.skill, args.tag)
-        except ValueError as e:
-            ap.error(str(e))
-        problem = runs.ignore_problem()
-        if problem:
-            print(f"ERROR {problem}: add it to .gitignore or set run_root in seo/config/settings.json", file=sys.stderr)
-            return 1
-    else:
+    if not args.site and not args.out_dir:
         ap.error("pass --site (fixed run folder) or --out-dir")
-    targets = [run_dir / n for n in (".run_state.json", "context.json", "findings.json")]
-    existing = [p for p in targets if p.exists()]
-    if existing and not args.force:
-        print(f"ERROR run already seeded ({', '.join(p.name for p in existing)} exist in {run_dir}); "
-              f"use --tag, a new --out-dir or pass --force to overwrite", file=sys.stderr)
+    if args.weeks and args.yoy:
+        ap.error("--yoy is not available with --weeks")
+    try:
+        run_dir = seed(args.skill, args.site, args.days, args.weeks, args.lag, args.source, args.compare, args.yoy,
+                       dt.date.fromisoformat(args.as_of) if args.as_of else None, args.tag, args.out_dir, args.force)
+    except SeedError as e:
+        print(f"ERROR {e}", file=sys.stderr)
         return 1
-    (run_dir / "data").mkdir(parents=True, exist_ok=True)
-
-    (run_dir / ".run_state.json").write_text(json.dumps({
-        "skill": args.skill,
-        "site": args.site,
-        "tag": args.tag,
-        "window": win,
-        "paths": {
-            "context": str(run_dir / "context.json"),
-            "data": str(run_dir / "data"),
-            "findings": str(run_dir / "findings.json"),
-            "report": str(run_dir / "report.md"),
-        },
-        "created": dt.datetime.now(dt.timezone.utc).isoformat(),
-    }, indent=2) + "\n")
-    (run_dir / "context.json").write_text(json.dumps({"calls": []}, indent=2) + "\n")
-    (run_dir / "findings.json").write_text(json.dumps({
-        "skill": args.skill,
-        "as_of": win["as_of"],
-        "window": win,
-        "verdict": "",
-        "sections": [],
-    }, indent=2) + "\n")
-
+    win = json.loads((run_dir / ".run_state.json").read_text())["window"]
     print(f"wrote {run_dir}/.run_state.json, context.json, findings.json and data/ ({window.as_of_line(win).split(' · generated')[0]})")
     print(f"run_dir: {run_dir}")
     return 0

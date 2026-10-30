@@ -25,12 +25,13 @@ the rendered report.
 - Plain language; tables carry the numbers.
 - Estimates/heuristics are labelled ([`conciseness-directives.md`](conciseness-directives.md));
   set `"estimate": true` on such sections.
-- Every URL and number must come from a response recorded with `seo/record.py`.
+- Every URL and number must come from recorded evidence (`data/`, written by `seo/pipeline.py` / `seo/record.py`) or a computed output (`computed/`).
 - No authoring tokens or marker blocks in the output.
 
 ## Validation order (mechanical)
 1. `validate_report.py --findings F --data {run_dir}/context.json` — structure, dates
-   (`endDate < as_of`, no overlapping comparison), labels, evidence for every URL.
+   (`endDate < as_of`, no overlapping comparison), labels, evidence for every URL, and every figure
+   against evidence + `computed/` at the precision written ([`number_check.py`](../report/number_check.py)).
 2. `build_report.py` — refuses malformed findings.
 3. `validate_report.py --findings F --report R --data {run_dir}/context.json` — the rendered report
    contains the provenance line, every heading, unavailable source and coverage item.

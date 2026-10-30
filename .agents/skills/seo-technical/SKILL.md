@@ -45,37 +45,36 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
 | `gsc.pagespeed` | `search-console` → `pagespeed_analyze` (supply: url, strategy) | PageSpeed: CrUX field data (when available) + Lighthouse lab data |
 | `gsc.pagespeed_a11y` | `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url, strategy) | Lighthouse accessibility category |
 | `gsc.schema` | `search-console` → `schema_validate` (supply: url) | Structured-data validation |
 | `gsc.inspect` | `search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls) | URL Inspection: coverage state, canonicals, last crawl (quota 2,000/day/property) |
 | `gsc.health` | `search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl) | Crawl/robots/sitemap blockers (report only the fields returned; not a site-wide index count) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 
 <!--/include-->
 
 Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`facts`, `robots`).
 
 ## Workflow
-<!--include:evidence days=28 flags=--->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-technical --site <domain> --days 28`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-technical --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-technical.json`](../../../seo/plans/seo-technical.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
-2. **Representative URLs.** One URL per template (homepage, service page, blog post, other) **and** per language prefix — including right-to-left templates (e.g. `/ar/`). Choose from priority pages, else the top pages by clicks from <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current window); record the list (`--source user` or from the GSC pull).
-3. **Core Web Vitals.** <!--cap:gsc.pagespeed-->`search-console` → `pagespeed_analyze` (supply: url, strategy)<!--/cap--> per URL, `strategy: mobile` then `desktop`. **Pass/fail uses field data** (CrUX for the URL, else the origin) at p75 against LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1. Lab (Lighthouse) values are diagnostics only; INP has no lab value (TBT is its proxy). No CrUX data → say "no field data" — never present lab numbers as a pass/fail. Section `window` note: "PageSpeed run <date>; CrUX = trailing 28 days".
-4. **Accessibility.** <!--cap:gsc.pagespeed_a11y-->`search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url, strategy)<!--/cap--> (`strategy: mobile`) → failing audits per template (contrast, alt text, labels, headings, ARIA).
-5. **Structured data & entities.** <!--cap:gsc.schema-->`search-console` → `schema_validate` (supply: url)<!--/cap--> per URL + `python3 seo/site_crawl.py facts --url <urls>` (record) → JSON-LD types, `sameAs`, author/reviewer, invalid blocks. Expected types per [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md); FAQ/HowTo markup earns no Google rich result — never recommend it for that purpose.
-6. **Index/canonical state.** <!--cap:gsc.inspect-->`search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls)<!--/cap--> for the representative URLs — coverage state, Google vs declared canonical, last crawl.
-7. **Crawl health & AI crawlers.** <!--cap:gsc.health-->`search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl)<!--/cap--> (fields returned only) and `python3 seo/site_crawl.py robots --site https://<domain>` (record) → search/retrieval vs training bots table.
-8. **Assemble.** Rank issues by severity × number of templates (and languages) affected.
+1. **Representative URLs.** `computed/reps.json` — the smallest set of top-clicked pages covering every page type and language prefix (including right-to-left templates, e.g. `/ar/`). Priority pages missing from it: add them only via a rerun after updating the profile, and say so.
+2. **Core Web Vitals.** `data/psi_mobile_*.json` and `data/psi_desktop_*.json`. **Pass/fail uses field data** (CrUX for the URL, else the origin) at p75 against LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1. Lab (Lighthouse) values are diagnostics only; INP has no lab value (TBT is its proxy). No CrUX data → say "no field data" — never present lab numbers as a pass/fail. Section `window` note: "PageSpeed run <date>; CrUX = trailing 28 days".
+3. **Accessibility.** `data/a11y_*.json` (mobile) → failing audits per template (contrast, alt text, labels, headings, ARIA).
+4. **Structured data & entities.** `data/schema_*.json` + `data/facts.json` → JSON-LD types, `sameAs`, author/reviewer, invalid blocks. Expected types per [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md); FAQ/HowTo markup earns no Google rich result — never recommend it for that purpose.
+5. **Index/canonical state.** `computed/inspection.json` for the representative URLs — coverage state, Google vs declared canonical (last crawl per URL in `data/inspect.json`).
+6. **Crawl health & AI crawlers.** `data/health.json` (fields returned only) and `data/robots.json` → search/retrieval vs training bots table.
+7. **Assemble.** Rank issues by severity × number of templates (and languages) affected.
 
 ## Determinism
 - The URL list is recorded before testing; every test runs on that list in both strategies.
@@ -124,8 +123,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -161,8 +161,10 @@ Skill-specific: `seo/site_crawl.py` (Execute), `seo/site_profile.py` (Execute).
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

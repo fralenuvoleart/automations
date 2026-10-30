@@ -1,0 +1,151 @@
+{
+ "skill": "seo-backlink-check",
+ "window": {
+  "days": 28,
+  "compare": true,
+  "source": "ga4"
+ },
+ "inputs": {
+  "competitor": {
+   "default_profile": "competitors",
+   "desc": "competitor domain for the link gap"
+  }
+ },
+ "steps": [
+  {
+   "pull": "ga4_properties",
+   "cap": "ga4.properties"
+  },
+  {
+   "pull": "summary",
+   "cap": "dfs.backlinks_summary",
+   "args": {
+    "data": [
+     {
+      "target": "{domain}",
+      "include_subdomains": true
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo"
+   ],
+   "affects": "backlink profile (DataForSEO)"
+  },
+  {
+   "pull": "rd_ours",
+   "cap": "dfs.referring_domains",
+   "args": {
+    "data": [
+     {
+      "target": "{domain}",
+      "limit": 100,
+      "order_by": [
+       "rank,desc"
+      ]
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo"
+   ],
+   "affects": "referring domains (DataForSEO)"
+  },
+  {
+   "pull": "anchors",
+   "cap": "dfs.anchors",
+   "args": {
+    "data": [
+     {
+      "target": "{domain}",
+      "limit": 100,
+      "order_by": [
+       "backlinks,desc"
+      ]
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo"
+   ],
+   "affects": "anchor mix (DataForSEO)"
+  },
+  {
+   "pull": "new_lost",
+   "cap": "dfs.backlinks_new_lost",
+   "args": {
+    "data": [
+     {
+      "target": "{domain}",
+      "date_from": "{compareStartDate}",
+      "date_to": "{endDate}",
+      "group_range": "month"
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo"
+   ],
+   "affects": "link velocity (DataForSEO)"
+  },
+  {
+   "pull": "rd_comp",
+   "cap": "dfs.referring_domains",
+   "args": {
+    "data": [
+     {
+      "target": "{input:competitor}",
+      "limit": 100,
+      "order_by": [
+       "rank,desc"
+      ]
+     }
+    ]
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo",
+    "input:competitor"
+   ],
+   "affects": "link gap (DataForSEO)"
+  },
+  {
+   "compute": "anchor_mix",
+   "run": [
+    "dfs_metrics.py",
+    "anchor-mix",
+    "--anchors",
+    "{data}/anchors.json",
+    "--site",
+    "{site}"
+   ],
+   "when": [
+    "data:anchors"
+   ]
+  },
+  {
+   "compute": "link_gap",
+   "run": [
+    "dfs_metrics.py",
+    "link-gap",
+    "--ours",
+    "{data}/rd_ours.json",
+    "--theirs",
+    "{data}/rd_comp.json"
+   ],
+   "when": [
+    "data:rd_ours",
+    "data:rd_comp"
+   ]
+  },
+  {
+   "pull": "referrals",
+   "cap": "ga4.referrals",
+   "period": "both"
+  }
+ ]
+}

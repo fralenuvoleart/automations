@@ -22,7 +22,7 @@ name: seo-demo
 {{include:datasources}}
 
 ## Workflow
-{{include:evidence days=28 flags=--compare}}
+{{include:evidence flags=--input_keyword="x"}}
 
 1. Pull {{cap:gsc.page}} then {{cap:gsc.query}}; profile {{site:priority_pages}}.
 
@@ -60,7 +60,7 @@ def test_render_is_idempotent_and_expands_tokens():
     assert "{{cap:" not in once and "{{include:" not in once and "{{site:" not in once
     assert "<!--cap:gsc.page-->`search-console` → `analytics_query`" in once
     assert "| `gsc.page` |" in once and "| `gsc.query` |" in once          # generated table
-    assert "--site <domain> --days 28 --compare`" in once               # include attrs (fixed run folder, no --out-dir)
+    assert 'seo/pipeline.py --skill seo-demo --site <domain> --input keyword="x"`' in once  # include attrs
     assert resolve.render(once, "seo-demo") == once
 
 
@@ -147,8 +147,21 @@ def test_every_capability_is_used_by_a_skill():
     _, caps, _, _ = resolve.load()
     used = set()
     for f in resolve.skill_files():
-        used |= set(resolve.caps_used(f.read_text()))
+        used |= set(resolve.skill_caps(f.parent.name, f.read_text()))
     assert set(caps) == used, f"unused: {sorted(set(caps) - used)}"
+
+
+def test_data_sources_come_from_the_plan_plus_agent_calls():
+    text = resolve.render("## Data Sources\n{{include:datasources}}\n\n1. Fallback {{cap:web.extract}}.\n"
+                          "{{include:privacy}}\n", "seo-ai-visibility")
+    table = text.split("<!--/include-->")[0]
+    plan = resolve.plan_caps("seo-ai-visibility")
+    assert plan[0] == "gsc.diagnostics" and "ga4.ai_sources" in plan and "gsc.sites_list" in plan
+    for cid in plan:  # every pipeline call is listed, without the agent marker
+        row = next(line for line in table.splitlines() if line.startswith(f"| `{cid}` |"))
+        assert "agent call" not in row, row
+    assert "| `web.extract` |" in table and "agent call, only when a step needs it" in table
+    assert "site_crawl.py` fetches public pages" in text  # the plan crawls, so privacy says so
 
 
 if __name__ == "__main__":
