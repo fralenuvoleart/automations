@@ -88,13 +88,52 @@ def test_history_append_and_read():
     domain = "_test_history_tmp"
     p = site_profile.history_path(domain)
     try:
-        site_profile.append_history(domain, "did a thing", when="2026-01-01")
+        site_profile.append_history(domain, "did a thing", when="2026-01-01", status="done")
+        assert site_profile.append_history(domain, "did  a thing", status="done") is None  # duplicate ignored
+        site_profile.append_history(domain, "try another", when="2026-01-02")             # default: recommended
         text = site_profile.read_history(domain)
-        assert "did a thing" in text
-        assert "2026-01-01" in text
+        assert "- **2026-01-01** [done] did a thing" in text and "[recommended] try another" in text
+        assert site_profile.read_history(domain, "done").strip() == "- **2026-01-01** [done] did a thing"
     finally:
         if p.exists():
             p.unlink()
+
+
+def test_validate_rejects_brand_terms_in_priority_keywords_and_bad_prefixes():
+    prof = site_profile.load_profile("pbservices.ge")
+    prof = {**prof, "priority_keywords": {**prof["priority_keywords"], "en": ["PB Services", "tax residency georgia"]},
+            "language_paths": {**prof["language_paths"], "RU": "ru/"}}
+    issues = site_profile.validate(prof)
+    assert any("is a brand term" in i for i in issues)
+    assert any("must start and end with '/'" in i for i in issues)
+
+
+def test_validate_checks_thresholds_and_ads_fields():
+    prof = site_profile.load_profile("pbservices.ge")
+    bad = {**prof, "thresholds": {"decay_pct": "30", "bogus": 1}, "ads_geo_targets": ["2840"],
+           "ads_customer_id": "12-34"}
+    issues = site_profile.validate(bad)
+    assert any("thresholds.decay_pct" in i for i in issues)
+    assert any("unknown key 'bogus'" in i for i in issues)
+    assert any("ads_geo_targets[0]" in i for i in issues)
+    assert any("ads_customer_id" in i for i in issues)
+
+
+def test_thresholds_merge_defaults():
+    import gsc_metrics
+    thr = site_profile.thresholds("pbservices.ge")
+    assert thr["decay_pct"] == gsc_metrics.DEFAULTS["decay_pct"]
+
+
+def test_ga4_ai_filter_matches_hosts_and_subdomains_only():
+    import re
+    f = site_profile.ga4_ai_filter("pbservices.ge")["filter"]
+    assert f["field_name"] == "sessionSource" and f["string_filter"]["match_type"] == "FULL_REGEXP"
+    rx = re.compile(f["string_filter"]["value"])
+    for host in ("chatgpt.com", "www.perplexity.ai", "chat.deepseek.com", "claude.ai", "copilot.microsoft.com"):
+        assert rx.match(host), host
+    for host in ("notchatgpt.com", "chatgpt.com.evil.io", "google.com"):
+        assert not rx.match(host), host
 
 
 def test_site_token_expansion():

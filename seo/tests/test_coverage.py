@@ -15,7 +15,7 @@ _spec.loader.exec_module(coverage)
 
 def test_compute_flattened_and_by_language():
     out = coverage.compute("pbservices.ge", ["ип в грузии", "bank account"], [])
-    assert len(out["priority_keywords"]) == 50
+    assert len(out["priority_keywords"]) == 46  # brand terms live in brand_terms only
     assert "ип в грузии" in out["covered"]
     assert "bank account" in out["covered"]
     assert out["by_language"]["ru"]["total"] == 33
@@ -32,13 +32,29 @@ def test_matching_is_case_and_space_insensitive():
 def test_missing_is_complement():
     out = coverage.compute("pbservices.ge", [], [])
     assert out["covered"] == []
-    assert len(out["missing"]) == 50
+    assert len(out["missing"]) == 46
 
 
 def test_read_list_accepts_json_and_csv():
     assert coverage._read_list('["a","b"]') == ["a", "b"]
     assert coverage._read_list("a, b ,c") == ["a", "b", "c"]
     assert coverage._read_list(None) == []
+
+
+def test_gsc_basis_counts_keywords_with_impressions():
+    import json
+    import tempfile
+    rows = {"rows": [{"keys": ["ИП в Грузии"], "clicks": 3, "impressions": 40, "ctr": 0.075, "position": 6.1},
+                     {"keys": ["bank account georgia"], "clicks": 0, "impressions": 0, "ctr": 0, "position": 0}]}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(rows, fh, ensure_ascii=False)
+    out = coverage.compute("pbservices.ge", coverage.visible_items(fh.name, "query"), [], basis="gsc_impressions")
+    assert out["basis"] == "gsc_impressions"
+    assert out["covered"] == ["ип в грузии"]          # case-insensitive; zero-impression rows don't count
+
+
+def test_read_list_keeps_slashes_in_inline_values():
+    assert coverage._read_list("24/7 accounting, tax") == ["24/7 accounting", "tax"]
 
 
 def test_read_list_rejects_missing_file_path():

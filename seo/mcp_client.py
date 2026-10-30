@@ -116,7 +116,8 @@ def dump(names: list[str] | None = None) -> dict:
 
 if __name__ == "__main__":
     names = sys.argv[1:] or None
-    data = dump(names)
     dest = HERE / "tool-schemas.json"
+    data = json.loads(dest.read_text()) if (names and dest.exists()) else {}
+    data.update(dump(names))  # dumping one server keeps the other servers' cached schemas
     dest.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
     print(f"wrote {dest.relative_to(ROOT)}")

@@ -1,119 +1,169 @@
 ---
 name: seo-technical
-description: Technical SEO audit of priority pages — Core Web Vitals (LCP/INP/CLS), mobile vs desktop, structured-data coverage, accessibility (Lighthouse a11y category), and crawlability flags, from PageSpeed + GSC inspection. Use when asked "technical SEO", "core web vitals", "page speed audit", "why is my page slow", "accessibility", or "schema check".
+description: Technical SEO audit of representative page templates per language — Core Web Vitals judged on field data (CrUX) with lab diagnostics, accessibility, structured data and entity markup, index/canonical state, crawl health and AI-crawler access. Use when asked "technical SEO", "core web vitals", "page speed audit", "why is my page slow", "accessibility" or "schema check".
 license: MIT
-compatibility: Requires the `search-console` MCP server (GSC + PageSpeed + schema) in .roo/mcp.json. Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
+compatibility: Requires the `search-console` MCP server (GSC + PageSpeed + schema). Page facts and robots checks use the local stdlib crawler (`seo/site_crawl.py`). Tool names canonicalized in [`seo/tool-map.md`](../../../seo/tool-map.md).
 ---
 
 # Technical SEO
 
-> **Mechanical steps** (window resolution, capability calls, table rendering, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within the guardrails in [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
+> **Mechanical steps** (window, capability calls, recording, computing, validation) must be followed exactly; **analytical steps** (severity, root cause, prioritization) use judgment within [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md).
 
 ## Scope
-- **Scope**: technical health of the site's priority pages (CWV, mobile, structured data, crawlability, accessibility). Does not read or write `memory-bank/`.
+- Template-level technical health: one representative URL per template **and per language variant**; CWV, accessibility, structured data, index/canonical state, crawlability, AI-crawler access.
 
 ## Report Audience & Purpose
+<!--include:audience-->
+
 - **Audience**: the site owner/marketer (not a developer).
-- **Purpose**: every finding ends in a concrete, prioritized action doable in the relevant panel/content system — never a code-level fix referencing this repo's files or functions.
+- **Purpose**: every finding ends in a concrete, prioritized action doable in the relevant panel or content system — never a code-level fix referencing this repo's files.
+
+<!--/include-->
 
 ## Memory-Bank Isolation
-This skill is a standalone SEO tool — it MUST NOT read from or write to `memory-bank/` (activeContext.md, progress.md, systemPatterns.md, productContext.md). Findings and reports stay under the run directory.
+<!--include:memory-bank-->
+
+While running this skill, do not read from or write to `memory-bank/` (repo-level exception recorded in `AGENTS.md`). Findings, evidence and reports stay in the run directory.
+
+<!--/include-->
 
 ## When to Use
 - "technical SEO", "core web vitals", "page speed audit"
-- "why is my page slow", "schema check", "structured data"
+- "why is my page slow", "schema check", "structured data", "accessibility"
 
 ## When NOT to Use
 - No `search-console` server configured
-- Whole-site organic performance audit (use `seo-audit`)
-- Index coverage / sitemap health (use `seo-indexation`)
+- Whole-site performance audit → `seo-audit`; index coverage/hreflang → `seo-indexation`
 
 ## Requires
-- The `search-console` MCP server with GSC connected (verify with `search-console` → `diagnostics`).
-- A site profile for priority pages ([`seo/site_profile.py`](../../../seo/site_profile.py)).
+- **Required:** `search-console`. Local: `seo/site_crawl.py`.
+- Profile `sections` (<!--site:sections-->`python3 seo/site_profile.py --site <domain> --get sections`<!--/site-->), `language_paths` (<!--site:language_paths-->`python3 seo/site_profile.py --site <domain> --get language_paths`<!--/site-->), `priority_pages` (<!--site:priority_pages-->`python3 seo/site_profile.py --site <domain> --get priority_pages`<!--/site-->).
 
 ## Data Sources
-| Need | Tool | Status |
+<!--include:datasources-->
+
+| Capability | Call | Purpose |
 |---|---|---|
-| Page speed / CWV | `search-console` → `pagespeed_analyze` (supply: url, strategy) | available |
-| Accessibility (Lighthouse a11y) | `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url) | available |
-| Structured data | `search-console` → `schema_validate` (supply: url) | available |
-| Index / canonical state | `search-console` → `inspection_inspect` (supply: siteUrl, urls) | available |
-| Crawl health | `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl) | available |
-| Priority pages | site profile (`python3 seo/site_profile.py --site <domain> --get priority_pages`) | available |
+| `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
+| `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
+| `gsc.pagespeed` | `search-console` → `pagespeed_analyze` (supply: url, strategy) | PageSpeed: CrUX field data (when available) + Lighthouse lab data |
+| `gsc.pagespeed_a11y` | `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url, strategy) | Lighthouse accessibility category |
+| `gsc.schema` | `search-console` → `schema_validate` (supply: url) | Structured-data validation |
+| `gsc.inspect` | `search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls) | URL Inspection: coverage state, canonicals, last crawl (quota 2,000/day/property) |
+| `gsc.health` | `search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl) | Crawl/robots/sitemap blockers (report only the fields returned; not a site-wide index count) |
+
+<!--/include-->
+
+Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`facts`, `robots`).
 
 ## Workflow
-1. **Verify + property.** `search-console` → `diagnostics`, then `search-console` → `sites_list` → pick the user's domain.
-2. **Template-level representative pages.** Identify one representative URL per template from the profile's `sections` (`python3 seo/site_profile.py --site <domain> --get sections`) and `priority_pages`: Homepage, a primary Service page, and a Blog post. CWV issues and layout shifts are systemic to page templates; testing representative templates delivers architectural recommendations without quota waste.
-3. **Core Web Vitals.** For each representative template URL: `search-console` → `pagespeed_analyze` (supply: url, strategy) — run **mobile first, then desktop** (`strategy: "mobile"` / `"desktop"`). Record LCP, INP, CLS and the pass/fail band. Then run `search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url) on the same pages for the Lighthouse accessibility category — flag contrast, missing alt text, ARIA, and label/heading issues per template.
-4. **Structured data & Knowledge Graph entities.** `search-console` → `schema_validate` (supply: url) per page — required types present (Organization, LocalBusiness/Service, FAQ, Article), errors vs warnings. Check entity disambiguation: presence of `sameAs` authority links (Wikidata, Wikipedia, LinkedIn, Crunchbase) and verified `author`/`reviewedBy` Person entities for E-E-A-T and LLM grounding (see [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md)).
-5. **Index / canonical state.** `search-console` → `inspection_inspect` (supply: siteUrl, urls) for the priority set — canonical correctness, indexing state, last crawl.
-6. **Crawl health & AI crawler access.** `search-console` → `site_health_check` {"level": "crawl_issues"} (supply: siteUrl) — surface crawl/robots/sitemap blockers. Verify whether `robots.txt` allows AI search crawlers (`GPTBot`, `OAI-SearchBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`).
-7. **Assemble.** Rank issues by (severity × number of priority pages affected).
+<!--include:evidence days=28 flags=--->
+
+**Run setup and evidence (mandatory).**
+1. Seed the run: `python3 seo/orchestrate.py --skill seo-technical --days 28 --out-dir {run_dir}`. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
+2. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
+3. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+
+<!--/include-->
+
+1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
+2. **Representative URLs.** One URL per template (homepage, service page, blog post, other) **and** per language prefix — including right-to-left templates (e.g. `/ar/`). Choose from priority pages, else the top pages by clicks from <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current window); record the list (`--source user` or from the GSC pull).
+3. **Core Web Vitals.** <!--cap:gsc.pagespeed-->`search-console` → `pagespeed_analyze` (supply: url, strategy)<!--/cap--> per URL, `strategy: mobile` then `desktop`. **Pass/fail uses field data** (CrUX for the URL, else the origin) at p75 against LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1. Lab (Lighthouse) values are diagnostics only; INP has no lab value (TBT is its proxy). No CrUX data → say "no field data" — never present lab numbers as a pass/fail. Section `window` note: "PageSpeed run <date>; CrUX = trailing 28 days".
+4. **Accessibility.** <!--cap:gsc.pagespeed_a11y-->`search-console` → `pagespeed_analyze` {"category": ["accessibility"]} (supply: url, strategy)<!--/cap--> (`strategy: mobile`) → failing audits per template (contrast, alt text, labels, headings, ARIA).
+5. **Structured data & entities.** <!--cap:gsc.schema-->`search-console` → `schema_validate` (supply: url)<!--/cap--> per URL + `python3 seo/site_crawl.py facts --url <urls>` (record) → JSON-LD types, `sameAs`, author/reviewer, invalid blocks. Expected types per [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md); FAQ/HowTo markup earns no Google rich result — never recommend it for that purpose.
+6. **Index/canonical state.** <!--cap:gsc.inspect-->`search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls)<!--/cap--> for the representative URLs — coverage state, Google vs declared canonical, last crawl.
+7. **Crawl health & AI crawlers.** <!--cap:gsc.health-->`search-console` → `site_health_check` {"level": "crawl_issues", "engine": "google"} (supply: siteUrl)<!--/cap--> (fields returned only) and `python3 seo/site_crawl.py robots --site https://<domain>` (record) → search/retrieval vs training bots table.
+8. **Assemble.** Rank issues by severity × number of templates (and languages) affected.
 
 ## Determinism
-- Resolve every window to **absolute dates** (`YYYY-MM-DD`) before calling a tool — never pass relative phrases. GSC lags ~2 days: `endDate = today − 2`, never include today. Compute with `python3 seo/window.py --days 28` and pass the literal `startDate`/`endDate`.
-- Emit an **as-of line** (resolved window + UTC generation timestamp) at the top of the output.
-- Keep every **estimate** / **heuristic** label exactly as written (PageSpeed lab data is a snapshot, not field data).
+- The URL list is recorded before testing; every test runs on that list in both strategies.
+- CWV verdicts use the published thresholds on field data only.
 
 ## Output
-Begin with the **as-of line**. Verdict (is the site technically healthy, and the #1 blocker), then: CWV table (page, mobile LCP/INP/CLS, desktop), accessibility findings (page, a11y issue, severity), structured-data coverage table (page, types, errors), crawlability flags, and a prioritized fix list. Each issue names the page and the exact change.
+Provenance line first. **Verdict**: technically healthy or not, and the #1 blocker. Then: CWV table (template, language, field LCP/INP/CLS mobile & desktop, lab diagnostics), accessibility findings, structured-data table (template, types, errors, `sameAs`/author), index/canonical table, crawler-access table, and the prioritized fix list — each issue names the template and the exact change.
+
+<!--include:pipeline-->
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-0. (optional) Seed the run: `python3 seo/orchestrate.py --skill seo-technical --days 28 --out-dir {run_dir}` → writes `.run_state.json` + a findings skeleton.
-1. Write findings to `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json).
-2. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
-3. **Validate (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
-4. Present the report path.
+1. Write `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json); copy `window` verbatim from `.run_state.json`; set `sections[].window` when a section's data covers a different period.
+2. Validate the findings: `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --data {run_dir}/context.json` — fix every error first.
+3. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
+4. **Validate the report (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
+5. Present the report path. PDF/email delivery → `report-export` with `--skill seo-technical`.
+
+<!--/include-->
 
 ## Fallbacks
-- If `pagespeed_analyze` fails (PageSpeed API unavailable/rate-limited), state it and still report structured data + inspection + crawl health.
-- If `schema_validate` is unavailable, state it and skip the structured-data section.
+- PageSpeed fails/rate-limited → retry once, then mark the URL unmeasured; still report structured data, inspection and crawl health.
+- `schema_validate` unavailable → use the `facts` JSON-LD summary and say validation was not run.
+- Site blocks the crawler → `facts`/`robots` sections become `unavailable` with the status code.
 
 ## Pending Data Sources
-- **DataForSEO** (optional, not configured): not used by this skill.
+- None required (field data availability depends on the site's Chrome traffic).
 
 ## Troubleshooting
+Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md).
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add it and reload MCP; otherwise follow the Fallbacks ladder |
-| PageSpeed empty/timeout | PageSpeed API rate limit or slow page | retry once; otherwise state the page is unmeasured |
-| Empty/zero results | window excludes data (GSC lag) or filter too narrow | widen the absolute window; never include today |
+| "No field data" everywhere | low traffic per URL | use origin-level CrUX if present; otherwise report lab diagnostics only |
+| Lab LCP good, field LCP poor | real users on slower devices/networks | trust field data; investigate images/fonts/server time |
+| JSON-LD `invalid_blocks` > 0 | malformed JSON in a script tag | fix the markup syntax first |
 
 ## Files
+<!--include:files-->
 
 | File | Purpose | Action |
 |---|---|---|
 | [`seo/capabilities.json`](../../../seo/capabilities.json) | capability registry (single source of truth) | Read |
-| [`seo/references/report-structure.md`](../../../seo/references/report-structure.md) | report section contract | Read |
-| [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md) | tone/label rules | Read |
-| [`seo/references/data-source-map.md`](../../../seo/references/data-source-map.md) | freshness + degradation ladder | Read |
-| [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | capability tokens, `args` vs `runtime`, `policy` | Read |
-| [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | SEO interpretation methodology | Read |
-| [`seo/report/build_report.py`](../../../seo/report/build_report.py) | renders findings JSON → Markdown | Execute |
+| [`seo/references/report-structure.md`](../../../seo/references/report-structure.md) | report contract + validation order | Read |
+| [`seo/references/conciseness-directives.md`](../../../seo/references/conciseness-directives.md) | mandatory rules | Read |
+| [`seo/references/data-source-map.md`](../../../seo/references/data-source-map.md) | freshness + the degradation rule | Read |
+| [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
+| [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
+| [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
-## Related / Delegation
-- Index coverage / sitemap health → run `seo-indexation`.
-- Whole-site organic audit → run `seo-audit`.
+<!--/include-->
 
-- Deliver the report as PDF/email → run `report-export` (pass `--skill seo-technical` to select this skill's subject).
+Skill-specific: `seo/site_crawl.py` (Execute), `seo/site_profile.py` (Execute).
+
+## Related / Delegation
+- Index coverage/hreflang → `seo-indexation`; whole-site audit → `seo-audit`.
+- AI visibility beyond crawler access → `seo-ai-visibility`.
+- PDF/email delivery → `report-export` (`--skill seo-technical`).
 
 ## Configuration
+<!--include:configuration-->
+
 - Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`.
-- `search-console` manages its own OAuth.
+- `search-console`: OAuth managed by the server (`~/.search-console-mcp-config.enc`).
+
+<!--/include-->
 
 ## Privacy & Retention
-- Findings/report files contain the site's own performance data (queries, URLs, metrics) — keep them under the run directory and prune when no longer needed.
-- Third-party calls: none — capability calls go only to the configured MCP servers (GSC/GA4/Google Ads); the site's data does not leave Google.
-- Rendered reports are written to disk and opened in the editor; treat them as containing the site's data.
+<!--include:privacy-->
+
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — keep them in the run directory and delete them when no longer needed.
+- Third-party calls: none — capability calls go only to Google APIs via the configured MCP servers.
+- `seo/site_crawl.py` fetches public pages directly from the target site (polite rate, identifying User-Agent).
+
+<!--/include-->
 
 ## Output Structure
+<!--include:output-structure-->
+
 ```
 {run_dir}/
   .run_state.json     # window + paths (seo/orchestrate.py)
-  context.json        # raw tool data
+  context.json        # evidence index (seo/record.py)
+  data/*.json         # raw tool responses (seo/record.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```
+
+<!--/include-->

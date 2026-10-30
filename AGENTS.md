@@ -15,6 +15,7 @@ Do not guess, speculate, extrapolate, or assume.
 # ⚙️ Project & Environment Conventions
 - **Plan Storage:** Always save plan files in `plans/` in the workspace root.
 - **Memory Bank Synchronization:** You MUST read the `/memory-bank` directory before every task as your primary source of truth.
+  - **Exception — running an SEO report skill** (`.agents/skills/seo-*`): while *executing* a skill to produce a site report, do not read or write `memory-bank/` (report runs stay isolated in their run directory). Maintaining or editing the SEO toolkit itself is a normal task: read and update the memory bank as usual.
 - **Auto-Update Protocol:** Update `activeContext.md` and `progress.md` after every significant change without being prompted.
 - **Deep Scan Initialization:** If no `memory-bank/` exists, offer to initialize it by scanning `docs/` and the codebase.
 

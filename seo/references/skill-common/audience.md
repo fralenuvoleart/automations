@@ -1,0 +1,2 @@
+- **Audience**: the site owner/marketer (not a developer).
+- **Purpose**: every finding ends in a concrete, prioritized action doable in the relevant panel or content system — never a code-level fix referencing this repo's files.

@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Resolve SEO capability IDs to deterministic MCP call specs.
+"""Render and validate the SEO skills against the capability registry.
 
-Skills reference logical capabilities as ``{{cap:<id>}}`` tokens. This script
-expands them to `` `server` -> `tool` { args } (supply: runtime) `` from
-``seo/capabilities.json`` so the LLM executes deterministically.
+Authoring tokens (in ``.agents/skills/seo-*/SKILL.md``)::
+
+    {{cap:<id>}}                 a capability call spec      -> <!--cap:<id>-->…<!--/cap-->
+    {{site:<key>}}               a site-profile lookup        -> <!--site:<key>-->…<!--/site-->
+    {{include:<name> k=v …}}     a shared/generated section   -> <!--include:<name> k=v-->…<!--/include-->
+
+``--write`` turns tokens into marker blocks and **re-renders every block** from the
+registry / shared templates, so a registry edit or tool rename propagates on the
+next ``--write`` (no hand-editing). ``--check`` fails when any block is stale.
 
 Usage:
-    python3 seo/resolve.py --check          # verify tokens resolve; report alias drift
-    python3 seo/resolve.py --validate-live  # spawn each server; validate tool + args vs live inputSchema
-    python3 seo/resolve.py --write          # rewrite skills in place (expand tokens + remap aliases)
-    python3 seo/resolve.py --list           # list capabilities and their current call spec
+    python3 seo/resolve.py --check            # blocks current, no stray tokens/legacy names, policies + names valid
+    python3 seo/resolve.py --validate-cached  # tool + args vs seo/tool-schemas.json (offline; CI)
+    python3 seo/resolve.py --validate-live    # tool + args vs the live servers (local)
+    python3 seo/resolve.py --write            # render all skills in place
+    python3 seo/resolve.py --map              # regenerate seo/tool-map.md
+    python3 seo/resolve.py --list             # list capabilities
 
-Exit codes: 0 = clean, 1 = issues found (--check / --validate-live).
+Exit codes: 0 = clean, 1 = issues found.
 """
 from __future__ import annotations
 
@@ -27,10 +35,67 @@ ROOT = HERE.parent
 REGISTRY = HERE / "capabilities.json"
 MCP_JSON = ROOT / ".roo" / "mcp.json"
 SKILLS = ROOT / ".agents" / "skills"
+TOOL_SCHEMAS = HERE / "tool-schemas.json"
+COMMON = HERE / "references" / "skill-common"
+SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
 
 TOKEN_RE = re.compile(r"\{\{cap:([A-Za-z0-9_.]+)\}\}")
 SITE_TOKEN_RE = re.compile(r"\{\{site:([A-Za-z0-9_.]+)\}\}")
-SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
+INCLUDE_TOKEN_RE = re.compile(r"\{\{include:([a-z0-9-]+)((?:\s+[a-z_]+=\S+?)*)\}\}")
+CAP_BLOCK_RE = re.compile(r"<!--cap:([A-Za-z0-9_.]+)-->(.*?)<!--/cap-->", re.S)
+SITE_BLOCK_RE = re.compile(r"<!--site:([A-Za-z0-9_.]+)-->(.*?)<!--/site-->", re.S)
+INCLUDE_BLOCK_RE = re.compile(r"<!--include:([a-z0-9-]+)((?:\s+[a-z_]+=\S+?)*)-->(.*?)<!--/include-->", re.S)
+ATTR_RE = re.compile(r"([a-z_]+)=(\S+)")
+GENERATED = ("datasources", "configuration", "privacy")
+
+# Curated allowlists for the *semantic* check. The live inputSchema only says
+# "array of strings", so a typo'd or deprecated GA4/GSC name passes schema validation.
+GA4_DIMENSIONS = {
+    "date", "dateHour", "year", "month", "week", "day", "hour", "minute",
+    "eventName", "pagePath", "pagePathPlusQueryString", "pageTitle",
+    "pageLocation", "landingPage", "landingPagePlusQueryString", "fullPageUrl",
+    "hostName", "sessionSource", "sessionMedium", "sessionCampaignName",
+    "sessionDefaultChannelGroup", "sessionSourceMedium",
+    "source", "medium", "campaignName", "defaultChannelGroup",
+    "firstUserSource", "firstUserMedium", "firstUserCampaignName",
+    "country", "region", "city", "continent", "deviceCategory",
+    "operatingSystem", "browser", "platform", "language",
+    "unifiedScreenName", "screenName", "audienceName",
+}
+# `conversions` was renamed `keyEvents` (2024) and is deliberately absent.
+GA4_METRICS = {
+    "sessions", "sessionsPerUser", "totalUsers", "activeUsers", "newUsers",
+    "eventCount", "screenPageViews", "screenPageViewsPerSession",
+    "averageSessionDuration", "userEngagementDuration", "engagementRate",
+    "engagedSessions", "bounceRate", "keyEvents", "sessionKeyEventRate",
+    "totalRevenue", "purchaseRevenue", "transactions", "eventValue",
+}
+GA4_MATCH_TYPES = {"EXACT", "BEGINS_WITH", "ENDS_WITH", "CONTAINS", "FULL_REGEXP", "PARTIAL_REGEXP"}
+GSC_DIMENSIONS = {"query", "page", "country", "device", "date", "searchAppearance"}
+GSC_MAX_ROWS = 25000
+
+
+# ---------------------------------------------------------------- registry ---
+def display(cap: dict) -> str:
+    """Render a capability as `server` → `tool` {args} (supply: runtime)."""
+    base = f"`{cap['server']}` → `{cap['tool']}`"
+    parts = []
+    if cap.get("args"):
+        parts.append(json.dumps(cap["args"], ensure_ascii=False))
+    if cap.get("runtime"):
+        parts.append("(supply: " + ", ".join(cap["runtime"]) + ")")
+    return base + (" " + " ".join(parts) if parts else "")
+
+
+def load(registry: Path | None = None):
+    data = json.loads((registry or REGISTRY).read_text())
+    caps = data["capabilities"]
+    disp = {cid: display(c) for cid, c in caps.items()}
+    alias = {}
+    for cid, c in caps.items():
+        for a in c.get("aliases", []):
+            alias[a] = cid
+    return data, caps, disp, alias
 
 
 def site_keys() -> set[str]:
@@ -45,221 +110,276 @@ def site_display(key: str) -> str:
     """Render a ``{{site:<key>}}`` token as the deterministic retrieval command."""
     return f"`python3 seo/site_profile.py --site <domain> --get {key}`"
 
-# Curated allowlists for the *semantic* check (--check). The live inputSchema
-# only says "array of strings", so a typo'd GA4 dimension/metric or GSC
-# dimension passes --validate-live. These sets catch that class of error.
-GA4_DIMENSIONS = {
-    "date", "dateHour", "year", "month", "week", "day", "hour", "minute",
-    "eventName", "pagePath", "pagePathPlusQueryString", "pageTitle",
-    "pageLocation", "landingPage", "landingPagePlusQueryString", "fullPageUrl",
-    "hostName", "sessionSource", "sessionMedium", "sessionCampaignName",
-    "source", "medium", "campaignName", "defaultChannelGroup",
-    "firstUserSource", "firstUserMedium", "firstUserCampaignName",
-    "country", "region", "city", "continent", "deviceCategory",
-    "operatingSystem", "browser", "platform", "language",
-    "unifiedScreenName", "screenName", "audienceName",
-}
-GA4_METRICS = {
-    "sessions", "sessionsPerUser", "totalUsers", "activeUsers", "newUsers",
-    "eventCount", "screenPageViews", "screenPageViewsPerSession",
-    "averageSessionDuration", "userEngagementDuration", "engagementRate",
-    "engagedSessions", "bounceRate", "conversions", "totalRevenue",
-    "purchaseRevenue", "transactions", "eventValue", "keyEvents",
-}
-GSC_DIMENSIONS = {"query", "page", "country", "device", "date", "searchAppearance"}
+
+def skill_files(skills: Path | None = None):
+    return sorted((skills or SKILLS).glob("seo-*/SKILL.md"))
 
 
-def display(cap: dict) -> str:
-    """Render a capability as `server` -> `tool` { args } (supply: runtime)."""
-    base = f"`{cap['server']}` → `{cap['tool']}`"
-    parts = []
-    if cap.get("args"):
-        parts.append(json.dumps(cap["args"]))
-    if cap.get("runtime"):
-        parts.append("(supply: " + ", ".join(cap["runtime"]) + ")")
-    return base + (" " + " ".join(parts) if parts else "")
+# --------------------------------------------------------------- rendering ---
+def _attrs(raw: str) -> dict:
+    return dict(ATTR_RE.findall(raw or ""))
 
 
-def load():
-    data = json.loads(REGISTRY.read_text())
+def _attr_str(attrs: dict) -> str:
+    return "".join(f" {k}={v}" for k, v in attrs.items())
+
+
+def _mask(text: str) -> str:
+    """Blank out every marker block (same length) so scans ignore rendered content."""
+    for rx in (INCLUDE_BLOCK_RE, CAP_BLOCK_RE, SITE_BLOCK_RE):
+        text = rx.sub(lambda m: " " * len(m.group(0)), text)
+    return text
+
+
+def caps_used(text: str) -> list[str]:
+    """Capability IDs referenced in the body (outside include blocks), first-use order."""
+    body = INCLUDE_BLOCK_RE.sub("", text)
+    seen: list[str] = []
+    for m in CAP_BLOCK_RE.finditer(body):
+        if m.group(1) not in seen:
+            seen.append(m.group(1))
+    return seen
+
+
+def _gen_datasources(caps_in: list[str], data: dict) -> str:
     caps = data["capabilities"]
-    disp = {cid: display(c) for cid, c in caps.items()}
-    alias = {}
-    for cid, c in caps.items():
-        for a in c.get("aliases", []):
-            alias[a] = disp[cid]
-    return data, caps, disp, alias
-
-
-def skill_files():
-    return sorted(SKILLS.glob("*/SKILL.md"))
-
-
-def _balanced_json(text: str, start: int) -> str | None:
-    """Return the brace-balanced JSON object substring at ``text[start] == '{'`` (string-aware)."""
-    depth = 0
-    in_str = False
-    esc = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
+    rows = ["| Capability | Call | Purpose |", "|---|---|---|"]
+    for cid in caps_in:
+        c = caps.get(cid)
+        if not c:
             continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i + 1]
-    return None
+        status = "" if data["servers"].get(c["server"], {}).get("configured", True) else " *(optional, not configured)*"
+        rows.append(f"| `{cid}` | {display(c)} | {c.get('desc', '')}{status} |")
+    return "\n".join(rows)
 
 
-def check_expanded() -> int:
-    """Verify every `tool` {json} in a skill matches a registry capability's args.
-
-    Catches drift *after* expansion (hand-edited or stale call specs) that the
-    token/alias checks cannot see once ``{{cap:}}`` tokens are materialized.
-    """
-    _, caps, _disp, _alias = load()
-    tools = {c["tool"] for c in caps.values()}
-    valid = {(c["tool"], json.dumps(c.get("args") or {}, sort_keys=True)) for c in caps.values()}
-    issues = 0
-    call_re = re.compile(r"`([A-Za-z0-9_.]+)`[ \t]*(\{)")
-    for f in skill_files():
-        text = f.read_text()
-        for m in call_re.finditer(text):
-            tool = m.group(1)
-            if tool not in tools:
-                continue
-            blob = _balanced_json(text, m.start(2))
-            if blob is None:
-                continue
-            try:
-                parsed = json.loads(blob)
-            except json.JSONDecodeError:
-                print(f"ERROR {f.relative_to(ROOT)}: invalid JSON args for `{tool}`: {blob}")
-                issues += 1
-                continue
-            if (tool, json.dumps(parsed, sort_keys=True)) not in valid:
-                line = text.count("\n", 0, m.start()) + 1
-                print(f"DRIFT {f.relative_to(ROOT)}:{line}: `{tool}` {blob} matches no capability args")
-                issues += 1
-    return issues
+def _servers_used(caps_in: list[str], data: dict) -> list[str]:
+    out: list[str] = []
+    for cid in caps_in:
+        s = data["capabilities"].get(cid, {}).get("server")
+        if s and s not in out:
+            out.append(s)
+    return out
 
 
+def _gen_configuration(caps_in: list[str], data: dict) -> str:
+    lines = ["- Credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`."]
+    for s in _servers_used(caps_in, data):
+        spec = data["servers"].get(s, {})
+        opt = " *(optional)*" if not spec.get("configured", True) else ""
+        lines.append(f"- `{s}`{opt}: {spec.get('credentials', spec.get('auth', ''))}.")
+    return "\n".join(lines)
+
+
+def _gen_privacy(caps_in: list[str], data: dict, text: str) -> str:
+    third = [(s, data["servers"][s]["third_party"]) for s in _servers_used(caps_in, data)
+             if data["servers"].get(s, {}).get("third_party")]
+    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — keep them in the run directory and delete them when no longer needed."]
+    if third:
+        names = ", ".join(f"{p} (`{s}`)" for s, p in third)
+        lines.append(f"- Third-party calls: target domains/keywords/URLs are sent to {names} when those servers are used; everything else goes only to Google APIs via the configured MCP servers.")
+    else:
+        lines.append("- Third-party calls: none — capability calls go only to Google APIs via the configured MCP servers.")
+    if "seo/site_crawl.py" in text:
+        lines.append("- `seo/site_crawl.py` fetches public pages directly from the target site (polite rate, identifying User-Agent).")
+    return "\n".join(lines)
+
+
+def _render_include(name: str, attrs: dict, skill: str, text: str, data: dict) -> str:
+    caps_in = caps_used(text)
+    if name == "datasources":
+        return _gen_datasources(caps_in, data)
+    if name == "configuration":
+        return _gen_configuration(caps_in, data)
+    if name == "privacy":
+        return _gen_privacy(caps_in, data, text)
+    path = COMMON / f"{name}.md"
+    if not path.exists():
+        raise KeyError(f"unknown include '{name}' (no {path.relative_to(ROOT)})")
+    out = path.read_text().strip("\n")
+    for k, v in {"skill": skill, **attrs}.items():
+        if k == "flags":  # flags=--compare_--yoy -> "--compare --yoy"; flags=- -> none
+            if v == "-":
+                out = out.replace(" <<flags>>", "")
+            v = "" if v == "-" else v.replace("_", " ")
+        out = out.replace(f"<<{k}>>", v)
+    leftover = re.findall(r"<<([a-z_]+)>>", out)
+    if leftover:
+        raise KeyError(f"include '{name}' needs attribute(s) {sorted(set(leftover))}")
+    return out
+
+
+def render(text: str, skill: str, data: dict | None = None) -> str:
+    """Return ``text`` with tokens converted and every marker block re-rendered."""
+    data = data or load()[0]
+    caps = data["capabilities"]
+    alias = {a: cid for cid, c in caps.items() for a in c.get("aliases", [])}
+
+    # 1. tokens -> blocks
+    text = TOKEN_RE.sub(lambda m: f"<!--cap:{m.group(1)}--><!--/cap-->", text)
+    text = SITE_TOKEN_RE.sub(lambda m: f"<!--site:{m.group(1)}--><!--/site-->", text)
+    text = INCLUDE_TOKEN_RE.sub(lambda m: f"<!--include:{m.group(1)}{m.group(2)}--><!--/include-->", text)
+
+    # 2. legacy tool names (aliases) outside blocks -> cap blocks
+    if alias:
+        masked = _mask(text)
+        pieces, last = [], 0
+        rx = re.compile(r"`(" + "|".join(re.escape(a) for a in sorted(alias, key=len, reverse=True)) + r")`")
+        for m in rx.finditer(masked):
+            pieces.append(text[last:m.start()])
+            pieces.append(f"<!--cap:{alias[m.group(1)]}--><!--/cap-->")
+            last = m.end()
+        pieces.append(text[last:])
+        text = "".join(pieces)
+
+    # 3. re-render cap + site blocks (unknown IDs are left untouched; --check reports them)
+    text = CAP_BLOCK_RE.sub(
+        lambda m: f"<!--cap:{m.group(1)}-->{display(caps[m.group(1)])}<!--/cap-->" if m.group(1) in caps else m.group(0),
+        text)
+    text = SITE_BLOCK_RE.sub(lambda m: f"<!--site:{m.group(1)}-->{site_display(m.group(1))}<!--/site-->", text)
+
+    # 4. re-render include blocks (generated ones read the cap blocks rendered above)
+    def inc(m: re.Match) -> str:
+        name, attrs = m.group(1), _attrs(m.group(2))
+        body = _render_include(name, attrs, skill, text, data)
+        return f"<!--include:{name}{_attr_str(attrs)}-->\n\n{body}\n\n<!--/include-->"
+
+    return INCLUDE_BLOCK_RE.sub(inc, text)
+
+
+# ------------------------------------------------------------------ checks ---
 def client_timeout_s() -> float:
     """MCP client request timeout (s); override with MCP_CLIENT_TIMEOUT_S."""
     return float(os.environ.get("MCP_CLIENT_TIMEOUT_S", "60"))
 
 
-def check_policies() -> int:
-    """Ensure each capability's retry budget fits inside the MCP client timeout."""
-    _, caps, _disp, _alias = load()
+def check_policies(caps: dict | None = None) -> int:
+    """Each retry budget must fit inside the MCP client timeout; retries live in one layer."""
+    caps = caps or load()[1]
     budget = client_timeout_s()
     issues = 0
     for cid, c in caps.items():
-        tb = (c.get("policy") or {}).get("timeout_budget_s")
+        pol = c.get("policy") or {}
+        tb = pol.get("timeout_budget_s")
         if tb is not None and tb >= budget:
             print(f"ERROR {cid}: policy.timeout_budget_s {tb} >= client timeout {budget}")
+            issues += 1
+        if c["server"] == "google-ads-planner" and pol.get("retry", 0) != 0:
+            print(f"ERROR {cid}: the planner server retries internally — policy.retry must be 0 (single retry layer)")
             issues += 1
     return issues
 
 
-def check_semantics() -> int:
-    """Validate GA4/GSC dimension + metric names against curated allowlists.
+def _check_ga4_filter(cid: str, fobj, issues: list[str]) -> None:
+    if not isinstance(fobj, dict):
+        return
+    f = fobj.get("filter")
+    if isinstance(f, dict):
+        if f.get("field_name") not in GA4_DIMENSIONS:
+            issues.append(f"{cid}: unknown GA4 filter dimension '{f.get('field_name')}'")
+        sf = f.get("string_filter")
+        if isinstance(sf, dict) and sf.get("match_type") not in GA4_MATCH_TYPES:
+            issues.append(f"{cid}: unknown GA4 string_filter.match_type '{sf.get('match_type')}'")
+    for grp in ("and_group", "or_group"):
+        for expr in (fobj.get(grp) or {}).get("expressions", []):
+            _check_ga4_filter(cid, expr, issues)
+    if "not_expression" in fobj:
+        _check_ga4_filter(cid, fobj["not_expression"], issues)
 
-    Catches semantic typos (e.g. a non-existent GA4 dimension) that the loose
-    live ``inputSchema`` ("array of strings") cannot.
-    """
-    _, caps, _disp, _alias = load()
-    issues = 0
+
+def check_semantics(caps: dict | None = None) -> int:
+    """GA4/GSC names against curated allowlists + GSC row-limit/engine rules."""
+    caps = caps or load()[1]
+    issues: list[str] = []
     for cid, c in caps.items():
         args = c.get("args") or {}
         if c["server"] == "analytics":
-            for d in args.get("dimensions", []):
-                if d not in GA4_DIMENSIONS:
-                    print(f"ERROR {cid}: unknown GA4 dimension '{d}'")
-                    issues += 1
-            for m in args.get("metrics", []):
-                if m not in GA4_METRICS:
-                    print(f"ERROR {cid}: unknown GA4 metric '{m}'")
-                    issues += 1
-            df = args.get("dimension_filter")
-            if isinstance(df, dict):
-                def _check_filter(fobj):
-                    nonlocal issues
-                    if not isinstance(fobj, dict):
-                        return
-                    if "filter" in fobj and "field_name" in fobj["filter"]:
-                        fn = fobj["filter"]["field_name"]
-                        if fn not in GA4_DIMENSIONS:
-                            print(f"ERROR {cid}: unknown GA4 filter dimension '{fn}'")
-                            issues += 1
-                    for grp in ("and_group", "or_group"):
-                        if grp in fobj and isinstance(fobj[grp], dict):
-                            for expr in fobj[grp].get("expressions", []):
-                                _check_filter(expr)
-                    if "not_expression" in fobj:
-                        _check_filter(fobj["not_expression"])
-                _check_filter(df)
+            issues += [f"{cid}: unknown GA4 dimension '{d}'" for d in args.get("dimensions", []) if d not in GA4_DIMENSIONS]
+            issues += [f"{cid}: unknown or deprecated GA4 metric '{m}'" for m in args.get("metrics", []) if m not in GA4_METRICS]
+            _check_ga4_filter(cid, args.get("dimension_filter"), issues)
         if c["server"] == "search-console" and c["tool"] == "analytics_query":
-            for d in args.get("dimensions", []):
-                if d not in GSC_DIMENSIONS:
-                    print(f"ERROR {cid}: unknown GSC dimension '{d}'")
-                    issues += 1
-    return issues
+            issues += [f"{cid}: unknown GSC dimension '{d}'" for d in args.get("dimensions", []) if d not in GSC_DIMENSIONS]
+            if args.get("rowLimit") != GSC_MAX_ROWS:
+                issues.append(f"{cid}: analytics_query must pin rowLimit {GSC_MAX_ROWS} (API default is 1000)")
+        if c["server"] == "search-console" and c["tool"] != "compare_engines" and "engine" not in args \
+                and c["tool"] not in ("diagnostics", "pagespeed_analyze", "schema_validate", "analytics_advanced"):
+            issues.append(f"{cid}: pin engine 'google' (tool default is 'all' = Google+Bing)")
+    for i in issues:
+        print(f"ERROR {i}")
+    return len(issues)
 
 
-def check() -> int:
-    _, caps, _disp, alias = load()
+def check(skills: Path | None = None, registry: Path | None = None) -> int:
+    data, caps, _disp, alias = load(registry)
+    keys = site_keys()
     issues = 0
-    for f in skill_files():
+    for f in skill_files(skills):
+        try:
+            rel = f.relative_to(ROOT)
+        except ValueError:
+            rel = f
         text = f.read_text()
-        for m in TOKEN_RE.finditer(text):
+        skill = f.parent.name
+        for rx, label in ((TOKEN_RE, "{{cap:}}"), (SITE_TOKEN_RE, "{{site:}}"), (INCLUDE_TOKEN_RE, "{{include:}}")):
+            for m in rx.finditer(text):
+                print(f"ERROR {rel}: unrendered {label} token {m.group(0)} — run --write")
+                issues += 1
+        for m in CAP_BLOCK_RE.finditer(text):
             if m.group(1) not in caps:
-                print(f"ERROR {f.relative_to(ROOT)}: unknown capability token {m.group(0)}")
+                print(f"ERROR {rel}: unknown capability <!--cap:{m.group(1)}-->")
                 issues += 1
-        for a, d in alias.items():
-            if re.search(rf"`{re.escape(a)}`", text):
-                print(f"DRIFT {f.relative_to(ROOT)}: legacy tool `{a}` -> should be {d}")
-                issues += 1
-        keys = site_keys()
-        for m in SITE_TOKEN_RE.finditer(text):
+        for m in SITE_BLOCK_RE.finditer(text):
             if m.group(1) not in keys:
-                print(f"ERROR {f.relative_to(ROOT)}: unknown site-profile key {m.group(0)}")
+                print(f"ERROR {rel}: unknown site-profile key <!--site:{m.group(1)}-->")
                 issues += 1
-    issues += check_expanded()
-    issues += check_policies()
-    issues += check_semantics()
-    print("OK — tokens resolve, no alias drift, expanded specs match the registry, "
-          "policies sane, dimension/metric names valid"
+        masked = _mask(text)
+        for a in alias:
+            if re.search(rf"`{re.escape(a)}`", masked):
+                print(f"DRIFT {rel}: legacy tool `{a}` outside a cap block — run --write")
+                issues += 1
+        try:
+            rendered = render(text, skill, data)
+        except KeyError as e:
+            print(f"ERROR {rel}: {e}")
+            issues += 1
+            continue
+        if rendered != text:
+            a, b = text.splitlines(), rendered.splitlines()
+            line = next((i + 1 for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)) + 1)
+            print(f"STALE {rel}:{line}: rendered blocks differ from the registry/templates — run --write")
+            issues += 1
+    issues += check_policies(caps)
+    issues += check_semantics(caps)
+    print("OK — blocks current, no stray tokens or legacy names, policies sane, names valid"
           if issues == 0 else f"{issues} issue(s)")
     return 1 if issues else 0
 
 
+# -------------------------------------------------------- schema validation ---
+def _type_ok(val, prop: dict) -> bool:
+    types = [prop["type"]] if "type" in prop else [p.get("type") for p in prop.get("anyOf", []) if p.get("type")]
+    if not types:
+        return True
+    for t in types:
+        if t == "string" and isinstance(val, str):
+            return True
+        if t in ("number", "integer") and isinstance(val, (int, float)) and not isinstance(val, bool):
+            return True
+        if t == "boolean" and isinstance(val, bool):
+            return True
+        if t == "array" and isinstance(val, list):
+            return True
+        if t == "object" and isinstance(val, dict):
+            return True
+        if t == "null" and val is None:
+            return True
+    return False
+
+
 def _check_type(cid: str, key: str, val, prop: dict) -> int:
     issues = 0
-    t = prop.get("type")
-    ok = True
-    if t == "string":
-        ok = isinstance(val, str)
-    elif t in ("number", "integer"):
-        ok = isinstance(val, (int, float)) and not isinstance(val, bool)
-    elif t == "boolean":
-        ok = isinstance(val, bool)
-    elif t == "array":
-        ok = isinstance(val, list)
-    elif t == "object":
-        ok = isinstance(val, dict)
-    if not ok:
-        print(f"ERROR {cid}: arg '{key}' expected {t}, got {type(val).__name__}")
+    if not _type_ok(val, prop):
+        print(f"ERROR {cid}: arg '{key}' expected {prop.get('type') or prop.get('anyOf')}, got {type(val).__name__}")
         issues += 1
     enum = prop.get("enum")
     if enum and val not in enum:
@@ -280,7 +400,7 @@ def _validate_args(cid: str, cap: dict, schema: dict) -> int:
             issues += 1
             continue
         issues += _check_type(cid, k, v, props[k])
-    for k in runtime:
+    for k in sorted(runtime):
         if k not in props:
             print(f"ERROR {cid}: runtime arg '{k}' not in `{cap['tool']}` schema")
             issues += 1
@@ -291,23 +411,16 @@ def _validate_args(cid: str, cap: dict, schema: dict) -> int:
     return issues
 
 
-def validate_live() -> int:
-    """Spawn each server, fetch tools/list, validate tool + args against inputSchema."""
-    sys.path.insert(0, str(HERE))
-    from mcp_client import list_tools  # noqa: E402
-
-    data, caps, _disp, _alias = load()
-    servers = data["servers"]
-    mcp = json.loads(MCP_JSON.read_text())["mcpServers"]
+def _validate_against(tool_sets: dict, data: dict, caps: dict, label: str) -> int:
     issues = 0
-    for srv in servers:
-        if srv not in mcp:
-            print(f"SKIP {srv}: not in .roo/mcp.json (optional)")
+    for srv, spec in data["servers"].items():
+        if srv not in tool_sets:
+            why = "optional, not configured" if not spec.get("configured", True) else f"no {label} schema"
+            print(f"SKIP {srv}: {why}")
             continue
-        try:
-            tools = {t["name"]: t.get("inputSchema", {}) for t in list_tools(mcp[srv])}
-        except Exception as e:  # noqa: BLE001
-            print(f"FAIL {srv}: {e}")
+        tools = tool_sets[srv]
+        if isinstance(tools, dict) and "__error__" in tools:
+            print(f"FAIL {srv}: {tools['__error__']}")
             issues += 1
             continue
         for cid, c in caps.items():
@@ -318,23 +431,49 @@ def validate_live() -> int:
                 issues += 1
                 continue
             issues += _validate_args(cid, c, tools[c["tool"]])
-    print("OK — every capability tool + args validate against the live schemas" if issues == 0 else f"{issues} issue(s)")
+    return issues
+
+
+def validate_cached(schemas: Path | None = None) -> int:
+    """Validate against the committed tool-schemas.json snapshot (offline, portable)."""
+    data, caps, _d, _a = load()
+    cached = json.loads((schemas or TOOL_SCHEMAS).read_text())
+    issues = _validate_against(cached, data, caps, "cached")
+    print("OK — every cached capability validates" if issues == 0 else f"{issues} issue(s)")
     return 1 if issues else 0
 
 
-def write() -> int:
-    _, _caps, disp, alias = load()
+def validate_live() -> int:
+    """Spawn each configured server, fetch tools/list, validate tool + args."""
+    sys.path.insert(0, str(HERE))
+    from mcp_client import list_tools  # noqa: E402
+
+    data, caps, _d, _a = load()
+    mcp = json.loads(MCP_JSON.read_text())["mcpServers"]
+    live: dict = {}
+    for srv in data["servers"]:
+        if srv not in mcp:
+            continue
+        try:
+            live[srv] = {t["name"]: t.get("inputSchema", {}) for t in list_tools(mcp[srv])}
+        except Exception as e:  # noqa: BLE001
+            live[srv] = {"__error__": str(e)}
+    issues = _validate_against(live, data, caps, "live")
+    print("OK — every capability validates against the live schemas" if issues == 0 else f"{issues} issue(s)")
+    return 1 if issues else 0
+
+
+# ------------------------------------------------------------------ writers ---
+def write(skills: Path | None = None) -> int:
+    data = load()[0]
     changed = 0
-    for f in skill_files():
-        text = orig = f.read_text()
-        text = TOKEN_RE.sub(lambda m: disp.get(m.group(1), m.group(0)), text)
-        text = SITE_TOKEN_RE.sub(lambda m: site_display(m.group(1)), text)
-        for a, d in alias.items():
-            text = re.sub(rf"`{re.escape(a)}`", d, text)
-        if text != orig:
-            f.write_text(text)
+    for f in skill_files(skills):
+        text = f.read_text()
+        out = render(text, f.parent.name, data)
+        if out != text:
+            f.write_text(out)
             changed += 1
-            print(f"updated {f.relative_to(ROOT)}")
+            print(f"updated {f}")
     print(f"{changed} file(s) updated")
     return 0
 
@@ -347,9 +486,9 @@ def write_map() -> int:
            "## Servers", "", "| Server | Package | Auth | Configured |", "|---|---|---|---|"]
     for s, v in data["servers"].items():
         out.append(f"| `{s}` | {v.get('package', '')} | {v.get('auth', '')} | {'yes' if v.get('configured', True) else 'no (optional)'} |")
-    out += ["", "## Capabilities", "", "| Capability | Call |", "|---|---|"]
+    out += ["", "## Capabilities", "", "| Capability | Call | Purpose |", "|---|---|---|"]
     for cid in sorted(caps):
-        out.append(f"| `{cid}` | {disp[cid]} |")
+        out.append(f"| `{cid}` | {disp[cid]} | {caps[cid].get('desc', '')} |")
     (HERE / "tool-map.md").write_text("\n".join(out) + "\n")
     print("wrote seo/tool-map.md")
     return 0
@@ -358,26 +497,29 @@ def write_map() -> int:
 def list_caps() -> int:
     _, caps, disp, _alias = load()
     for cid in sorted(caps):
-        print(f"{cid:24} -> {disp[cid]}")
+        print(f"{cid:26} -> {disp[cid]}")
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--check", action="store_true", help="verify tokens resolve; report alias drift")
-    g.add_argument("--validate-live", action="store_true", help="validate tool + args against live schemas")
-    g.add_argument("--write", action="store_true", help="rewrite skills in place")
-    g.add_argument("--list", action="store_true", help="list capabilities")
-    g.add_argument("--map", action="store_true", help="regenerate seo/tool-map.md from the registry")
-    args = ap.parse_args()
-    if args.check:
+    g.add_argument("--check", action="store_true")
+    g.add_argument("--validate-cached", action="store_true")
+    g.add_argument("--validate-live", action="store_true")
+    g.add_argument("--write", action="store_true")
+    g.add_argument("--list", action="store_true")
+    g.add_argument("--map", action="store_true")
+    a = ap.parse_args()
+    if a.check:
         return check()
-    if args.validate_live:
+    if a.validate_cached:
+        return validate_cached()
+    if a.validate_live:
         return validate_live()
-    if args.write:
+    if a.write:
         return write()
-    if args.map:
+    if a.map:
         return write_map()
     return list_caps()
 

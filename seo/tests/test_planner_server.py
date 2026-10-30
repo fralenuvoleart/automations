@@ -204,10 +204,72 @@ def test_requires_a_seed():
 def test_rejects_too_many_seeds():
     _setup(0)
     try:
-        server.generate_keyword_ideas(customer_id="1", keywords=[f"k{i}" for i in range(101)])
+        server.generate_keyword_ideas(customer_id="1", keywords=[f"k{i}" for i in range(21)])
         raise AssertionError("expected ValueError")
-    except ValueError:
-        pass
+    except ValueError as e:
+        assert "20" in str(e)
+    server.generate_keyword_ideas(customer_id="1", keywords=[f"k{i}" for i in range(20)])  # API max is fine
+
+
+def test_rejects_bad_geo_targets_and_language():
+    _setup(0)
+    for kwargs in ({"geo_targets": [f"geoTargetConstants/{i}" for i in range(11)]},
+                   {"geo_targets": ["2840"]}, {"language": "ru"}):
+        try:
+            server.generate_keyword_ideas(customer_id="1", keywords=["a"], **kwargs)
+            raise AssertionError(f"expected ValueError for {kwargs}")
+        except ValueError:
+            pass
+
+
+class _Pager:
+    """GAPIC-like pager: `.results` is page 1; iterating would fetch more pages."""
+    def __init__(self, items):
+        self.results = items
+
+    def __iter__(self):
+        raise AssertionError("iterating the pager fetches extra pages (un-gated API calls)")
+
+
+def test_reads_first_page_only():
+    service, _, gate = _setup(0)
+
+    class PagedService(FakeService):
+        def generate_keyword_ideas(self, request=None):
+            self.calls += 1
+            return _Pager([FakeIdea(), FakeIdea()])
+
+    STATE["service"] = PagedService()
+    out = server.generate_keyword_ideas(customer_id="1", keywords=["a"], page_size=1)
+    assert len(out) == 1 and gate.calls == ["1"]
+
+
+def test_unknown_month_is_skipped_not_mapped_to_january():
+    _setup(0)
+    idea = FakeIdea()
+    idea.keyword_idea_metrics.monthly_search_volumes = [_Vol(1, 2026, 99), _Vol(2, 2026, 20)]  # UNKNOWN, JANUARY
+    assert server._idea_to_dict(idea)["monthly_trend"] == [{"month": "2026-01", "searches": 20}]
+
+
+def test_historical_metrics_tool():
+    _setup(0)
+
+    class Hist(FakeService):
+        def generate_keyword_historical_metrics(self, request=None):
+            self.calls += 1
+            self.last_request = request
+            return _NS(results=[_NS(text="kw", keyword_metrics=FakeIdea().keyword_idea_metrics)])
+
+    hist = Hist()
+    STATE["service"] = hist
+    orig = server.get_googleads_type
+    server.get_googleads_type = lambda name: _NS(customer_id=None, keywords=[], language=None, geo_target_constants=[])
+    try:
+        out = server.keyword_historical_metrics(customer_id="1", keywords=["kw", "kw"], language="languageConstants/1031")
+    finally:
+        server.get_googleads_type = orig
+    assert out[0]["keyword"] == "kw" and out[0]["avg_monthly_searches"] == 1000
+    assert hist.last_request.keywords == ["kw"] and hist.last_request.language == "languageConstants/1031"
 
 
 def test_page_size_is_clamped():

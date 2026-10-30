@@ -1,0 +1,4 @@
+**Run setup and evidence (mandatory).**
+1. Seed the run: `python3 seo/orchestrate.py --skill <<skill>> --days <<days>> <<flags>> --out-dir {run_dir}`. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
+2. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
+3. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.

@@ -17,14 +17,15 @@
 - **`web-to-pdf`** — webpage→PDF.
 
 **Non-skill SEO tooling** lives in `seo/`:
-- `capabilities.json` — single source of truth (capability → server + tool + `args` + `runtime`).
-- `resolve.py` — expands `{{cap:<id>}}` / `{{site:<key>}}` tokens; `--check` / `--validate-live` / `--write` / `--map`.
+- `capabilities.json` — single source of truth (capability → server + tool + `args` + `runtime` + `desc`), registry v7.
+- `resolve.py` — renders `{{cap:}}` / `{{site:}}` / `{{include:}}` tokens into marker blocks and re-renders them on every `--write`; `--check` / `--validate-cached` / `--validate-live` / `--map`.
+- `record.py` (evidence), `gsc_metrics.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` — deterministic run pipeline and analysis.
 - `site_profile.py` — per-site profile + action history (`config/sites/<domain>.json` / `.history.md`).
 - `coverage.py` — deterministic coverage block (flattened + per-language).
-- `window.py` / `orchestrate.py` — deterministic windows + run seeding.
+- `window.py` / `orchestrate.py` — deterministic windows (GSC lag 3, GA4 lag 2, snapshot; previous/YoY) + run seeding (no silent overwrite).
 - `report/` — `build_report.py` (findings JSON → Markdown) + `validate_report.py` (mandatory).
 - `references/` — shared contracts: `report-structure.md`, `conciseness-directives.md`, `data-source-map.md`, `capability-usage.md`, `domain-knowledge.md`, `findings-schema.json`.
-- `check.sh` — CI gate (`--check` + `--validate-live` + all tests).
+- `check.sh` — CI gate, offline by default (`--check`, `--validate-cached`, profiles, compile, tests); `--live` adds live schema validation.
 
 **MCP servers** (`.roo/mcp.json`): `search-console` (GSC/GA4/Bing/AdSense, OAuth), `analytics` (official GA4, service account), `google-ads` (service account), `google-ads-planner` (local, `seo/mcp-servers/`), `tavily`. **`dataforseo` is optional and not configured** — skills degrade gracefully and the report states the missing source.
 
@@ -43,6 +44,8 @@
 
 ## Recent Changes
 
+- **2026-10-30**: Applied every proposal from the 2026-10-30 audit (C1–C5, H1–H16, M1–M19, L1–L11 + optional items): evidence recording and a real hallucination gate; `gsc_metrics.py` replaces the window-ignoring `seo_audit` tool; page metrics from `page` rows; `rowLimit 25000` + `engine google` pinned; site CTR curve + labelled heuristic; planner limits (20/10), first-page reads, historical-metrics tool; Indexing API opt-in; `site_crawl.py` for link graph/hreflang/robots; profile cleanup (brand terms out of priority keywords, `Category` removed, AI hosts extended, Ads language constants); status-tagged history; all 12 skills rewritten from tokens + shared includes; offline CI. `seo/check.sh` ALL GREEN (offline). `.roo/mcp.json` and how credentials are read were left unchanged.
+- **2026-10-30**: Independent audit of the 12 `seo-*` skills + `seo/` → [`plans/seo-skills-audit-2026-10-30.md`](../plans/seo-skills-audit-2026-10-30.md). Rating **5.7/10**: 5 Critical (C1 evidence gate never verifies: `context.json` never populated; C2 `seo_audit`/`genai` ignore the resolved window; C3 page metrics from `query×page` lose anonymized clicks; C4 1,000-row truncation; C5 undefined CTR curve), 16 High, 19 Medium, 11 Low. 75/75 tests green but structural only. Separate: live API keys in tracked `.roo/mcp.json` in a public repo — rotate.
 - **2026-10-29**: AdSense Pruning & Google Ads Isolation — permanently removed unused `adsense.accounts` and `adsense.report` capabilities from `seo/capabilities.json`; regenerated `seo/tool-map.md`; isolated the `google-ads` MCP server dependency exclusively to `seo-paid-organic`, guaranteeing that the other 11 SEO skills run with 100% independence if the AdWords server is unavailable. All 14 CI test suites passed (`seo/check.sh` ALL GREEN).
 - **2026-10-29**: Physical Portfolio Consolidation (18 to 12 Power Skills) — executed physical consolidation of skills in `.agents/skills/`: created `seo-keyword-strategy` (consolidating keyword research, striking distance opportunity sizing, and competitor gap) and `seo-paid-organic` (paid vs organic GAQL waste elimination); absorbed `seo-serp-features` into `seo-content-brief`, `seo-local` into `seo-audit`, `seo-cross-engine` into `seo-rank-tracking`; pruned `seo-monetisation`, `seo-opportunity`, `seo-serp-features`, `seo-competitor-gap`, `seo-local`, `seo-cross-engine`, `seo-vs-ads`, `seo-keyword-research`. Locked in with updated CI tests. All 14 test suites passed (`seo/check.sh` ALL GREEN).
 - **2026-10-29**: Portfolio Consolidation & Strategic Streamlining — pivoted `seo-monetisation` from publisher AdSense display ads to GA4 commercial conversion value and revenue attribution; merged striking distance opportunity sizing into `seo-keyword-research` (Fast-Track Quick Wins cluster with planner volume/CPC); restructured `seo-audit` into an Executive Macro Health Scorecard delegating deep tactical workflows; absorbed SERP feature capture targeting into `seo-content-brief`; integrated cross-engine divergence checks into `seo-rank-tracking`; decoupled GSC queries across skills using clean `gsc.query` (`["query"]`) and `gsc.page_query` (`["query", "page"]`) to prevent row truncation. All 14 CI test suites passed (`seo/check.sh` ALL GREEN).

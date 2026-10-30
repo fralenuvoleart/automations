@@ -9,18 +9,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS = ROOT / ".agents" / "skills"
 
+# The full skill contract (README "Skill anatomy"), in order.
 REQUIRED_HEADERS = [
+    "## Scope",
+    "## Report Audience & Purpose",
+    "## Memory-Bank Isolation",
     "## When to Use",
     "## When NOT to Use",
     "## Requires",
+    "## Data Sources",
     "## Workflow",
+    "## Determinism",
     "## Output",
     "## Fallbacks",
     "## Pending Data Sources",
     "## Troubleshooting",
     "## Files",
     "## Related / Delegation",
+    "## Configuration",
+    "## Privacy & Retention",
+    "## Output Structure",
 ]
+REQUIRED_INCLUDES = ["audience", "memory-bank", "datasources", "evidence", "pipeline", "files",
+                     "configuration", "privacy", "output-structure"]
 REQUIRED_FRONTMATTER = ["name", "description", "license", "compatibility"]
 SHARED_LINKS = ["seo/references/report-structure.md", "seo/references/conciseness-directives.md"]
 
@@ -59,10 +70,30 @@ def test_required_sections_present_in_order():
         text = f.read_text()
         positions = []
         for h in REQUIRED_HEADERS:
-            idx = text.find(h)
+            idx = text.find("\n" + h + "\n")
             assert idx != -1, f"{f.parent.name}: missing section {h!r}"
             positions.append(idx)
         assert positions == sorted(positions), f"{f.parent.name}: sections out of order"
+
+
+def test_shared_sections_come_from_includes():
+    for f in _skill_files():
+        text = f.read_text()
+        for inc in REQUIRED_INCLUDES:
+            assert f"<!--include:{inc}" in text, f"{f.parent.name}: missing include {inc}"
+
+
+def test_no_window_ignoring_or_removed_tools():
+    """C2: seo_audit tools ignore the report window; skills compute with seo/gsc_metrics.py instead."""
+    for f in _skill_files():
+        text = f.read_text()
+        assert "`seo_audit`" not in text, f"{f.parent.name}: uses seo_audit"
+        assert '"conversions"' not in text, f"{f.parent.name}: deprecated GA4 metric"
+
+
+def test_descriptions_fit_frontmatter_limit():
+    for f in _skill_files():
+        assert len(_frontmatter(f.read_text())["description"]) <= 1024, f.parent.name
 
 
 def test_shared_contract_links_present():

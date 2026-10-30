@@ -1,6 +1,6 @@
 # Runtime dependencies for seo/mcp-servers/google-ads-planner/server.py
 # (resolve.py and mcp_client.py are stdlib-only).
-# Captured from the working venv: /home/francesco/.venvs/google-ads-mcp/bin/pip freeze
+# Pinned from the planner server venv (`pip freeze`); install into its own venv.
 # Pin these to reproduce the server environment.
 fastmcp==4.1.4
 google-ads==34.0.0

@@ -1,10 +1,24 @@
 {
   "domain": "pbservices.ge",
-  "languages": ["EN", "RU", "AR", "ZH"],
-  "language_paths": {"EN": "/", "RU": "/ru/", "AR": "/ar/", "ZH": "/zh/"},
-  "sections": ["Service pages", "Blog", "Homepage", "Other pages"],
+  "languages": [
+    "EN",
+    "RU",
+    "AR",
+    "ZH"
+  ],
+  "language_paths": {
+    "EN": "/",
+    "RU": "/ru/",
+    "AR": "/ar/",
+    "ZH": "/zh/"
+  },
+  "sections": [
+    "Service pages",
+    "Blog",
+    "Homepage",
+    "Other pages"
+  ],
   "services": [
-    "Category",
     "IE",
     "Residency",
     "Tax",
@@ -60,31 +74,68 @@
       "accounting services georgia",
       "vasp georgia",
       "apostille georgia",
-      "pb services",
-      "pb services georgia",
-      "pbservices",
       "llc registration",
       "apostille",
       "annual accounts preparation georgia",
-      "bank account",
-      "gecrypto"
+      "bank account"
     ],
     "zh": [
       "格鲁吉亚银行开户"
     ],
     "ar": []
   },
-  "priority_pages": [],
-  "brand_terms": ["pb services", "pb services georgia", "pbservices", "gecrypto"],
-  "markets": ["WORLDWIDE"],
-  "competitors": [],
+  "priority_pages": [
+    "https://pbservices.ge/",
+    "https://pbservices.ge/about/",
+    "https://pbservices.ge/services/individual-entrepreneur-georgia/",
+    "https://pbservices.ge/ru/",
+    "https://pbservices.ge/ru/o-nas/",
+    "https://pbservices.ge/ru/uslugi/individualnyj-predprinematel/",
+    "https://pbservices.ge/ar/",
+    "https://pbservices.ge/ar/about-ar/",
+    "https://pbservices.ge/ar/offers/individual-entrepreneur-georgia-ar/",
+    "https://pbservices.ge/zh/",
+    "https://pbservices.ge/zh/guanyu/",
+    "https://pbservices.ge/zh/fuwu/individual-entrepreneur-georgia-zh/"
+  ],
+  "brand_terms": [
+    "pb services",
+    "pb services georgia",
+    "pbservices",
+    "gecrypto",
+    "pb service",
+    "пб сервис"
+  ],
+  "markets": [
+    "WORLDWIDE"
+  ],
+  "competitors": [
+    "tbilisi-expat.com",
+    "register-company.ge",
+    "expathub.ge",
+    "gegidze.com",
+    "tpsolution.ge"
+  ],
   "ai_sources": [
     "chatgpt.com",
     "chat.openai.com",
     "perplexity.ai",
     "gemini.google.com",
     "claude.ai",
-    "copilot.microsoft.com"
+    "copilot.microsoft.com",
+    "deepseek.com",
+    "grok.com",
+    "meta.ai",
+    "chat.mistral.ai",
+    "you.com"
   ],
+  "ads_customer_id": "596-360-9731",
+  "ads_language_constants": {
+    "EN": "languageConstants/1000",
+    "RU": "languageConstants/1031",
+    "AR": "languageConstants/1019",
+    "ZH": "languageConstants/1017"
+  },
+  "ads_geo_targets": [],
   "thresholds": {}
 }

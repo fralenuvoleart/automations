@@ -33,25 +33,30 @@
 
 ---
 
-## 🔎 SEO Skills — MCP servers
+## 🔎 SEO Skills — architecture & invariants
 
-The 18 SEO/GEO skills in `.agents/skills/` run on a **multi-server** MCP stack (not Ryze). All non-skill SEO files live in [`seo/`](../seo/): the registry [`seo/capabilities.json`](../seo/capabilities.json) (capability → server + tool + structured `args` + `runtime`), the resolver [`seo/resolve.py`](../seo/resolve.py), the live-schema client [`seo/mcp_client.py`](../seo/mcp_client.py), the readable map [`seo/tool-map.md`](../seo/tool-map.md), and local servers under [`seo/mcp-servers/`](../seo/mcp-servers/). Skills reference capabilities as `{{cap:<id>}}` tokens; the resolver expands them to `` `server` → `tool` {args} (supply: runtime) `` so execution is deterministic even when several capabilities share one tool (`run_report`, `api_request`, `analytics_compare`). **To swap a server: edit `capabilities.json` → `python3 seo/resolve.py --write`** — never hand-edit tool names in skills. Validate with `--check` (tokens/aliases) and `--validate-live` (spawns each server, checks tool + args against the live `inputSchema`).
+The 12 `seo-*` skills in `.agents/skills/` run on a multi-server MCP stack; every non-skill SEO file lives in [`seo/`](../seo/) ([README](../seo/README.md)).
 
-**Personalised criteria** live in a per-site profile ([`seo/site_profile.py`](../seo/site_profile.py), `seo/config/sites/<domain>.json`) referenced as `{{site:<key>}}` tokens; coverage is computed by [`seo/coverage.py`](../seo/coverage.py). **Report delivery** (PDF + email) is the shared [`report-export`](../.agents/skills/report-export/SKILL.md) skill — every report skill delegates to it.
+**Registry + rendering.** [`seo/capabilities.json`](../seo/capabilities.json) is the single source of truth (server, tool, fixed `args`, `runtime`, `desc`, `policy`). Skills are authored with `{{cap:id}}`, `{{site:key}}` and `{{include:name}}` tokens; `python3 seo/resolve.py --write` renders them into `<!--cap:…-->…<!--/cap-->` blocks and **re-renders every block on each run** (registry edits and tool renames propagate). Never edit inside a block or hard-code tool names. Shared skill sections live in `seo/references/skill-common/`.
 
-| Concern | Server | Tools |
+**Run pipeline (mandatory).** `orchestrate.py` (window in `.run_state.json`) → `record.py` after every tool call (evidence in `context.json` + `data/`) → compute with `gsc_metrics.py` / `coverage.py` / `site_crawl.py` / `dfs_metrics.py` / `ads_metrics.py` → findings JSON → `validate_report.py --data context.json` → `build_report.py` → validate the report. URLs/numbers must trace to recorded evidence.
+
+| Concern | Server | Notes |
 |---|---|---|
-| GSC (queries, compare, anomalies, indexation, inspection, sitemaps, keyword stats, SEO intelligence, AI-query heuristic, PageSpeed/schema) | `search-console` | `analytics_query`, `analytics_compare`, `analytics_anomalies`, `site_health_check`, `inspection_inspect`, `sitemaps_*`, `indexing_*`, `seo_keywords_research`, `seo_audit`, `genai_query_insights`, `pagespeed_analyze`, `schema_validate`, `sites_list`, `diagnostics` |
-| GA4 (traffic sources / AI referrers, landing pages, page performance, conversions by source) | `analytics` (official GA4 MCP) | `run_report`, `get_account_summaries`, `get_property_details`, `get_custom_dimensions_and_metrics` |
-| Google Ads (GAQL, search terms, CPC) | `google-ads` | `search_search`, `metadata_get_resource_metadata`, `customers_list_accessible_customers` |
-| Keyword Planner (volumes, bids, trend) | `google-ads-planner` | `generate_keyword_ideas` |
-| SERP / Backlinks / Competitor (Labs) | `dataforseo` | `api_request` (endpoint paths in the map) |
+| GSC (queries, pages, compare, anomalies, inspection, sitemaps, keyword estimates, AI-query heuristic, PageSpeed/schema) | `search-console` | every `analytics_query` pins `rowLimit 25000` + `engine google`; `seo_audit` is not used (ignores windows) |
+| GA4 (AI referrals, channels, organic landing pages, referrals) | `analytics` | metric `keyEvents` (not `conversions`); AI filter from profile `ai_sources` via `site_profile.py --ga4-ai-filter` |
+| Google Ads (GAQL) | `google-ads` | only `seo-paid-organic` |
+| Keyword Planner (ideas + historical metrics) | `google-ads-planner` | ≤20 seeds, ≤10 geos, first page only; retries only inside the server (`policy.retry 0`) |
+| SERP / backlinks / labs | `dataforseo` | optional, not configured; payloads in `seo/references/dataforseo-payloads.md` |
+| Web search / extract fallback | `tavily` | approximate; never Google's order |
+| Link graph, hreflang, robots, page facts | local `seo/site_crawl.py` | stdlib, no key |
 
 Rules:
-- Never fabricate volumes, positions, or link counts. Label estimates (DataForSEO/Ahrefs/Semrush) vs real (GSC/GA4).
-- A skill with an unmet data source must state the missing connection, not guess.
-- Auth: `analytics`, `google-ads`, `google-ads-planner` use the service account (`GOOGLE_APPLICATION_CREDENTIALS`); `search-console` manages its own OAuth; `dataforseo` needs `DATAFORSEO_LOGIN`/`DATAFORSEO_PASSWORD`.
-- Pending: **DataForSEO** (optional, not configured) and **Google Business Profile** (not wired) — skills degrade gracefully and the report states the missing source. **Google Ads** and the **Keyword Planner** are connected.
+- GSC: page metrics from `page` rows (include anonymized clicks), query metrics from `query` rows, `query×page` only for attribution; positions impression-weighted; truncated pulls (= row limit) never produce "lost/new".
+- Windows: GSC ends `today − 3`, GA4 `today − 2`; tools without a window get a per-section `window` note.
+- One degradation rule ([`data-source-map.md`](../seo/references/data-source-map.md)): required missing → stop; optional missing → `findings.unavailable`; never substitute estimates or memory.
+- Side effects (Indexing API submissions, `[done]` history entries) only after explicit user confirmation.
+- CI: `bash seo/check.sh` (offline, portable); `--live` adds live schema validation on the workstation.
 
 ---
 

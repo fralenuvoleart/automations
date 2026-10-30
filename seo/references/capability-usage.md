@@ -1,27 +1,42 @@
 # Capability Usage
 
-Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json) — the single
-source of truth for `server` → `tool` + fixed `args` + `runtime` (agent-supplied) + optional
-`policy`. Skills reference them as `{{cap:<id>}}` tokens; [`seo/resolve.py`](../resolve.py)
-expands tokens to the full call spec and validates them against the live server schemas.
+Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json): `server` →
+`tool` + fixed `args` + `runtime` (agent-supplied) + `desc` + optional `policy`.
 
-## Authoring
-- Reference a capability, don't hard-code a tool: ``Call {{cap:gsc.query}} for the period.``
-- `resolve.py --write` materialises tokens into the committed skills.
-- Legacy tool names under a capability's `aliases` are remapped automatically.
+## Authoring a skill
+- Reference a capability, never a hard-coded tool: write `{{cap:gsc.page}}`.
+- Shared/generated sections: `{{include:<name> k=v}}` — templates live in
+  [`skill-common/`](skill-common/); `datasources`, `configuration` and `privacy` are generated
+  from the capabilities the skill uses.
+- Site-profile lookups: `{{site:<key>}}`.
+- Run `python3 seo/resolve.py --write`. Tokens become marker blocks
+  (`<!--cap:gsc.page-->`…`<!--/cap-->`) and **every block is re-rendered on each run**, so a
+  registry edit or tool rename propagates to all skills. Never edit inside a block.
+- `python3 seo/resolve.py --check` fails on stale blocks, leftover tokens, unknown IDs or keys,
+  legacy tool names outside blocks, bad policies, and invalid/deprecated GA4/GSC names.
 
-## Runtime vs args
-- `args` are fixed arguments the resolver emits.
-- `runtime` are the arguments **the agent supplies at call time** (e.g. `siteUrl`, `date_ranges`).
+## At run time
+- The block's `<!--cap:ID-->` is the ID you pass to `seo/record.py --cap ID` after the call.
+- `runtime` args are the ones you supply (e.g. `siteUrl`, `date_ranges`); fixed `args` are
+  already set — do not override them. `record.py` rejects non-runtime args and off-window dates.
+- GA4 AI-source filters: `dimension_filter` = output of
+  `python3 seo/site_profile.py --site <domain> --ga4-ai-filter` (single source: profile `ai_sources`).
+- GA4 `date_ranges`: `[{"start_date": "<startDate>", "end_date": "<endDate>"}]` (+ the comparison
+  range when the run has one).
 
 ## Policy (retry / timeout / degrade)
-Optional per capability:
 ```json
-"policy": { "retry": 3, "backoff_s": [2, 4, 8], "timeout_budget_s": 40, "on_error": "degrade" }
+"policy": { "retry": 0, "timeout_budget_s": 40, "on_error": "degrade" }
 ```
-- `timeout_budget_s` must stay **below the MCP client timeout** (default 60s; override with `MCP_CLIENT_TIMEOUT_S`) so the server returns the real error instead of the client timing out.
-- `on_error`: `degrade` (fall back per [`data-source-map.md`](data-source-map.md)) or `fail` (stop and report).
+- Retries live in **one layer**. The planner server retries internally, so its policy has
+  `retry: 0` — never re-call it in a loop.
+- `timeout_budget_s` must stay **below the MCP client timeout** (default 60 s;
+  `MCP_CLIENT_TIMEOUT_S`) so the server returns the real error instead of the client timing out.
+- `on_error: degrade` → apply the rule in [`data-source-map.md`](data-source-map.md).
 
 ## Checks
-- `python3 seo/resolve.py --check` — tokens resolve, no alias drift, expanded specs match, policies sane.
-- `python3 seo/resolve.py --validate-live` — tool + args vs the live `inputSchema`.
+- `python3 seo/resolve.py --check` — rendering, names, policies (offline).
+- `python3 seo/resolve.py --validate-cached` — tool + args vs the committed
+  [`tool-schemas.json`](../tool-schemas.json) (offline; CI). Refresh the snapshot with
+  `python3 seo/mcp_client.py [server]`.
+- `python3 seo/resolve.py --validate-live` — tool + args vs the live servers (local machine).

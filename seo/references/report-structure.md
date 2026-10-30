@@ -1,23 +1,34 @@
 # SEO Report Structure (contract)
 
 Every SEO skill produces the same minimum shape. The LLM writes **findings JSON**
-([`findings-schema.json`](findings-schema.json)); [`seo/report/build_report.py`](../report/build_report.py)
-renders the Markdown. Do not hand-edit the rendered report.
+([`findings-schema.json`](findings-schema.json)) from the outputs of the deterministic tools
+(`seo/gsc_metrics.py`, `seo/coverage.py`, `seo/site_crawl.py`);
+[`seo/report/build_report.py`](../report/build_report.py) renders the Markdown. Never hand-edit
+the rendered report.
 
 ## Required order
-1. **Title** — the skill name / subject.
-2. **As-of line** — `Window <start>→<end> (vs …) · GSC lag Nd · generated <UTC>`. From [`seo/window.py`](../window.py) `as_of_line()`.
+1. **Title** — the skill name.
+2. **Provenance line** — `Window <start>→<end> (vs …) · GSC lag Nd · generated <UTC>`, or
+   `Snapshot as of <date> (live data) · generated <UTC>` for live-only skills. From
+   [`seo/window.py`](../window.py) `as_of_line()`; the `window` object is copied from `.run_state.json`.
 3. **Verdict** — one paragraph: healthy or not, and the #1 issue.
-4. **Data availability** *(only when a source is missing)* — one line per unavailable source: what it affects and why. Driven by `findings.unavailable` (graceful degradation).
-5. **Coverage vs site profile** *(only when a profile is used)* — priority keywords/pages covered vs missing, the per-language breakdown (`by_language`), and the missing list. Driven by `findings.coverage` (produce it with [`seo/coverage.py`](../coverage.py)).
-6. **Sections** — one per finding group. Each: heading, prose body, optional table.
+4. **Data availability** *(only when a source is missing)* — one line per `findings.unavailable` entry.
+5. **Coverage vs site profile** *(when the skill uses the profile)* — from `seo/coverage.py`;
+   with `basis: gsc_impressions`, "covered" means ≥1 impression in the window.
+6. **Sections** — heading, optional data-window line (`sections[].window`, when the data covers a
+   different period than the report window), prose body, optional table.
 7. **Action list** — prioritized, concrete.
 
 ## Rules
-- Every section body is plain language; tables carry the numbers.
-- Numbers that are **estimates/heuristics** must be labelled (see [`conciseness-directives.md`](conciseness-directives.md)).
-- The as-of line is mandatory and must reflect the *actual* window used.
-- The report must contain no `{{cap:}}` tokens (those are authoring-only).
+- Plain language; tables carry the numbers.
+- Estimates/heuristics are labelled ([`conciseness-directives.md`](conciseness-directives.md));
+  set `"estimate": true` on such sections.
+- Every URL and number must come from a response recorded with `seo/record.py`.
+- No authoring tokens or marker blocks in the output.
 
-## Validation
-[`seo/report/validate_report.py`](../report/validate_report.py) enforces this contract mechanically.
+## Validation order (mechanical)
+1. `validate_report.py --findings F --data {run_dir}/context.json` — structure, dates
+   (`endDate < as_of`, no overlapping comparison), labels, evidence for every URL.
+2. `build_report.py` — refuses malformed findings.
+3. `validate_report.py --findings F --report R --data {run_dir}/context.json` — the rendered report
+   contains the provenance line, every heading, unavailable source and coverage item.
