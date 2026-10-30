@@ -1,0 +1,126 @@
+{
+ "skill": "seo-indexation",
+ "window": {
+  "days": 28
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "sitemaps",
+   "cap": "gsc.sitemaps"
+  },
+  {
+   "pull": "health",
+   "cap": "gsc.health",
+   "optional": true,
+   "affects": "crawl health"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "compute": "top_pages",
+   "run": [
+    "gsc_metrics.py",
+    "top-pages",
+    "--page",
+    "{data}/page_cur.json",
+    "--limit",
+    "50"
+   ]
+  },
+  {
+   "local": "sitemap",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "sitemap",
+    "--site",
+    "https://{domain}",
+    "--limit",
+    "5000"
+   ],
+   "optional": true,
+   "affects": "sitemap sample (zero-impression URLs)"
+  },
+  {
+   "compute": "unseen",
+   "run": [
+    "gsc_metrics.py",
+    "unseen",
+    "--page",
+    "{data}/page_cur.json",
+    "--urls",
+    "{data}/sitemap.json",
+    "--limit",
+    "150"
+   ],
+   "when": [
+    "data:sitemap"
+   ]
+  },
+  {
+   "pull": "inspect_{i}",
+   "cap": "gsc.inspect",
+   "batch": 50,
+   "args": {
+    "urls": "{item}"
+   },
+   "for_each": {
+    "$concat": [
+     {
+      "$else": [
+       {
+        "$from": "profile:priority_pages"
+       },
+       {
+        "$from": "computed:top_pages",
+        "path": "pages[].page"
+       }
+      ]
+     },
+     {
+      "$else": [
+       {
+        "$from": "computed:unseen",
+        "path": "urls[]"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "compute": "inspection",
+   "run": [
+    "gsc_metrics.py",
+    "inspection",
+    "--inspect",
+    {
+     "$glob": "{data}/inspect_*.json"
+    }
+   ]
+  },
+  {
+   "local": "crawl",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "crawl",
+    "--site",
+    "https://{domain}",
+    "--profile",
+    "{site}",
+    "--limit",
+    "300"
+   ],
+   "optional": true,
+   "affects": "hreflang & canonicals"
+  }
+ ]
+}

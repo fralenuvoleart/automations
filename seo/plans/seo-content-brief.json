@@ -1,0 +1,138 @@
+{
+ "skill": "seo-content-brief",
+ "window": {
+  "days": 90
+ },
+ "inputs": {
+  "keyword": {
+   "required": true,
+   "desc": "the target keyword of the brief"
+  }
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "serp",
+   "cap": "dfs.serp",
+   "args": {
+    "data": {
+     "$from": "serp_payload",
+     "keyword": "{input:keyword}"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:dataforseo",
+    "profile:serp_locations"
+   ],
+   "affects": "SERP order and features (DataForSEO)"
+  },
+  {
+   "pull": "web_serp",
+   "cap": "web.search",
+   "args": {
+    "query": "{input:keyword}"
+   },
+   "optional": true,
+   "when": [
+    "!data:serp",
+    "server:tavily"
+   ],
+   "affects": "approximate SERP (web search)"
+  },
+  {
+   "compute": "serp_urls",
+   "run": [
+    "dfs_metrics.py",
+    "serp-urls",
+    "--serp",
+    "{data}/serp.json",
+    "--top",
+    "3"
+   ],
+   "when": [
+    "data:serp"
+   ]
+  },
+  {
+   "compute": "serp_urls_web",
+   "run": [
+    "dfs_metrics.py",
+    "serp-urls",
+    "--serp",
+    "{data}/web_serp.json",
+    "--top",
+    "3"
+   ],
+   "when": [
+    "data:web_serp"
+   ]
+  },
+  {
+   "local": "serp_facts",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "facts",
+    {
+     "$each": "--url",
+     "$else": [
+      {
+       "$from": "computed:serp_urls",
+       "path": "urls[]"
+      },
+      {
+       "$from": "computed:serp_urls_web",
+       "path": "urls[]"
+      }
+     ]
+    }
+   ],
+   "optional": true,
+   "affects": "top pages (headings, length, schema)"
+  },
+  {
+   "pull": "ideas_{i}",
+   "cap": "planner.ideas",
+   "for_each": {
+    "$from": "planner:list",
+    "keywords": [
+     "{input:keyword}"
+    ]
+   },
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "keywords": "{item.keywords}",
+    "language": "{item.language}",
+    "geo_targets": {
+     "$from": "profile:ads_geo_targets"
+    }
+   },
+   "optional": true,
+   "when": [
+    "server:google-ads-planner",
+    "profile:ads_customer_id"
+   ],
+   "affects": "keyword volumes (Keyword Planner)"
+  },
+  {
+   "pull": "pq_cur",
+   "cap": "gsc.page_query",
+   "period": "current"
+  },
+  {
+   "compute": "foothold",
+   "run": [
+    "gsc_metrics.py",
+    "topic",
+    "--page-query",
+    "{data}/pq_cur.json",
+    "--terms",
+    "{input:keyword}"
+   ]
+  }
+ ]
+}

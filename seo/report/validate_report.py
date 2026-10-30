@@ -9,6 +9,8 @@ problem is returned as an issue.
 Usage:
     python3 seo/report/validate_report.py --findings F --data {run_dir}/context.json            # before build
     python3 seo/report/validate_report.py --findings F --report R --data {run_dir}/context.json # after build
+With --data, every URL and every figure in the findings must trace back to the recorded evidence or
+to ``{run_dir}/computed/*.json`` (number rules: [`number_check.py`](number_check.py)).
 Exit codes: 0 = clean, 1 = issues.
 """
 from __future__ import annotations
@@ -24,6 +26,8 @@ from urllib.parse import unquote, urlparse
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))  # seo/
 import window  # noqa: E402
+sys.path.insert(0, str(HERE))
+from number_check import Index, check as number_issues  # noqa: E402
 
 URL_RE = re.compile(r"https?://[^\s)\]\"'<>|`]+")
 TRAILING = ".,;:!?)]}'\"»”’…"
@@ -207,8 +211,8 @@ def action_issues(a) -> list[str]:
 
 # ------------------------------------------------------------------ validate ---
 def validate(findings, report_text: str | None = None, data_text: str | None = None,
-             evidence_calls: int | None = None) -> list[str]:
-    """Return a list of human-readable issues (empty == clean)."""
+             evidence_calls: int | None = None, numbers: Index | None = None) -> list[str]:
+    """Return a list of human-readable issues (empty == clean). ``numbers`` enables the number check."""
     issues = validate_structure(findings)
     if issues:
         return issues
@@ -269,6 +273,8 @@ def validate(findings, report_text: str | None = None, data_text: str | None = N
             if path in ("", "/") and host and host in data.lower():
                 continue
             issues.append(f"URL not found in recorded evidence (possible hallucination): {u}")
+    if numbers is not None:
+        issues += number_issues(findings, numbers)
     return issues
 
 
@@ -286,7 +292,8 @@ def _main() -> int:
         return 1
     report_text = Path(args.report).read_text() if args.report else None
     data_text, n_calls, problems = load_evidence(args.data)
-    issues = problems + validate(findings, report_text, data_text, n_calls)
+    index = Index.from_run(Path(args.data).parent) if data_text is not None else None
+    issues = problems + validate(findings, report_text, data_text, n_calls, index)
     for i in issues:
         print(f"ERROR {i}")
     print("OK — findings/report satisfy the contract" if not issues else f"{len(issues)} issue(s)")

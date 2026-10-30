@@ -45,34 +45,33 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `ads.customers` | `google-ads` → `customers_list_accessible_customers` | Accessible Ads customer IDs |
-| `ads.metadata` | `google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id) | GAQL field discovery (verify fields before querying) |
 | `ads.search` | `google-ads` → `search_search` (supply: customer_id, resource, fields, conditions, orderings, login_customer_id) | GAQL query (search terms, account currency) |
 | `gsc.query` | `search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query-level clicks/impressions/CTR/position (anonymized queries excluded) |
-| `gsc.geo_query` | `search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query by country (align organic with ad geo-targeting) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
+| `ads.customers` | `google-ads` → `customers_list_accessible_customers` | Accessible Ads customer IDs *(agent call, only when a step needs it)* |
+| `ads.metadata` | `google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id) | GAQL field discovery (verify fields before querying) *(agent call, only when a step needs it)* |
+| `gsc.geo_query` | `search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query by country (align organic with ad geo-targeting) *(agent call, only when a step needs it)* |
 
 <!--/include-->
 
 Local tools: [`seo/ads_metrics.py`](../../../seo/ads_metrics.py) (`overlap`).
 
 ## Workflow
-<!--include:evidence days=90 flags=--->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-paid-organic --site <domain> --days 90`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-paid-organic --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-paid-organic.json`](../../../seo/plans/seo-paid-organic.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap--> (required). <!--cap:ads.customers-->`google-ads` → `customers_list_accessible_customers`<!--/cap--> → the Ads customer ID (ask if several). If access goes through a manager account, pass its ID as `login_customer_id` in every Ads call.
-2. **Field check.** <!--cap:ads.metadata-->`google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id)<!--/cap--> for `search_term_view` and `customer` — never guess GAQL fields.
-3. **Currency.** <!--cap:ads.search-->`google-ads` → `search_search` (supply: customer_id, resource, fields, conditions, orderings, login_customer_id)<!--/cap--> with `resource: customer`, `fields: [customer.currency_code]`.
-4. **Paid search terms.** <!--cap:ads.search-->`google-ads` → `search_search` (supply: customer_id, resource, fields, conditions, orderings, login_customer_id)<!--/cap--> with `resource: search_term_view`, `fields: [search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.absolute_top_impression_percentage]`, `conditions: ["segments.date BETWEEN '<startDate>' AND '<endDate>'"]` (run window), `orderings: ["metrics.cost_micros DESC"]`. The search-terms report omits low-volume terms (privacy thresholds) — say so.
-5. **Organic.** <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> over the same window. If campaigns target specific countries, also <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> and compare like with like.
-6. **Overlap.** `python3 seo/ads_metrics.py overlap --ads {run_dir}/data/terms.json --query {run_dir}/data/query_cur.json --currency <code>` → buckets `double_paying` (organic ≤ 3 + spend), `defend_check` (double-paying with ad absolute-top share < 50 %: competitors may bid — needs a manual SERP check), `paid_only_winners` (converting in Ads, no organic top-20: the content roadmap), `organic_only` (scale candidates), plus spend in the account currency.
-7. **Savings (estimate).** Spend on `double_paying` is avoidable; the paid clicks organic would *not* recapture are the cost — shown for a heuristic 50–70 % recapture range. Recommend a **holdout test** (pause the terms in one region or alternate weeks for 2–4 weeks; compare total paid + organic clicks and conversions) before cutting permanently.
+1. **Account.** The plan uses the profile's Ads customer ID (<!--site:ads_customer_id-->`python3 seo/site_profile.py --site <domain> --get ads_customer_id`<!--/site-->; required — without it the pipeline stops: find it with <!--cap:ads.customers-->`google-ads` → `customers_list_accessible_customers`<!--/cap--> and set it in the profile). If access goes through a manager account, rerun with `--input login_customer_id=<manager ID> --force`. A GAQL field error → check fields with <!--cap:ads.metadata-->`google-ads` → `metadata_get_resource_metadata` (supply: resource_name, login_customer_id)<!--/cap--> (`search_term_view`, `customer`) — never guess GAQL fields.
+2. **Paid search terms.** `data/terms.json` (search terms over the run window, by cost) in the currency of `data/currency.json`. The search-terms report omits low-volume terms (privacy thresholds) — say so.
+3. **Organic.** `data/query_cur.json` over the same window. If campaigns target specific countries, compare like with like: an extra <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> pull (recorded).
+4. **Overlap.** `computed/overlap.json` → buckets `double_paying` (organic ≤ 3 + spend), `defend_check` (double-paying with ad absolute-top share < 50 %: competitors may bid — needs a manual SERP check), `paid_only_winners` (converting in Ads, no organic top-20: the content roadmap), `organic_only` (scale candidates), plus spend in the account currency.
+5. **Savings (estimate).** Spend on `double_paying` is avoidable; the paid clicks organic would *not* recapture are the cost — shown for a heuristic 50–70 % recapture range (`computed/overlap.json`). Recommend a **holdout test** (pause the terms in one region or alternate weeks for 2–4 weeks; compare total paid + organic clicks and conversions) before cutting permanently.
 
 ## Determinism
 - One 90-day window from `.run_state.json` for both sides; Ads `conditions` use exactly those dates.
@@ -104,7 +103,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| GAQL "unknown field" | field guessed | run step 2 first |
+| GAQL "unknown field" | field guessed or renamed | check the fields with `ads.metadata` (step 1), then fix the plan |
 | `USER_PERMISSION_DENIED` | access through a manager account | pass `login_customer_id` |
 | No overlap found | ads target another market/language | compare against `gsc.geo_query` for the ad countries |
 
@@ -120,8 +119,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -156,8 +156,10 @@ Skill-specific: `seo/ads_metrics.py` (Execute).
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

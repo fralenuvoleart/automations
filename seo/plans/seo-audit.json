@@ -1,0 +1,329 @@
+{
+ "skill": "seo-audit",
+ "window": {
+  "days": 90,
+  "compare": true
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "compare",
+   "cap": "gsc.compare_period",
+   "period": "current",
+   "optional": true,
+   "affects": "period-over-period aggregate (gsc.compare_period)"
+  },
+  {
+   "pull": "totals_cur",
+   "cap": "gsc.daily_totals",
+   "period": "current"
+  },
+  {
+   "pull": "totals_prev",
+   "cap": "gsc.daily_totals",
+   "period": "previous"
+  },
+  {
+   "compute": "totals",
+   "run": [
+    "gsc_metrics.py",
+    "totals",
+    "--cur",
+    "{data}/totals_cur.json",
+    "--prev",
+    "{data}/totals_prev.json"
+   ]
+  },
+  {
+   "pull": "anomalies",
+   "cap": "gsc.anomalies",
+   "period": "current",
+   "optional": true,
+   "affects": "anomalies"
+  },
+  {
+   "pull": "drop",
+   "cap": "gsc.compare_drop",
+   "period": "current",
+   "optional": true,
+   "affects": "drop attribution"
+  },
+  {
+   "pull": "query_cur",
+   "cap": "gsc.query",
+   "period": "current"
+  },
+  {
+   "pull": "query_prev",
+   "cap": "gsc.query",
+   "period": "previous"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "pull": "page_prev",
+   "cap": "gsc.page",
+   "period": "previous"
+  },
+  {
+   "pull": "pq_cur",
+   "cap": "gsc.page_query",
+   "period": "current"
+  },
+  {
+   "pull": "query_12m",
+   "cap": "gsc.query",
+   "period": "lookback",
+   "lookback_days": 365,
+   "allow_window": "CTR curve: the site's own last 12 months fill position buckets the run window cannot",
+   "optional": true,
+   "affects": "CTR curve from the site's last 12 months (benchmark used instead)"
+  },
+  {
+   "compute": "anonymized",
+   "run": [
+    "gsc_metrics.py",
+    "anonymized",
+    "--totals",
+    "{data}/totals_cur.json",
+    "--rows",
+    "{data}/query_cur.json"
+   ]
+  },
+  {
+   "compute": "decay",
+   "run": [
+    "gsc_metrics.py",
+    "decay",
+    "--cur",
+    "{data}/page_cur.json",
+    "--prev",
+    "{data}/page_prev.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "low_ctr",
+   "run": [
+    "gsc_metrics.py",
+    "low-ctr",
+    "--query",
+    "{data}/query_cur.json",
+    "--site",
+    "{site}",
+    {
+     "$each": "--curve-query",
+     "$from": "files",
+     "glob": "{data}/query_12m.json"
+    }
+   ]
+  },
+  {
+   "compute": "striking",
+   "run": [
+    "gsc_metrics.py",
+    "striking",
+    "--query",
+    "{data}/query_cur.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "cannibalization",
+   "run": [
+    "gsc_metrics.py",
+    "cannibalization",
+    "--page-query",
+    "{data}/pq_cur.json",
+    "--site",
+    "{site}"
+   ]
+  },
+  {
+   "compute": "segments_category",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "breakdown",
+    "--by",
+    "category",
+    "--cur",
+    "{data}/query_cur.json",
+    "--prev",
+    "{data}/query_prev.json"
+   ]
+  },
+  {
+   "compute": "segments_page_tag",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "breakdown",
+    "--by",
+    "page_tag",
+    "--cur",
+    "{data}/page_cur.json",
+    "--prev",
+    "{data}/page_prev.json"
+   ]
+  },
+  {
+   "compute": "segments_language",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "breakdown",
+    "--by",
+    "language",
+    "--cur",
+    "{data}/page_cur.json",
+    "--prev",
+    "{data}/page_prev.json"
+   ]
+  },
+  {
+   "pull": "geo_cur",
+   "cap": "gsc.geo_query",
+   "period": "current",
+   "optional": true,
+   "when": [
+    "profile:markets!=WORLDWIDE"
+   ],
+   "affects": "local visibility"
+  },
+  {
+   "pull": "inspect",
+   "cap": "gsc.inspect",
+   "args": {
+    "urls": {
+     "$from": "computed:decay",
+     "path": "pages[class=vanished|ranking_loss].page",
+     "limit": 5
+    }
+   },
+   "skip_empty": "urls",
+   "optional": true,
+   "affects": "indexation spot-check"
+  },
+  {
+   "compute": "inspection",
+   "run": [
+    "gsc_metrics.py",
+    "inspection",
+    "--inspect",
+    "{data}/inspect.json"
+   ],
+   "when": [
+    "data:inspect"
+   ]
+  },
+  {
+   "pull": "health",
+   "cap": "gsc.health",
+   "optional": true,
+   "affects": "crawl health"
+  },
+  {
+   "pull": "ga4_lp",
+   "cap": "ga4.landing_source",
+   "period": "both",
+   "optional": true,
+   "when": [
+    "server:analytics",
+    "profile:ga4_property"
+   ],
+   "affects": "engagement, channels and AI share (GA4)"
+  },
+  {
+   "compute": "ga4_channels",
+   "run": [
+    "ga4_metrics.py",
+    "breakdown",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ga4_lp.json",
+    "--by",
+    "channel"
+   ],
+   "when": [
+    "data:ga4_lp"
+   ]
+  },
+  {
+   "compute": "ga4_page_tag",
+   "run": [
+    "ga4_metrics.py",
+    "breakdown",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ga4_lp.json",
+    "--by",
+    "page_tag",
+    "--organic"
+   ],
+   "when": [
+    "data:ga4_lp"
+   ]
+  },
+  {
+   "compute": "ga4_language",
+   "run": [
+    "ga4_metrics.py",
+    "breakdown",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ga4_lp.json",
+    "--by",
+    "language",
+    "--organic"
+   ],
+   "when": [
+    "data:ga4_lp"
+   ]
+  },
+  {
+   "compute": "reconcile",
+   "run": [
+    "ga4_metrics.py",
+    "reconcile",
+    "--site",
+    "{site}",
+    "--ga4",
+    "{data}/ga4_lp.json",
+    "--gsc-totals",
+    "{data}/totals_cur.json",
+    "--gsc-totals-prev",
+    "{data}/totals_prev.json"
+   ],
+   "when": [
+    "data:ga4_lp"
+   ]
+  },
+  {
+   "compute": "coverage",
+   "run": [
+    "coverage.py",
+    "--site",
+    "{site}",
+    "--gsc",
+    "{data}/query_cur.json",
+    "--gsc-pages",
+    "{data}/page_cur.json"
+   ]
+  }
+ ]
+}

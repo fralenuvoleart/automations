@@ -14,6 +14,7 @@ Usage (all print JSON):
     python3 seo/rules.py --site pbservices.ge breakdown --by page_tag|language --cur F [--prev F]  # page rows
     python3 seo/rules.py --site pbservices.ge keywords --query F [--prev F] [--countries F]  # tracked set (+ status, top countries)
     python3 seo/rules.py --site pbservices.ge targets --page-query F   # tracked keyword ranking with its target page?
+    python3 seo/rules.py --site pbservices.ge representatives --page F  # one URL per page type and per language
     python3 seo/rules.py --site pbservices.ge trend --by category|page_tag|language|keyword --rows W1 W2 …  # one file per week
 Exit codes: 0 = ok, 1 = error.
 """
@@ -313,6 +314,22 @@ class Rules:
                 "basis": ("named queries only (anonymized queries excluded)" if by in ("category", "keyword")
                           else "page rows (include anonymized-query traffic); jump-link (#) variants merged")}
 
+    def representatives(self, page_rows: list[dict]) -> list[dict]:
+        """Smallest set of top-clicked pages covering every page type and every language."""
+        import gsc_metrics as G
+        agg = G.aggregate(self.collapse_fragments(page_rows), lambda r: self.clean(r["page"]))
+        ranked = sorted(agg.items(), key=lambda kv: (-kv[1]["clicks"], -kv[1]["impressions"], kv[0]))
+        out, tags, langs = [], set(), set()
+        for want, key in (("tag", self.page_tag), ("language", self.page_language)):
+            for url, m in ranked:
+                v = key(url)
+                if (v in tags if want == "tag" else v in langs) or url in {o["page"] for o in out}:
+                    continue
+                out.append({"page": url, "tag": self.page_tag(url), "language": self.page_language(url), **G._r(m)})
+                tags.add(self.page_tag(url))
+                langs.add(self.page_language(url))
+        return out
+
     # derived profile values
     def services(self) -> list[str]:
         caps = list((self.auto.get("category_caps") or {}).keys())
@@ -503,6 +520,8 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--countries", help="country × query rows (gsc.geo_query): top 3 countries per keyword")
     t = sub.add_parser("targets")
     t.add_argument("--page-query", dest="page_query", required=True)
+    rp = sub.add_parser("representatives")
+    rp.add_argument("--page", required=True)
     tr = sub.add_parser("trend")
     tr.add_argument("--by", choices=["category", "page_tag", "language", "keyword"], required=True)
     tr.add_argument("--rows", nargs="+", required=True, help="one recorded file per week, oldest first")
@@ -539,6 +558,8 @@ def main(argv: list[str] | None = None) -> int:
         elif a.command == "keywords":
             res = r.select_keywords(G.load_rows(a.query, ["query"]), G.load_rows(a.prev, ["query"]) if a.prev else None,
                                     G.load_rows(a.countries, ["country", "query"]) if a.countries else None)
+        elif a.command == "representatives":
+            res = {"pages": r.representatives(G.load_rows(a.page, ["page"]))}
         elif a.command == "targets":
             res = r.targets(G.load_rows(a.page_query, ["query", "page"]))
         else:

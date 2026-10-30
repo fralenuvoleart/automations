@@ -48,11 +48,19 @@ candidate (concise definition/list/table near the top). **FAQ and HowTo rich res
 appear in Google Search** (restricted 2023, FAQ removed 2026): never promise them.
 
 ## CTR by position
-1. **Use the site's own curve first**: `gsc_metrics.py curve` — non-brand, impression-weighted CTR
-   per position bucket, trusted when a bucket has ≥ `curve_min_impressions`.
-2. **Heuristic fallback (positions 1–4 only)**, labelled *heuristic*: 27.6 %, 15.8 %, 11.0 %,
-   8.4 % (Backlinko 2019, 4M results, before AI Overviews; AI Overviews lower these). Other buckets
-   without site data are "insufficient data" — never invented.
+Expected CTR per position bucket comes from the first source with ≥ `curve_min_impressions`
+(non-brand, impression-weighted; each bucket carries its `source`):
+1. **`site`** — this run's window (the current SERPs, AI Overviews included where they show).
+2. **`site_12m`** — the site's own last 12 months (`--curve-query`, pulled by the plans as
+   `query_12m`): more data per position, still this site's queries, markets and SERP layouts.
+3. **`benchmark`** (positions it covers), labelled *heuristic* — a dated, post-AI-Overviews study
+   measured in Search Console, kept in [`config/ctr-benchmark.json`](../config/ctr-benchmark.json)
+   (source, publication month, `max_age_months`). `python3 seo/gsc_metrics.py benchmark` shows its
+   age; `check.sh` warns when it is stale — replace it with a newer study, never with a pre-2024 one
+   (AI Overviews cut top-position CTR sharply, and published curves vary 2× by query mix and layout).
+
+Buckets none of these fill are "insufficient data" — never invented. Reports state the basis
+(`basis` in the computed output) whenever a benchmark value drives a finding.
 - **Low CTR** (`gsc_metrics.py low-ctr`): position ≤ `low_ctr_max_position` and CTR below
   `low_ctr_ratio` × expected CTR for that position → a title/meta (or SERP-feature) problem, not
   a ranking problem.

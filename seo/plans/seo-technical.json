@@ -1,0 +1,141 @@
+{
+ "skill": "seo-technical",
+ "window": {
+  "days": 28
+ },
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "page_cur",
+   "cap": "gsc.page",
+   "period": "current"
+  },
+  {
+   "compute": "reps",
+   "run": [
+    "rules.py",
+    "--site",
+    "{site}",
+    "representatives",
+    "--page",
+    "{data}/page_cur.json"
+   ]
+  },
+  {
+   "pull": "psi_mobile_{i}",
+   "cap": "gsc.pagespeed",
+   "for_each": {
+    "$from": "computed:reps",
+    "path": "pages[].page"
+   },
+   "args": {
+    "url": "{item}",
+    "strategy": "mobile"
+   },
+   "optional": true,
+   "affects": "Core Web Vitals (mobile)"
+  },
+  {
+   "pull": "psi_desktop_{i}",
+   "cap": "gsc.pagespeed",
+   "for_each": {
+    "$from": "computed:reps",
+    "path": "pages[].page"
+   },
+   "args": {
+    "url": "{item}",
+    "strategy": "desktop"
+   },
+   "optional": true,
+   "affects": "Core Web Vitals (desktop)"
+  },
+  {
+   "pull": "a11y_{i}",
+   "cap": "gsc.pagespeed_a11y",
+   "for_each": {
+    "$from": "computed:reps",
+    "path": "pages[].page"
+   },
+   "args": {
+    "url": "{item}",
+    "strategy": "mobile"
+   },
+   "optional": true,
+   "affects": "accessibility"
+  },
+  {
+   "pull": "schema_{i}",
+   "cap": "gsc.schema",
+   "for_each": {
+    "$from": "computed:reps",
+    "path": "pages[].page"
+   },
+   "args": {
+    "url": "{item}"
+   },
+   "optional": true,
+   "affects": "structured data"
+  },
+  {
+   "local": "facts",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "facts",
+    {
+     "$each": "--url",
+     "$from": "computed:reps",
+     "path": "pages[].page"
+    }
+   ],
+   "optional": true,
+   "affects": "page facts (entities, sameAs)"
+  },
+  {
+   "pull": "inspect",
+   "cap": "gsc.inspect",
+   "args": {
+    "urls": {
+     "$from": "computed:reps",
+     "path": "pages[].page"
+    }
+   },
+   "skip_empty": "urls",
+   "optional": true,
+   "affects": "index / canonical state"
+  },
+  {
+   "compute": "inspection",
+   "run": [
+    "gsc_metrics.py",
+    "inspection",
+    "--inspect",
+    "{data}/inspect.json"
+   ],
+   "when": [
+    "data:inspect"
+   ]
+  },
+  {
+   "pull": "health",
+   "cap": "gsc.health",
+   "optional": true,
+   "affects": "crawl health"
+  },
+  {
+   "local": "robots",
+   "source": "site_crawl",
+   "run": [
+    "site_crawl.py",
+    "robots",
+    "--site",
+    "https://{domain}"
+   ],
+   "optional": true,
+   "affects": "AI-crawler access"
+  }
+ ]
+}

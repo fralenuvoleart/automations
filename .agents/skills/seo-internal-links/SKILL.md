@@ -45,33 +45,31 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
 | `gsc.page_query` | `search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Query × page attribution (anonymized queries excluded) |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 
 <!--/include-->
 
 Local tools: [`seo/site_crawl.py`](../../../seo/site_crawl.py) (`crawl`, `sitemap`), [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`topic`).
 
 ## Workflow
-<!--include:evidence days=90 flags=--->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-internal-links --site <domain> --days 90`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-internal-links --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-internal-links.json`](../../../seo/plans/seo-internal-links.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
-2. **Targets.** Priority pages; if none, the top 20 pages by impressions from <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current window) — say so.
-3. **Crawl.** `python3 seo/site_crawl.py crawl --site https://<domain> --profile <domain> --limit 500` (record `--source site_crawl --name crawl`) → per page `inlinks`, `depth`, `top_anchors`; site lists `orphans_vs_sitemap`, `weakly_linked` (≤ 1 inlink), `deep_pages` (depth > 3), `broken_internal`. If `limit_reached`, the graph is partial: say so.
-4. **Under-linked targets.** A target is under-linked when it is in `weakly_linked`, `deep_pages` or `orphans_vs_sitemap`.
-5. **Sources.** <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (current) → for each under-linked target, take its top non-brand queries; `python3 seo/gsc_metrics.py topic --page-query {run_dir}/data/pq_cur.json --terms "<1–2 stem terms>"` lists other pages with impressions on the same topic. Keep sources in the **same language prefix** that **do not already link** to the target (the target is absent from the source's `outlinks` in the crawl file). Pick 3–5 per target, highest impressions first.
-6. **Anchors.** Use the target's main query in the page's language, varied across sources; avoid repeating one exact-match anchor everywhere.
-7. **Fixes beyond links.** Orphans: link them from a relevant hub or remove from the sitemap (301 if retired). Broken internal links: fix or redirect.
-8. **Assemble.** Rank by (priority page first) × the target's impressions.
+1. **Targets.** Priority pages; if none, the top 20 pages by impressions (`computed/top_pages.json`) — say so.
+2. **Under-linked targets.** `computed/underlinked.json` → per target: `inlinks`, `depth`, `outlinks` and the reasons (`orphan`, `weakly_linked` ≤ 1 inlink, `deep` > 3 clicks, `not_crawled`). The full graph (`top_anchors`, `orphans_vs_sitemap`, `broken_internal`) is in `data/crawl.json`; if `limit_reached`, the graph is partial: say so.
+3. **Sources.** For each under-linked target, take its top non-brand queries from `data/pq_cur.json`, then `python3 seo/gsc_metrics.py topic --page-query {run_dir}/data/pq_cur.json --terms "<1–2 stem terms>"` (recorded as `--source derived`) → other pages with impressions on the same topic. Keep sources in the **same language prefix** that **do not already link** to the target (the target is absent from the source's `outlinks` in `data/crawl.json`). Pick 3–5 per target, highest impressions first.
+4. **Anchors.** Use the target's main query in the page's language, varied across sources; avoid repeating one exact-match anchor everywhere.
+5. **Fixes beyond links.** Orphans: link them from a relevant hub or remove from the sitemap (301 if retired). Broken internal links: fix or redirect.
+6. **Assemble.** Rank by (priority page first) × the target's impressions.
 
 ## Determinism
 - Graph metrics come from the recorded crawl; query overlap from `gsc_metrics.py topic`; the GSC window is 90 days from `.run_state.json`.
@@ -119,8 +117,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -156,8 +155,10 @@ Skill-specific: `seo/site_crawl.py` (Execute), `seo/gsc_metrics.py` (Execute).
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

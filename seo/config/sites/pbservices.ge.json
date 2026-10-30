@@ -1,5 +1,7 @@
 {
   "domain": "pbservices.ge",
+  "gsc_property": "https://pbservices.ge/",
+  "ga4_property": "353738640",
   "priority_pages": [
     "https://pbservices.ge/",
     "https://pbservices.ge/about/",

@@ -9,6 +9,8 @@ Commands (all print JSON):
     breakdown --site D --ga4 F [--prev F] --by channel|page_tag|language [--organic]
     reconcile --site D --ga4 F --gsc-totals F [--ga4-prev F --gsc-totals-prev F]
         # Search Console clicks vs GA4 organic sessions + "(not set)" landing-page share
+    top-pages --site D --ga4 F [--limit N]          # landing pages by sessions (absolute URLs)
+    misses    --site D --ga4 F --gsc-pages F [--limit N]   # top organic pages with no sessions in the GA4 rows
 """
 from __future__ import annotations
 
@@ -113,8 +115,21 @@ def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = N
 
     tot_c = _agg([r for r in rows if keep(r)], lambda r: "t").get("t")
     tot_p = _agg([r for r in prev_rows if keep(r)], lambda r: "t").get("t") if prev_rows is not None else None
-    return {"by": by, "organic_only": organic_only, "rows": [line(n, cur.get(n), (prev or {}).get(n)) for n in names],
-            "total": line("Total", tot_c, tot_p)}
+    out_rows = [line(n, cur.get(n), (prev or {}).get(n)) for n in names]
+    total_sessions = (tot_c or {}).get("sessions") or 0
+    for row in out_rows:
+        row["session_share"] = round(row["sessions"] / total_sessions, 4) if total_sessions else None
+        row["key_event_rate"] = round(row["keyEvents"] / row["sessions"], 4) if row.get("sessions") else None
+    out = {"by": by, "organic_only": organic_only, "rows": out_rows, "total": line("Total", tot_c, tot_p)}
+    if by == "channel":  # headline of the AI sections: AI sessions ÷ organic sessions (a lower bound)
+        ai, org = rules.data["channels"]["ai_channel"], organic
+
+        def share(agg):
+            a, o = (agg or {}).get(ai, {}).get("sessions", 0), (agg or {}).get(org, {}).get("sessions", 0)
+            return round(a / o, 4) if o else None
+        out["ai_share_of_organic"] = {"current": share(cur), "previous": share(prev) if prev is not None else None,
+                                      "label": "lower bound — some AI visits arrive as direct or unlisted referrers"}
+    return out
 
 
 def reconcile(rules, ga4_rows: list[dict], gsc_totals: list[dict], ga4_prev: list[dict] | None = None,
@@ -153,9 +168,30 @@ def reconcile(rules, ga4_rows: list[dict], gsc_totals: list[dict], ga4_prev: lis
     return out
 
 
+def _landing(r: dict) -> str | None:
+    return r.get("landingPage") or r.get("landingPagePlusQueryString")
+
+
+def top_pages(rules, rows: list[dict], limit: int = 3) -> list[dict]:
+    """Landing pages by sessions (absolute, cleaned URLs; "(not set)" skipped)."""
+    agg = _agg([r for r in rows if _landing(r) and _landing(r) != NOT_SET], lambda r: rules.clean(_landing(r)))
+    return [{"page": p, "sessions": round(m["sessions"], 1), "keyEvents": round(m["keyEvents"], 1)}
+            for p, m in sorted(agg.items(), key=lambda kv: (-kv[1]["sessions"], kv[0]))[:limit]]
+
+
+def misses(rules, ga4_rows: list[dict], gsc_page_rows: list[dict], limit: int = 5) -> list[dict]:
+    """Pages with the most organic clicks that got no sessions in the GA4 rows (e.g. no AI referrals)."""
+    import gsc_metrics
+    seen = {rules.clean(_landing(r)) for r in ga4_rows if _landing(r) and _num(r.get("sessions")) > 0}
+    tops = gsc_metrics.top_pages(gsc_page_rows, "clicks", 10 ** 6)
+    return [p for p in tops if rules.clean(p["page"]) not in seen][:limit]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["breakdown", "reconcile"])
+    ap.add_argument("command", choices=["breakdown", "reconcile", "top-pages", "misses"])
+    ap.add_argument("--gsc-pages", dest="gsc_pages")
+    ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--site", required=True)
     ap.add_argument("--ga4", required=True)
     ap.add_argument("--prev", "--ga4-prev", dest="prev")
@@ -172,7 +208,13 @@ def main(argv: list[str] | None = None) -> int:
         cur, prev = split_ranges(load_rows(a.ga4))
         if a.prev:
             prev = load_rows(a.prev)
-        if a.command == "breakdown":
+        if a.command == "top-pages":
+            res = {"pages": top_pages(r, cur, a.limit or 3)}
+        elif a.command == "misses":
+            if not a.gsc_pages:
+                raise ValueError("--gsc-pages is required for misses")
+            res = {"pages": misses(r, cur, gsc_metrics.load_rows(a.gsc_pages, ["page"]), a.limit or 5)}
+        elif a.command == "breakdown":
             if not a.by:
                 raise ValueError("--by is required for breakdown")
             res = breakdown(r, cur, a.by, prev, a.organic)

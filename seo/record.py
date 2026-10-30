@@ -153,15 +153,16 @@ def _store(run_dir: Path, cap: str, cap_entry: dict, full_args: dict, parsed) ->
                                ensure_ascii=False) + "\n")
 
 
-def record_from_cache(run_dir: Path, name: str, cap: str, args: dict | None = None) -> Path | None:
+def record_from_cache(run_dir: Path, name: str, cap: str, args: dict | None = None,
+                      allow_window: str | None = None) -> Path | None:
     """Record the cached response for this call (same guards as a live call); None on a miss."""
     args = args or {}
     hit = cached(run_dir, cap, args)
     if hit is None:
-        record(run_dir, name, "{}", cap, args=args, dry_run=True)  # still enforce the guards
+        record(run_dir, name, "{}", cap, args=args, allow_window=allow_window, dry_run=True)  # still enforce the guards
         return None
     return record(run_dir, name, json.dumps(hit["response"], ensure_ascii=False), cap, args=args,
-                  _cached_from=hit["stored_at"])
+                  allow_window=allow_window, _cached_from=hit["stored_at"])
 
 
 def record(run_dir: Path, name: str, raw: str, cap: str | None = None, source: str | None = None,
@@ -231,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.from_cache:
             if not a.cap:
                 raise ValueError("--from-cache needs --cap")
-            out = record_from_cache(Path(a.run_dir), a.name, a.cap, json.loads(a.args))
+            out = record_from_cache(Path(a.run_dir), a.name, a.cap, json.loads(a.args), a.allow_window)
             if out is None:
                 print(f"cache miss for {a.cap} — make the call, then record it with --response-file")
                 return CACHE_MISS

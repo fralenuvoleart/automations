@@ -3,8 +3,8 @@
 Mandatory, grep-auditable rules for every SEO report.
 
 1. **Never fabricate.** If a call fails, show the item without numbers and say why. Never fill a gap from memory or substitute third-party estimates for the site's own data.
-2. **Record evidence.** Save every tool response with `seo/record.py` right after the call; numbers and URLs in the findings must come from those files.
-3. **Compute, don't eyeball.** Deltas, movers, thresholds, CTR curves, splits and coverage come from `seo/gsc_metrics.py` / `seo/coverage.py` / `seo/site_crawl.py`, not mental arithmetic.
+2. **Record evidence.** `seo/pipeline.py` records every planned call; save any extra tool response with `seo/record.py` right after the call. Numbers and URLs in the findings must come from those files or `computed/` — the validator checks both.
+3. **Compute, don't eyeball.** Deltas, movers, thresholds, CTR curves, splits, shares and coverage come from `computed/` (the pipeline's analysis scripts), not mental arithmetic; a new figure is computed by a script and recorded (`record.py --source derived`).
 4. **Label estimates.** Any number not from the site's own GSC/GA4/Ads data carries `estimate` or `heuristic` (planner volumes, DataForSEO data, value models, heuristic CTRs, savings).
 5. **Provenance line first.** State the resolved window (or snapshot date) and UTC generation time ([`report-structure.md`](report-structure.md)).
 6. **Absolute windows only.** Pass literal `YYYY-MM-DD` from `.run_state.json`; never relative phrases, never today. If a tool uses its own period, state it in that section.

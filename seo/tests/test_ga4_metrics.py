@@ -63,6 +63,17 @@ def test_breakdown_by_channel_page_type_and_language():
     assert tot["sessions"] == 98 and tot["engagementRate"] == round(43 / 98, 3)
 
 
+def test_channel_breakdown_states_ai_share_and_rates():
+    rows, prev = M.parse_rows(report(CUR)), M.parse_rows(report(PREV))
+    out = M.breakdown(R, rows, "channel", prev)
+    assert out["ai_share_of_organic"]["current"] == round(4 / 98, 4)
+    assert out["ai_share_of_organic"]["previous"] == 0.0 and "lower bound" in out["ai_share_of_organic"]["label"]
+    ch = {r["channel"]: r for r in out["rows"]}
+    assert ch["Paid search"]["key_event_rate"] == round(2 / 33, 4)
+    assert ch["Direct"]["session_share"] == round(34 / 169, 4)
+    assert "ai_share_of_organic" not in M.breakdown(R, rows, "language")
+
+
 def test_reconcile_flags_not_set_and_diverging_trends():
     gsc_cur = [{"date": "d", "clicks": 242.0, "impressions": 1, "ctr": 0, "position": 1}]
     gsc_prev = [{"date": "d", "clicks": 500.0, "impressions": 1, "ctr": 0, "position": 1}]

@@ -46,37 +46,35 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | Capability | Call | Purpose |
 |---|---|---|
 | `gsc.diagnostics` | `search-console` → `diagnostics` | Connection check (`google` must report ok) |
-| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 | `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
 | `gsc.daily_totals` | `search-console` → `analytics_query` {"dimensions": ["date"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Daily site totals, including anonymized queries (reconciliation baseline) |
 | `gsc.compare_trends` | `search-console` → `analytics_compare` {"mode": "trends", "engine": "google"} (supply: siteUrl, startDate, endDate) | Gradual trend detection |
 | `ga4.organic_landing_pages` | `analytics` → `run_report` {"dimensions": ["landingPagePlusQueryString"], "metrics": ["sessions", "engagementRate", "keyEvents"], "dimension_filter": {"filter": {"field_name": "sessionDefaultChannelGroup", "string_filter": {"match_type": "EXACT", "value": "Organic Search", "case_sensitive": false}}}} (supply: property_id, date_ranges) | Organic-search landing pages: sessions, engagement, key events |
 | `dfs.referring_domains` | `dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/referring_domains/live"} (supply: data) | Referring domains (index estimate) *(optional, not configured)* |
+| `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
 
 <!--/include-->
 
 Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`decay`).
 
 ## Workflow
-<!--include:evidence days=90 flags=--compare-->
+<!--include:evidence flags=--->
 
-**Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-content-refresh --site <domain> --days 90 --compare`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
-3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+**Data (scripted — never pull or record by hand).**
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-content-refresh --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-content-refresh.json`](../../../seo/plans/seo-content-refresh.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
+4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
 
 <!--/include-->
 
-1. **Verify + property.** <!--cap:gsc.diagnostics-->`search-console` → `diagnostics`<!--/cap-->, <!--cap:gsc.sites_list-->`search-console` → `sites_list` {"engine": "google"}<!--/cap-->.
-2. **Rows.** For both periods: <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`page_cur`, `page_prev`) and <!--cap:gsc.daily_totals-->`search-console` → `analytics_query` {"dimensions": ["date"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`totals_cur`, `totals_prev`). Optionally <!--cap:gsc.compare_trends-->`search-console` → `analytics_compare` {"mode": "trends", "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> for gradual site-wide trends.
-3. **Classify.** `python3 seo/gsc_metrics.py decay --cur {run_dir}/data/page_cur.json --prev {run_dir}/data/page_prev.json --site <domain>` → declining pages (clicks down ≥ `decay_pct`) with exactly one class, in this precedence: `vanished` → `ranking_loss` → `demand_drop` → `ctr_loss` (table in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md)).
-4. **Seasonality.** If most declining pages are `demand_drop` (or the site total fell), seed a second run with `--yoy` in a new run directory and repeat steps 2–3; report whether the drop is seasonal.
-5. **Importance.** Priority pages and pages mapping to a service line rank first; otherwise rank by clicks lost and say so.
-6. **Key events (GA4, optional).** <!--cap:ga4.organic_landing_pages-->`analytics` → `run_report` {"dimensions": ["landingPagePlusQueryString"], "metrics": ["sessions", "engagementRate", "keyEvents"], "dimension_filter": {"filter": {"field_name": "sessionDefaultChannelGroup", "string_filter": {"match_type": "EXACT", "value": "Organic Search", "case_sensitive": false}}}} (supply: property_id, date_ranges)<!--/cap--> (current window) → key events per declining page (join on path).
-7. **Backlinks (DataForSEO, optional).** Referring domains per candidate-to-retire page via <!--cap:dfs.referring_domains-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/backlinks/referring_domains/live"} (supply: data)<!--/cap--> (`target` = page URL).
-8. **Recommend** per class: `ranking_loss` → **refresh**; `ctr_loss` → **rewrite title/meta**; `vanished` → **inspect URL** (→ `seo-indexation`); `demand_drop` → **consolidate (301)** if another page covers the topic, **retire** only when GA4 shows no key events **and** the page has no referring domains — without both checks, downgrade to "consolidate after manual backlink check". Never recommend deleting without a 301.
-9. <!--include:history-->
+1. **Classify.** `computed/decay.json` → declining pages (clicks down ≥ `decay_pct`) with exactly one class, in this precedence: `vanished` → `ranking_loss` → `demand_drop` → `ctr_loss` (table in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md)). `computed/totals.json` and `data/trends.json` → the site-wide change and gradual trends.
+2. **Seasonality.** If most declining pages are `demand_drop` (or the site total fell: `computed/totals.json`), run the plan again year-over-year — `python3 seo/pipeline.py --skill seo-content-refresh --site <domain> --yoy --tag yoy` (its own run folder) — and compare its `computed/decay.json`; report whether the drop is seasonal.
+3. **Importance.** Priority pages and pages mapping to a service line rank first; otherwise rank by clicks lost and say so.
+4. **Key events (GA4).** `data/ga4_pages.json` → key events per declining page (join on path).
+5. **Backlinks (DataForSEO).** `data/rd_*.json` → referring domains for up to 10 `demand_drop` pages (the retire candidates).
+6. **Recommend** per class: `ranking_loss` → **refresh**; `ctr_loss` → **rewrite title/meta**; `vanished` → **inspect URL** (→ `seo-indexation`); `demand_drop` → **consolidate (301)** if another page covers the topic, **retire** only when GA4 shows no key events **and** the page has no referring domains — without both checks, downgrade to "consolidate after manual backlink check". Never recommend deleting without a 301.
+7. <!--include:history-->
 
 **Action history.** Before recommending, read `python3 seo/site_profile.py --site <domain> --history`: never re-recommend a `[done]` action; list open `[recommended]` ones as "previously recommended, still open". After the run, record each *new* recommendation with `--append-history "<action>" --status recommended` (exact duplicates are ignored). Use `--status done` only when the user confirms an action was carried out.
 
@@ -101,8 +99,8 @@ Provenance line first. **Verdict**: how much of the drop is ranking loss vs dema
 <!--/include-->
 
 ## Fallbacks
-- No GA4 or no DataForSEO → no **retire** calls (downgrade as in step 8) and one `unavailable` entry per missing source.
-- `gsc.compare_trends` unavailable → skip it; the page-level classification is unaffected.
+- No GA4 or no DataForSEO → no **retire** calls (downgrade as in step 6) and one `unavailable` entry per missing source.
+- `gsc.compare_trends` unavailable → the pipeline lists it in `unavailable`; the page-level classification is unaffected.
 
 ## Pending Data Sources
 - **DataForSEO** (optional, not configured): page-level backlinks for retire decisions.
@@ -112,7 +110,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Nearly every page "declining" | strong prior period or seasonality | run the `--yoy` comparison (step 4) |
+| Nearly every page "declining" | strong prior period or seasonality | run the `--yoy` comparison (step 2) |
 | A page shows `vanished` | deindexed, redirected or canonicalised | inspect it (`seo-indexation`) before any content work |
 | Pages listed under `beyond_row_cutoff` | the page pull hit 25,000 rows | treat as unknown, not as lost |
 
@@ -128,8 +126,9 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window | Execute |
-| [`seo/record.py`](../../../seo/record.py) | record evidence | Execute |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
+| [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
 | [`seo/report/validate_report.py`](../../../seo/report/validate_report.py) | mechanical validation | Execute (mandatory) |
 
@@ -166,8 +165,10 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/site_profile.py` (Execute).
 ```
 {run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
+  pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)
+  computed/*.json     # analysis outputs — the numbers the report may state (seo/pipeline.py)
   findings.json       # LLM output (findings-schema.json)
   report.md           # rendered by build_report.py
 ```

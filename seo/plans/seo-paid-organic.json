@@ -1,0 +1,77 @@
+{
+ "skill": "seo-paid-organic",
+ "window": {
+  "days": 90
+ },
+ "inputs": {
+  "login_customer_id": {
+   "default": null,
+   "desc": "manager (MCC) account ID when Ads access goes through a manager account"
+  }
+ },
+ "requires": [
+  "ads_customer_id"
+ ],
+ "steps": [
+  {
+   "pull": "diagnostics",
+   "cap": "gsc.diagnostics"
+  },
+  {
+   "pull": "currency",
+   "cap": "ads.search",
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "resource": "customer",
+    "fields": [
+     "customer.currency_code"
+    ],
+    "login_customer_id": "{input:login_customer_id}"
+   }
+  },
+  {
+   "pull": "terms",
+   "cap": "ads.search",
+   "args": {
+    "customer_id": "{ads_customer_id}",
+    "resource": "search_term_view",
+    "fields": [
+     "search_term_view.search_term",
+     "metrics.impressions",
+     "metrics.clicks",
+     "metrics.cost_micros",
+     "metrics.conversions",
+     "metrics.absolute_top_impression_percentage"
+    ],
+    "conditions": [
+     "segments.date BETWEEN '{startDate}' AND '{endDate}'"
+    ],
+    "orderings": [
+     "metrics.cost_micros DESC"
+    ],
+    "login_customer_id": "{input:login_customer_id}"
+   }
+  },
+  {
+   "pull": "query_cur",
+   "cap": "gsc.query",
+   "period": "current"
+  },
+  {
+   "compute": "overlap",
+   "run": [
+    "ads_metrics.py",
+    "overlap",
+    "--ads",
+    "{data}/terms.json",
+    "--query",
+    "{data}/query_cur.json",
+    "--currency",
+    {
+     "$from": "data:currency",
+     "find": "currency_code"
+    }
+   ]
+  }
+ ]
+}
