@@ -36,9 +36,14 @@ def _seed(skill, as_of, tag=None, verdict=""):
     return d
 
 
-def test_repo_default_is_git_ignored():
-    assert runs.settings()["run_root"] == ".output/seo"
-    assert runs.ignore_problem() is None  # .gitignore covers it
+def test_configured_root_cannot_be_committed():
+    assert runs.settings()["run_root"]
+    assert runs.ignore_problem() is None  # outside the repo, or covered by .gitignore
+
+
+def test_a_relative_root_inside_the_repo_must_be_git_ignored():
+    assert runs.ignore_problem(runs.REPO / ".output" / "seo") is None          # in .gitignore
+    assert "not in .gitignore" in (runs.ignore_problem(runs.REPO / "seo") or "")  # tracked folder: refused
 
 
 def test_layout_and_name_guards():

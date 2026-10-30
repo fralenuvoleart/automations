@@ -278,5 +278,169 @@ def test_cli_dry_run_and_check_plans():
     assert "no data plan" in err.getvalue()
 
 
+# — A1: pulls cut at the row limit are completed (GSC split by date, GA4 paged) or refused downstream
+
+class _SplitGSC(FakeClients):
+    """page × query rows: 400 new pairs per day plus one pair seen daily — 90 days = 36,001 rows > 25,000."""
+
+    def call(self, server, tool, args):
+        if tool == "analytics_query" and args.get("dimensions") == ["query", "page"]:
+            self.calls.append((server, tool, args))
+            a, b = dt.date.fromisoformat(args["startDate"]), dt.date.fromisoformat(args["endDate"])
+            days = [(a + dt.timedelta(days=i)) for i in range((b - a).days + 1)]
+            rows = [{"keys": ["shared", f"{U}/"], "clicks": len(days), "impressions": 10 * len(days), "ctr": 0.1,
+                     "position": sum(1 + d.day % 3 for d in days) / len(days)}]
+            rows += [{"keys": [f"q{d.isoformat()}-{k}", f"{U}/p{k % 7}/"], "clicks": 1, "impressions": 3,
+                      "ctr": 0.33, "position": 12} for d in days for k in range(400)]
+            return _text({"rows": rows[:25000]})
+        return super().call(server, tool, args)
+
+
+def test_gsc_pull_over_the_row_limit_is_split_by_date_and_summed():
+    with _isolated_cache():
+        fake = _SplitGSC()
+        run_dir, s = _run("seo-audit", fake)
+    pq = next(st for st in s["steps"] if st["name"] == "pq_cur")
+    assert pq["status"] == "ok" and "truncated" not in pq and pq["chunks"] == 2 and pq["calls"] == 3, pq
+    assert s["truncated"] == [] and s["tainted"] == []
+    rows = P._payload(json.loads((run_dir / "data" / "pq_cur.json").read_text()))
+    assert rows["_pipeline"]["complete"] is True and len(rows["rows"]) == 90 * 400 + 1
+    shared = next(r for r in rows["rows"] if r["keys"][0] == "shared")
+    assert shared["clicks"] == 90 and shared["impressions"] == 900 and round(shared["ctr"], 3) == 0.1
+    # the recorded evidence keeps the run window, so the window guard and the number check still apply
+    calls = json.loads((run_dir / "context.json").read_text())["calls"]
+    assert next(c for c in calls if c["name"] == "pq_cur")["args"]["startDate"] == "2026-07-30"
+
+
+def test_gsc_pull_that_cannot_be_completed_is_flagged_and_its_figures_refused():
+    sys.path.insert(0, str(SEO / "report"))
+    import number_check as N
+
+    class Always(FakeClients):
+        def call(self, server, tool, args):
+            if tool == "analytics_query" and args.get("dimensions") == ["query", "page"]:
+                self.calls.append((server, tool, args))
+                return _text({"rows": [{"keys": [f"q{i}", f"{U}/"], "clicks": 7777 if i == 0 else 1, "impressions": 9000,
+                                        "ctr": 0.1, "position": 3} for i in range(25000)]})
+            return super().call(server, tool, args)
+
+    saved = P.MAX_CALLS_PER_PULL
+    P.MAX_CALLS_PER_PULL = 5
+    try:
+        with _isolated_cache():
+            run_dir, s = _run("seo-brand-split", Always())
+    finally:
+        P.MAX_CALLS_PER_PULL = saved
+    assert set(s["truncated"]) == {"pq_cur", "pq_prev"}, s["truncated"]
+    assert "computed/brand_split.json" in s["tainted"]
+    assert any("cut at 25,000 rows" in u["source"] for u in s["unavailable"])
+    f = json.loads((run_dir / "findings.json").read_text())
+    f["verdict"] = "Top query had 7,777 clicks."
+    issues = N.check(f, N.Index.from_run(run_dir))
+    assert issues and "cut at the row limit" in issues[0], issues
+
+
+def test_ga4_report_over_the_limit_is_paged():
+    class Paged(FakeClients):
+        def call(self, server, tool, args):
+            if tool == "run_report":
+                self.calls.append((server, tool, args))
+                off, lim, total = int(args.get("offset") or 0), int(args.get("limit") or 10000), 23500
+                n = max(0, min(lim, total - off))
+                return _text({"dimension_headers": [{"name": "sessionSource"}, {"name": "date"}],
+                              "metric_headers": [{"name": "sessions"}],
+                              "rows": [{"dimension_values": [{"value": f"s{off + i}"}, {"value": "20261001"}],
+                                        "metric_values": [{"value": "1"}]} for i in range(n)], "row_count": total})
+            return super().call(server, tool, args)
+
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / ".run_state.json").write_text(json.dumps({"window": {"source": "ga4"}}))
+    fake = Paged()
+    ctx = P.Context(SITE, run_dir, {}, fake, resolve.load()[1])
+    raw, info = ctx.fetch("ga4.ai_time_series", {"property_id": "1", "date_ranges": [{"start_date": "2026-09-01",
+                                                                                       "end_date": "2026-09-28"}]})
+    assert info == {"rows": 23500, "calls": 3}, info  # default GA4 page = 10,000 rows
+    assert [a.get("offset") for _, _, a in fake.calls] == [None, 10000, 20000]
+    pl = P._payload(raw)
+    assert pl["_pipeline"]["complete"] is True and len({r["dimension_values"][0]["value"] for r in pl["rows"]}) == 23500
+
+
+def test_an_incomplete_cached_pull_is_fetched_again():
+    with _isolated_cache():
+        run_dir, _ = _run("seo-brand-split", FakeClients())
+        # poison the shared cache entry of pq_cur with a response that sits exactly at the row limit
+        import record
+        calls = json.loads((run_dir / "context.json").read_text())["calls"]
+        entry = next(c for c in calls if c["name"] == "pq_cur")
+        path = record._cache_path(run_dir, "gsc.page_query", entry["args"])
+        stored = json.loads(path.read_text())
+        stored["response"] = _text({"rows": [{"keys": [f"q{i}", f"{U}/"], "clicks": 1, "impressions": 2, "ctr": 0.5,
+                                               "position": 4} for i in range(25000)]})
+        path.write_text(json.dumps(stored))
+        fake = FakeClients()
+        _, s = _run("seo-brand-split", fake)
+    pq = next(st for st in s["steps"] if st["name"] == "pq_cur")
+    assert pq["status"] == "ok", pq  # not "cached": the cut response was not trusted
+    assert any(a.get("dimensions") == ["query", "page"] for _, t, a in fake.calls if t == "analytics_query")
+
+
+def test_ga4_paging_follows_the_reported_total_when_pages_are_smaller_than_the_limit():
+    class SmallPages(FakeClients):  # a server that returns 1,000 rows per call whatever `limit` says
+        def call(self, server, tool, args):
+            if tool == "run_report":
+                self.calls.append((server, tool, args))
+                off, total = int(args.get("offset") or 0), 2500
+                n = max(0, min(1000, total - off))
+                return _text({"dimension_headers": [{"name": "sessionSource"}],
+                              "metric_headers": [{"name": "sessions"}], "row_count": total,
+                              **({"rows": [{"dimension_values": [{"value": f"s{off + i}"}],
+                                            "metric_values": [{"value": "1"}]} for i in range(n)]} if n else {})})
+            return super().call(server, tool, args)
+
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / ".run_state.json").write_text(json.dumps({"window": {"source": "ga4"}}))
+    fake = SmallPages()
+    ctx = P.Context(SITE, run_dir, {}, fake, resolve.load()[1])
+    raw, info = ctx.fetch("ga4.ai_cited_pages", {"property_id": "1", "date_ranges": [{"start_date": "2026-09-01",
+                                                                                       "end_date": "2026-09-28"}]})
+    assert info == {"rows": 2500, "calls": 3}, info
+    assert P._payload(raw)["_pipeline"]["complete"] is True
+
+
+def test_a_split_pull_that_stayed_incomplete_is_reused_from_cache_and_stays_flagged():
+    class Always(FakeClients):
+        def call(self, server, tool, args):
+            if tool == "analytics_query" and args.get("dimensions") == ["query", "page"]:
+                self.calls.append((server, tool, args))
+                return _text({"rows": [{"keys": [f"q{i}", f"{U}/"], "clicks": 1, "impressions": 9, "ctr": 0.1,
+                                        "position": 3} for i in range(25000)]})
+            return super().call(server, tool, args)
+
+    saved = P.MAX_CALLS_PER_PULL
+    P.MAX_CALLS_PER_PULL = 3
+    try:
+        with _isolated_cache():
+            _run("seo-brand-split", Always())
+            again = Always()
+            _, s = _run("seo-brand-split", again)
+    finally:
+        P.MAX_CALLS_PER_PULL = saved
+    pq = next(st for st in s["steps"] if st["name"] == "pq_cur")
+    assert pq["status"] == "cached" and pq["truncated"] is True, pq
+    assert not [a for _, t, a in again.calls if t == "analytics_query" and a.get("dimensions") == ["query", "page"]]
+    assert "pq_cur" in s["truncated"] and "computed/brand_split.json" in s["tainted"]
+
+
+def test_merge_reads_metrics_like_the_analysis_and_refuses_missing_ones():
+    merged = P._merge_gsc([{"rows": [{"keys": ["a"], "clicks": "1,000", "impressions": "2,000", "position": "2"}]},
+                           {"rows": [{"keys": ["a"], "clicks": 500, "impressions": 2000, "position": 4}]}], ["query"])
+    assert merged == [{"keys": ["a"], "clicks": 1500.0, "impressions": 4000.0, "ctr": 0.375, "position": 3.0}]
+    try:
+        P._merge_gsc([{"rows": [{"keys": ["a"], "clicks": 1}]}], ["query"])
+        raise AssertionError("a row without impressions must not be merged as zero")
+    except ValueError as e:
+        assert "absent is not 0" in str(e)
+
+
 if __name__ == "__main__":
     main(globals())

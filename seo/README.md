@@ -4,7 +4,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
 > **Status (2026-10-30):** 13 `seo-*` skills (12 reports + the weekly `seo-brief`), registry v8, CI gate [`check.sh`](check.sh) ALL GREEN offline.
-> Implements every fix from [`plans/seo-skills-audit-2026-10-30.md`](../plans/seo-skills-audit-2026-10-30.md).
+> Latest architecture review: [`plans/seo-architecture-audit-v8.md`](../plans/seo-architecture-audit-v8.md) (status of its A1–A9 items in [`memory-bank/activeContext.md`](../memory-bank/activeContext.md)).
 
 ## Layout
 
@@ -12,7 +12,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 |---|---|
 | [`capabilities.json`](capabilities.json) | **Single source of truth**: capability ID → MCP `server` + `tool` + fixed `args` + `runtime` + `desc` (+ `policy`). |
 | [`resolve.py`](resolve.py) | Renders skills from `{{cap:}}` / `{{site:}}` / `{{include:}}` tokens into marker blocks and **re-renders every block** on each `--write`; validates names, policies and schemas. |
-| [`pipeline.py`](pipeline.py) / [`plans/`](plans/) | **The data half of every skill**: runs `plans/<skill>[.<mode>].json` — seeds the run, makes every MCP call (cache first) through `mcp_client.py`, records it, runs every analysis script into `computed/`, and writes `pipeline.json` + the `unavailable` list. The agent only interprets. |
+| [`pipeline.py`](pipeline.py) / [`data-plans/`](data-plans/) | **The data half of every skill**: runs `data-plans/<skill>[.<mode>].json` — seeds the run, makes every MCP call (cache first) through `mcp_client.py`, records it, runs every analysis script into `computed/`, and writes `pipeline.json` + the `unavailable` list. The agent only interprets. |
 | [`window.py`](window.py) / [`orchestrate.py`](orchestrate.py) | Deterministic windows per source (GSC lag 3, GA4 lag 2, snapshot; previous or YoY compare; Monday–Sunday weeks with `--weeks`) and run seeding. |
 | [`record.py`](record.py) | Records every raw tool response as run evidence (`context.json` + `data/`); rejects non-runtime args and off-window dates. |
 | [`gsc_metrics.py`](gsc_metrics.py) | All GSC analysis: movers, striking distance, low CTR, CTR curve (site → site's last 12 months → dated post-AI-Overviews benchmark in [`config/ctr-benchmark.json`](config/ctr-benchmark.json)), cannibalization, decline classes, brand/language split, value model, topic filter, truncation and anonymized share. |
@@ -21,7 +21,7 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
 | [`ga4_metrics.py`](ga4_metrics.py) | GA4 landing page × source/medium rows classified with the site rules: `breakdown` per channel / page type / language (sessions, engaged sessions, engagement rate, key events) and `reconcile` (Search Console clicks vs GA4 organic sessions, `(not set)` share). |
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
-| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed, git-ignored run folders (`<run_root>/<site>/<date>/<skill>/`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
+| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed run folders outside git (`<run_root>/<site>/<date>/<skill>/`; `run_root` = `/home/francesco/Documents/seo-reports`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
 | [`digest.py`](digest.py) | The weekly brief (`seo-brief`): 8-week KPIs, actions merged and ranked across the latest reports, new vs open since, `[done]` history, due reports. |
 | [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate** for URLs and — via [`number_check.py`](report/number_check.py) — every figure) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
@@ -35,9 +35,23 @@ one command, from the skill's data plan; the agent starts at **Write**. Optional
 configured or fail become `unavailable` entries; a required one stops the run (exit 1, details in
 `pipeline.json`). `--dry-run` shows every call with its resolved args and calls nothing.
 
+- **Row limits.** A pull that comes back at the server's row limit (Search Console 25,000; GA4 the
+  capability's `limit`, else 10,000) is completed automatically: Search Console windows are halved by date
+  until every chunk is under the limit and the rows are summed per key (position impression-weighted, CTR
+  recomputed); GA4 reports are paged with `offset`. A cached pull at the limit is fetched again. Anything
+  still cut (one day over the limit, or the 64-call budget spent) is listed in `pipeline.json` `truncated`,
+  the outputs built on it in `tainted`, an `unavailable` entry is added, and the number check refuses
+  figures found only there — at that volume use the Search Console BigQuery export.
+- **Writes.** `gsc.indexing` is the only capability that changes something outside the workspace
+  (`policy.write`). A plan step using it must set `"confirm": true` (else `--check-plans` fails) and the run
+  must be started with `--allow-write`; agent calls to it need the user's approval in the chat.
+- **Missing data.** Absent is never zero: a Search Console row without its metrics stops the run; a blank
+  GA4 value stays empty, and a property that recorded no key event gets no key-event rate
+  (`key_events_recorded: false` + a note) instead of a confident 0 %.
+
 | Phase | Mechanism |
 |---|---|
-| **Orchestrate** | `orchestrate.py --site D` creates the run folder `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in [`config/settings.json`](config/settings.json), git-ignored — it refuses a root that could be committed) and fixes the window in `.run_state.json`; that is the only window tools may receive. |
+| **Orchestrate** | `orchestrate.py --site D` creates the run folder `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in [`config/settings.json`](config/settings.json), outside the repo or git-ignored — it refuses a root that could be committed) and fixes the window in `.run_state.json`; that is the only window tools may receive. |
 | **Record** | `record.py --from-cache` first: an identical earlier call (same capability + args, still valid) is reused from `<run_root>/<site>/_cache/`; otherwise, after the MCP/tool call, `record.py` stores the raw response, its full call spec, and a cache copy (dated windows kept; live tools per `policy.cache_ttl_days`; errors never). |
 | **Compute** | `gsc_metrics.py`, `rules.py`, `ga4_metrics.py`, `coverage.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` turn recorded data into findings-ready numbers (`computed/<name>.json`). |
 | **Write** | the LLM writes `findings.json` ([schema](references/findings-schema.json)) from those outputs; actions are objects (`action`, `impact`, `effort`, `page`/`keyword`, `why`) so `seo-brief` can merge them. |
@@ -61,7 +75,7 @@ registry edit or a tool rename (via `aliases`) propagates everywhere. **Never ed
 invalid or deprecated GA4/GSC names (e.g. `conversions`), and enforces `rowLimit: 25000` + `engine: google`
 on GSC queries.
 
-### Data plans ([`plans/`](plans/))
+### Data plans ([`data-plans/`](data-plans/))
 
 One JSON file per skill (`<skill>.json`, plus modes such as `seo-rank-tracking.weekly.json`): the window
 (`days`/`weeks`, `compare`, `source`), optional `inputs` (`required`, `default`, `default_profile`) and
@@ -154,7 +168,7 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/resolve.py --check \| --write \| --map \| --list` | render/validate skills; regenerate [`tool-map.md`](tool-map.md) |
 | `python3 seo/resolve.py --validate-cached \| --validate-live` | tool + args vs cached / live schemas |
 | `python3 seo/mcp_client.py [server]` | refresh `tool-schemas.json` (one server keeps the others) |
-| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run]` | run a skill's data plan (seed, pull, record, compute) |
+| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run] [--allow-write]` | run a skill's data plan (seed, pull, record, compute); `--allow-write` permits confirmed write steps |
 | `python3 seo/pipeline.py --check-plans` | validate every plan (capabilities, runtime args, scripts, names) |
 | `python3 seo/orchestrate.py --skill S --site D (--days N [--compare\|--yoy] \| --weeks N) [--source gsc\|ga4\|snapshot] [--tag T] [--force]` | seed a run in the fixed run folder |
 | `python3 seo/record.py --run-dir D --cap ID --name N --args JSON (--response-file F \| --from-cache)` | record evidence (exit 3 = cache miss) |

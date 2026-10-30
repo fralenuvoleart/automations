@@ -18,13 +18,14 @@
 - Senior SEO & GEO enhancements — AI crawler accessibility audits, Schema `sameAs` entity disambiguation, `hreflang` reciprocity checks, Cannibalization Decision Matrix, Quotability Scorecard, and anchor distribution profiles.
 - Physical Portfolio Consolidation (18 to 12 Power Skills) & Capability registry v6 — decoupled GSC dimensions (`gsc.query`, `gsc.page_query`, `gsc.query_full`, `gsc.geo_query`, `gsc.time_series`, `gsc.device_performance`); created `seo-keyword-strategy` and `seo-paid-organic`; absorbed `seo-serp-features`, `seo-competitor-gap`, `seo-local`, `seo-cross-engine`, and `seo-opportunity`; pruned `seo-monetisation`; removed legacy `adsense.*` capabilities; isolated `google-ads` server strictly to `seo-paid-organic`.
 - Site rules (`seo/config/rules/<domain>.json` + `seo/rules.py`) — classification shared with the SEO sheet (2026-10-30).
-- Scripted data pulls (`seo/pipeline.py` + `seo/plans/`) and the number check in `validate_report.py` — the agent only interprets (2026-10-30).
+- Scripted data pulls (`seo/pipeline.py` + `seo/data-plans/`) and the number check in `validate_report.py` — the agent only interprets (2026-10-30).
 - Run folder + cache + structured actions + weekly `seo-brief` (2026-10-30).
 - SEO-sheet practices ported (2026-10-30): target pages + wrong-page check, top countries per keyword, Monday–Sunday weekly mode with 8-week trends, GA4 by the site rules + Search Console vs GA4 check, report definitions.
 - CI gate `seo/check.sh` (`--check` + `--validate-live` + all tests) — 14 test suites green.
-- **2026-10-30 architecture audit** — [`plans/seo-architecture-audit-2026-10-30.md`](../plans/seo-architecture-audit-2026-10-30.md): 8.1/10 systems-design grade; taxonomy matrix (44 caps / 6 servers / T0–T6 tiers), per-domain scores, anti-pattern teardown, P0–P3 refactor blueprint.
+- **2026-10-30 architecture audit** (8.1/10 systems design; removed from `plans/`, superseded by the v8 audit below).
 - **2026-10-30 audit fixes applied (all 51 issues + optional items)** — evidence recording + gate, deterministic GSC/crawl/DFS/Ads analysis modules, registry v7 (rowLimit/engine pinned, `keyEvents`, profile-driven AI filter), marker-based re-rendering with shared includes, planner API limits + historical metrics, offline-portable CI (`--validate-cached`). 18 SEO test suites + report-export green.
 - **Fresh architecture audit on registry v8** — [`plans/seo-architecture-audit-v8.md`](../plans/seo-architecture-audit-v8.md): 8.1/10 weighted on a new rubric; 44 capabilities × 6 servers × function-class matrix, 13-skill pull-overlap matrix, 9 anti-patterns (A1–A9) with file references, P0–P3 blueprint, residual risk register. Supersedes the 2026-10-30 audit.
+- v8 audit follow-up (2026-10-30): A1 (split/paged pulls + truncation gate), A2 (absent ≠ 0 in both readers, untracked key events), A3 (write guard), A4 (record every agent call), A8 (strict call log), A9 (`seo/data-plans/`) done; A5–A7 rejected with reasons in `activeContext.md`.
 
 ## In Progress
 

@@ -68,10 +68,10 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/rules.py
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-audit --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/plans/seo-audit.json`](../../../seo/plans/seo-audit.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
-2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-audit --site <domain>`. It seeds the fixed run folder (outside git; `python3 seo/runs.py root` shows where), makes every call in [`seo/data-plans/seo-audit.json`](../../../seo/data-plans/seo-audit.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
-4. A call the plan does not make (a judgment step below): check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`.
+4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
 
 <!--/include-->
 
@@ -82,7 +82,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py), [`seo/rules.py
 5. **Cannibalization.** `computed/cannibalization.json` → apply the decision matrix in [`domain-knowledge.md`](../../../seo/references/domain-knowledge.md). Any output with `truncated: true` → report "beyond the row cutoff" items as such, never as movements.
 6. **Local visibility.** `data/geo_cur.json` (pulled only when the profile's markets — <!--site:markets-->`python3 seo/site_profile.py --site <domain> --get markets`<!--/site--> — are not WORLDWIDE) → clicks/impressions per target country. For WORLDWIDE, say so.
 7. **Indexation spot-check.** `computed/inspection.json` — up to 5 declining pages (`vanished` and `ranking_loss` first): coverage state, Google vs declared canonical. `data/health.json`: report only the fields it returns — site-wide indexed/excluded counts are not available via the API (→ `seo-indexation`).
-8. **Engagement & channels (GA4).** `computed/ga4_channels.json` (the site rules' channels, AI assistants first), `ga4_page_tag.json` and `ga4_language.json` (organic) → sessions, engaged sessions, engagement rate, key events and change. Join organic landing pages (`data/ga4_lp.json`) to the declining pages; call out pages that keep rankings but lose key events.
+8. **Engagement & channels (GA4).** `computed/ga4_channels.json` (the site rules' channels, AI assistants first), `ga4_page_tag.json` and `ga4_language.json` (organic) → sessions, engaged sessions, engagement rate, key events and change (`key_events_recorded` false → no key-event figures: say they are not set up). Join organic landing pages (`data/ga4_lp.json`) to the declining pages; call out pages that keep rankings but lose key events.
 9. **Search Console vs GA4 + AI share.** `computed/reconcile.json` → both trends side by side; any `flags` (diverging trends, a high `(not set)` landing-page share) open the Engagement section — they can invalidate other numbers. AI share = `ai_share_of_organic` in `ga4_channels.json` (**lower bound**: some AI visits arrive as direct).
 10. **Coverage.** `computed/coverage.json` → paste as `findings.coverage`.
 11. <!--include:history-->
@@ -139,7 +139,7 @@ Shared issues: [`skill-common/troubleshooting.md`](../../../seo/references/skill
 | [`seo/references/capability-usage.md`](../../../seo/references/capability-usage.md) | runtime args, GA4 filters, policy | Read |
 | [`seo/references/domain-knowledge.md`](../../../seo/references/domain-knowledge.md) | methodology + thresholds | Read |
 | [`seo/references/skill-common/troubleshooting.md`](../../../seo/references/skill-common/troubleshooting.md) | shared troubleshooting | Read |
-| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/plans/`): seed, pull, record, compute | Execute (first) |
+| [`seo/pipeline.py`](../../../seo/pipeline.py) | run the skill's data plan (`seo/data-plans/`): seed, pull, record, compute | Execute (first) |
 | [`seo/orchestrate.py`](../../../seo/orchestrate.py) | seed the run + window (called by the pipeline) | Execute |
 | [`seo/record.py`](../../../seo/record.py) | record evidence (extra calls, derived figures) | Execute |
 | [`seo/report/build_report.py`](../../../seo/report/build_report.py) | render findings → Markdown | Execute |
@@ -168,7 +168,7 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute), `seo/g
 ## Privacy & Retention
 <!--include:privacy-->
 
-- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
 - Third-party calls: none — capability calls go only to Google APIs via the configured MCP servers.
 
 <!--/include-->
@@ -177,7 +177,7 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute), `seo/g
 <!--include:output-structure-->
 
 ```
-{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
+{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; outside git)
   .run_state.json     # window + paths (seo/orchestrate.py)
   pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)

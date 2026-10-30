@@ -37,7 +37,7 @@ MCP_JSON = ROOT / ".roo" / "mcp.json"
 SKILLS = ROOT / ".agents" / "skills"
 TOOL_SCHEMAS = HERE / "tool-schemas.json"
 COMMON = HERE / "references" / "skill-common"
-PLANS = HERE / "plans"
+PLANS = HERE / "data-plans"
 SITE_SCHEMA = HERE / "config" / "site-profile.schema.json"
 
 TOKEN_RE = re.compile(r"\{\{cap:([A-Za-z0-9_.]+)\}\}")
@@ -144,7 +144,7 @@ def caps_used(text: str) -> list[str]:
 
 
 def _plan_steps(skill: str) -> list[dict]:
-    """Steps of the skill's data plans (seo/plans/<skill>.json and its modes, e.g. <skill>.weekly.json)."""
+    """Steps of the skill's data plans (seo/data-plans/<skill>.json and its modes, e.g. <skill>.weekly.json)."""
     steps: list[dict] = []
     for f in sorted(PLANS.glob(f"{skill}.json")) + sorted(PLANS.glob(f"{skill}.*.json")):
         steps += json.loads(f.read_text()).get("steps", [])
@@ -202,7 +202,7 @@ def _gen_configuration(caps_in: list[str], data: dict) -> str:
 def _gen_privacy(caps_in: list[str], data: dict, text: str, plan_scripts: bool = False) -> str:
     third = [(s, data["servers"][s]["third_party"]) for s in _servers_used(caps_in, data)
              if data["servers"].get(s, {}).get("third_party")]
-    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`."]
+    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`."]
     if third:
         names = ", ".join(f"{p} (`{s}`)" for s, p in third)
         lines.append(f"- Third-party calls: target domains/keywords/URLs are sent to {names} when those servers are used; everything else goes only to Google APIs via the configured MCP servers.")

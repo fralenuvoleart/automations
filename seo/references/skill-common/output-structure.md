@@ -1,5 +1,5 @@
 ```
-{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
+{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; outside git)
   .run_state.json     # window + paths (seo/orchestrate.py)
   pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)

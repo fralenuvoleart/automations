@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run folders: one fixed, configurable, git-ignored location for every SEO run.
+"""Run folders: one fixed, configurable location outside git for every SEO run.
 
 Layout (``run_root`` from ``seo/config/settings.json``):
     <run_root>/<site>/<as_of>/<skill>[-<tag>]/   one run (.run_state.json, context.json, data/, findings.json, report.md)
