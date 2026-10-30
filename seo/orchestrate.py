@@ -8,7 +8,7 @@ responses, and a `findings.json` skeleton conforming to
 Refuses to overwrite an existing run unless `--force` is given.
 
 The run folder is fixed (seo/runs.py): `<run_root>/<site>/<as_of>/<skill>[-<tag>]/`, with
-`run_root` from seo/config/settings.json; it must be git-ignored. Prints `run_dir: <path>`.
+`run_root` from seo/config/settings.json; it must be outside the repo or git-ignored. Prints `run_dir: <path>`.
 `--out-dir` overrides the location (tests, one-off runs).
 
 Usage:

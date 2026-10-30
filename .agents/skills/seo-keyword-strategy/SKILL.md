@@ -65,7 +65,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`striking`, `c
 <!--include:evidence flags=--->
 
 **Data (scripted — never pull or record by hand).**
-1. Run the data plan: `python3 seo/pipeline.py --skill seo-keyword-strategy --site <domain>`. It seeds the fixed, git-ignored run folder, makes every call in [`seo/data-plans/seo-keyword-strategy.json`](../../../seo/data-plans/seo-keyword-strategy.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
+1. Run the data plan: `python3 seo/pipeline.py --skill seo-keyword-strategy --site <domain>`. It seeds the fixed run folder (outside git; `python3 seo/runs.py root` shows where), makes every call in [`seo/data-plans/seo-keyword-strategy.json`](../../../seo/data-plans/seo-keyword-strategy.json) cache-first, records each response as evidence (`{run_dir}/data/<name>.json`) and runs every analysis script (`{run_dir}/computed/<name>.json`). It prints `run_dir: <path>` — use that path as `{run_dir}`. Exit 1 = a required source failed: report the error shown in `{run_dir}/pipeline.json` and stop.
 2. Read `{run_dir}/pipeline.json`: optional sources that failed or did not apply are already listed in `findings.unavailable` — keep those entries, say so in the report, and never fill the gap from memory. Pulls over the row limit are split by date (Search Console) or paged (GA4) automatically; any still listed under `truncated` — and the outputs under `tainted` — are incomplete: their figures cannot pass validation, so report the gap instead.
 3. Interpret the outputs named in the steps below — that is the whole job. Every number and URL in the findings must come from `computed/` or `data/`; `validate_report.py` rejects any other figure. A figure that is not computed (a sum, a share): compute it with a script and record the output — `… | python3 seo/record.py --run-dir {run_dir} --source derived --name <name> --response-file -`.
 4. **Every call the plan does not make** — a judgment step, a fallback or a troubleshooting fix below: check the cache first — `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <name> --args '<runtime args, JSON>' --from-cache` (exit 3 = miss) — make the call, then record it with `--response-file <file or ->` instead of `--from-cache`. An unrecorded call's figures fail the number check; its statements cannot be checked at all.
@@ -160,7 +160,7 @@ Skill-specific: `seo/gsc_metrics.py`, `seo/dfs_metrics.py`, `seo/coverage.py`, `
 ## Privacy & Retention
 <!--include:privacy-->
 
-- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
 - Third-party calls: target domains/keywords/URLs are sent to DataForSEO (`dataforseo`) when those servers are used; everything else goes only to Google APIs via the configured MCP servers.
 
 <!--/include-->
@@ -169,7 +169,7 @@ Skill-specific: `seo/gsc_metrics.py`, `seo/dfs_metrics.py`, `seo/coverage.py`, `
 <!--include:output-structure-->
 
 ```
-{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
+{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; outside git)
   .run_state.json     # window + paths (seo/orchestrate.py)
   pipeline.json       # every plan step and its status (seo/pipeline.py)
   context.json        # evidence index (seo/record.py)
