@@ -12,14 +12,15 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 |---|---|
 | [`capabilities.json`](capabilities.json) | **Single source of truth**: capability ID → MCP `server` + `tool` + fixed `args` + `runtime` + `desc` (+ `policy`). |
 | [`resolve.py`](resolve.py) | Renders skills from `{{cap:}}` / `{{site:}}` / `{{include:}}` tokens into marker blocks and **re-renders every block** on each `--write`; validates names, policies and schemas. |
-| [`window.py`](window.py) / [`orchestrate.py`](orchestrate.py) | Deterministic windows per source (GSC lag 3, GA4 lag 2, snapshot; previous or YoY compare) and run seeding. |
+| [`window.py`](window.py) / [`orchestrate.py`](orchestrate.py) | Deterministic windows per source (GSC lag 3, GA4 lag 2, snapshot; previous or YoY compare; Monday–Sunday weeks with `--weeks`) and run seeding. |
 | [`record.py`](record.py) | Records every raw tool response as run evidence (`context.json` + `data/`); rejects non-runtime args and off-window dates. |
 | [`gsc_metrics.py`](gsc_metrics.py) | All GSC analysis: movers, striking distance, low CTR, CTR curve, cannibalization, decline classes, brand/language split, value model, topic filter, truncation and anonymized share. |
 | [`site_crawl.py`](site_crawl.py) | Stdlib crawler: robots.txt verdicts per search/AI crawler, sitemaps, link graph (inlinks, depth, orphans), hreflang reciprocity, canonicals, page facts. |
 | [`dfs_metrics.py`](dfs_metrics.py) / [`ads_metrics.py`](ads_metrics.py) | DataForSEO anchor mix / link gap / keyword gap; Ads × GSC paid-organic overlap. |
-| [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks; `breakdown` per category / page type / language. |
+| [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
+| [`ga4_metrics.py`](ga4_metrics.py) | GA4 landing page × source/medium rows classified with the site rules: `breakdown` per channel / page type / language (sessions, engaged sessions, engagement rate, key events) and `reconcile` (Search Console clicks vs GA4 organic sessions, `(not set)` share). |
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
-| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate**) and `build_report.py` (refuses malformed findings). |
+| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate**) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
 | [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client and the cached tool schemas used for offline validation. |
 | [`mcp-servers/google-ads-planner/`](mcp-servers/google-ads-planner/) | Local Keyword Planner server (ideas + historical metrics; API limits enforced). |
@@ -91,7 +92,9 @@ position 5–20, Generic; per-category caps, exclusions, duplicate keys). Regexe
 python3 seo/rules.py --site pbservices.ge validate
 python3 seo/rules.py --site pbservices.ge classify --query "внж по ип в грузии"
 python3 seo/rules.py --site pbservices.ge breakdown --by category --cur query_cur.json --prev query_prev.json
-python3 seo/rules.py --site pbservices.ge keywords --query query_cur.json --prev query_prev.json
+python3 seo/rules.py --site pbservices.ge keywords --query query_cur.json --prev query_prev.json --countries geo.json
+python3 seo/rules.py --site pbservices.ge targets --page-query pq_cur.json
+python3 seo/rules.py --site pbservices.ge trend --by category --rows query_w1.json … query_w8.json
 ```
 
 ## Site profiles

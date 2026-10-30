@@ -23,6 +23,7 @@ import validate_report  # noqa: E402
 import window  # noqa: E402
 
 TEMPLATE = HERE / "templates" / "base.md"
+DEFINITIONS = HERE.parent / "references" / "definitions.json"
 
 
 def _clean_cell(val: object) -> str:
@@ -108,7 +109,18 @@ def build(findings: dict, generated_at: str | None = None) -> str:
     actions = findings.get("actions") or []
     if actions:
         out += "\n## Action list\n\n" + "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions)) + "\n"
-    return out
+    return out + definitions(out)
+
+
+def definitions(report_text: str) -> str:
+    """'Definitions' block for the glossary terms the report uses (empty when none)."""
+    import re
+    terms = json.loads(DEFINITIONS.read_text())["terms"]
+    used = [t for t in terms if any(
+        re.search(r"\b" + re.escape(m), report_text, 0 if t.get("case") else re.I) for m in t["match"])]
+    if not used:
+        return ""
+    return "\n## Definitions\n\n" + "\n".join(f"- **{t['term']}** — {t['text']}" for t in used) + "\n"
 
 
 def _main() -> int:

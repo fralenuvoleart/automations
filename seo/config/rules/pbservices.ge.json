@@ -47,6 +47,7 @@
     "default": "Other",
     "default_note": "Anything that matches no rule (email, social, untagged links).",
     "ai_channel": "AI assistants",
+    "organic_channel": "Organic search",
     "rules": [
       {"channel": "AI assistants", "regex": "ai-assistant|chatgpt|openai|perplexity|gemini|copilot|claude|deepseek|grok|meta\\.ai|mistral|you\\.com", "note": "Visits from AI chat tools. Checked first, so 'chatgpt.com / referral' counts here. grok, meta.ai, mistral and you.com added from the skills' former ai_sources list."},
       {"channel": "Organic search", "regex": "/ organic$", "note": "Unpaid search results: Google, Bing, Yandex, DuckDuckGo."},
@@ -57,35 +58,48 @@
   },
   "keywords": {
     "tracked": [
-      {"keyword": "ип в грузии", "category": "IE", "type": "Core"},
-      {"keyword": "открыть ип в грузии", "category": "IE", "type": "Core"},
-      {"keyword": "individual entrepreneur georgia", "category": "IE", "type": "Core"},
-      {"keyword": "внж грузии", "category": "Residency", "type": "Core"},
-      {"keyword": "внж грузии по ип", "category": "Residency", "type": "Core"},
-      {"keyword": "residence permit georgia", "category": "Residency", "type": "Core"},
-      {"keyword": "налоговое резидентство грузии", "category": "Tax", "type": "Core"},
-      {"keyword": "tax residency georgia", "category": "Tax", "type": "Core"},
-      {"keyword": "статус малого бизнеса в грузии", "category": "IE", "type": "Core"},
-      {"keyword": "регистрация компании в грузии", "category": "Company", "type": "Core"},
-      {"keyword": "ооо в грузии", "category": "Company", "type": "Core"},
-      {"keyword": "company registration in georgia", "category": "Company", "type": "Core"},
+      {"keyword": "ип в грузии", "category": "IE", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/registracziya-ip-v-gruzii/"},
+      {"keyword": "открыть ип в грузии", "category": "IE", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/registracziya-ip-v-gruzii/"},
+      {"keyword": "individual entrepreneur georgia", "category": "IE", "type": "Core", "target_page": "https://pbservices.ge/services/individual-entrepreneur-georgia/"},
+      {"keyword": "внж грузии", "category": "Residency", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/vnzh-v-gruzii/"},
+      {"keyword": "внж грузии по ип", "category": "Residency", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/oformlenie-vnzh-gruzii-po-ip/"},
+      {"keyword": "residence permit georgia", "category": "Residency", "type": "Core", "target_page": "https://pbservices.ge/services/visa-residency-georgia/"},
+      {"keyword": "налоговое резидентство грузии", "category": "Tax", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/nalogovoe-rezidentstvo-gruzii/"},
+      {"keyword": "tax residency georgia", "category": "Tax", "type": "Core", "target_page": "https://pbservices.ge/services/tax-residency-georgia/"},
+      {"keyword": "статус малого бизнеса в грузии", "category": "IE", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/individualnyj-predprinematel/"},
+      {"keyword": "регистрация компании в грузии", "category": "Company", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/registracziya-biznesa-v-gruzii/"},
+      {"keyword": "ооо в грузии", "category": "Company", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/kak-otkryt-ooo-v-gruzii-dokumenty-srok-i-yuridicheskaya-proczedura/"},
+      {"keyword": "company registration in georgia", "category": "Company", "type": "Core", "target_page": "https://pbservices.ge/services/company-registration-georgia/"},
       {"keyword": "bank account georgia", "category": "Bank account", "type": "Core", "target_page": "https://pbservices.ge/services/bank-account-georgia/"},
-      {"keyword": "открытие счета в грузии", "category": "Bank account", "type": "Core"},
-      {"keyword": "открыть счет в грузии удаленно", "category": "Bank account", "type": "Core"},
-      {"keyword": "accounting services georgia", "category": "Legal & Accounting", "type": "Core"},
-      {"keyword": "бухгалтер грузия", "category": "Legal & Accounting", "type": "Core"},
-      {"keyword": "ипотека в грузии для иностранцев", "category": "Real estate", "type": "Core"},
-      {"keyword": "vasp georgia", "category": "Crypto & PSP licensing", "type": "Core"},
-      {"keyword": "apostille georgia", "category": "Apostille", "type": "Core"},
+      {"keyword": "открытие счета в грузии", "category": "Bank account", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/lichnyj-schet-v-gruzinskom-banke/"},
+      {"keyword": "открыть счет в грузии удаленно", "category": "Bank account", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/kak-otkryt-bankovskij-schet-v-gruzii-distanczionno-poshagovoe-rukovodstvo/"},
+      {"keyword": "accounting services georgia", "category": "Legal & Accounting", "type": "Core", "target_page": "https://pbservices.ge/services/accounting-services-georgia/"},
+      {"keyword": "бухгалтер грузия", "category": "Legal & Accounting", "type": "Core", "target_page": "https://pbservices.ge/ru/uslugi/buhgalterskie-uslugi-v-gruzii/"},
+      {"keyword": "ипотека в грузии для иностранцев", "category": "Real estate", "type": "Core", "target_page": "https://pbservices.ge/ru/blog/ipoteka-v-gruzii-dlya-inostranczev/"},
+      {"keyword": "vasp georgia", "category": "Crypto & PSP licensing", "type": "Core", "target_page": "https://pbservices.ge/services/crypto-license-georgia/"},
+      {"keyword": "apostille georgia", "category": "Apostille", "type": "Core", "target_page": "https://pbservices.ge/services/apostille-notary-legalization/"},
       {"keyword": "pb services", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"},
       {"keyword": "pb services georgia", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"},
       {"keyword": "pbservices", "category": "Brand", "type": "Brand", "target_page": "https://pbservices.ge/"}
     ],
     "auto": {
       "lookback_days": 90,
-      "proven": {"slots": 15, "min_clicks": 2, "note": "Service searches with the most clicks."},
-      "opportunity": {"slots": 10, "min_impressions": 5, "position_from": 5, "position_to": 20, "note": "Service searches with the most impressions while ranking just below the top results."},
-      "generic": {"slots": 2, "note": "Generic searches with the most clicks."},
+      "proven": {
+        "slots": 15,
+        "min_clicks": 2,
+        "note": "Service searches with the most clicks."
+      },
+      "opportunity": {
+        "slots": 10,
+        "min_impressions": 5,
+        "position_from": 5,
+        "position_to": 20,
+        "note": "Service searches with the most impressions while ranking just below the top results."
+      },
+      "generic": {
+        "slots": 2,
+        "note": "Generic searches with the most clicks."
+      },
       "max_words": 7,
       "exclude_regex": "20\\d\\d|\"|solo|соло|liberty|либерти|bank of georgia|tbc|credo|atlanta|безвиз",
       "exclude_note": "Never picked as Proven or Opportunity: years, quotes, bank names, visa-free travel.",
@@ -104,6 +118,7 @@
         "Marriage": 1
       },
       "category_caps_note": "Max automatic picks (Proven + Opportunity) per service category. Categories not listed (Brand, Generic, unclassified) are never picked as Proven or Opportunity."
-    }
+    },
+    "tracked_note": "target_page = the page that should rank for the keyword. Proposed 2026-10-30 from 90 days of Search Console data: the page already ranking in the top 10 (≥10 impressions, homepage excluded), else the service page for the keyword's language and category. Edit freely."
   }
 }

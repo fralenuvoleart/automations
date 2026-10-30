@@ -22,7 +22,10 @@ Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json
 - GA4 AI-source filters: `dimension_filter` = output of
   `python3 seo/site_profile.py --site <domain> --ga4-ai-filter` (single source: the rules' `AI assistants` channel).
 - GA4 `date_ranges`: `[{"start_date": "<startDate>", "end_date": "<endDate>"}]` (+ the comparison
-  range when the run has one).
+  range when the run has one). With two ranges GA4 adds a `dateRange` dimension
+  (`date_range_0` = current, `date_range_1` = previous); `ga4_metrics.py` splits it.
+- Weekly runs (`--weeks N`): pass each week from `window.weeks` as its own call; `record.py`
+  accepts the run window, its comparison window and each listed week.
 
 ## Policy (retry / timeout / degrade)
 ```json

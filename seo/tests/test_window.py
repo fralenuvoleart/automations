@@ -56,5 +56,24 @@ def test_as_of_line_is_stable():
     assert "(vs YoY " in window.as_of_line(y, "X") and "GA4 lag 2d" in window.as_of_line(y, "X")
 
 
+
+def test_calendar_weeks_end_with_the_latest_complete_week():
+    w = window.resolve_weeks(8, dt.date(2026, 10, 30))  # Friday; GSC data through Tue 27 Oct
+    assert (w["startDate"], w["endDate"], w["days"]) == ("2026-08-31", "2026-10-25", 56)  # the SEO sheet's 8 weeks
+    assert w["weeks"][-1] == {"startDate": "2026-10-19", "endDate": "2026-10-25"} and len(w["weeks"]) == 8
+    assert all(dt.date.fromisoformat(x["startDate"]).weekday() == 0 for x in w["weeks"])
+    w = window.resolve_weeks(1, dt.date(2026, 10, 27), compare=True)  # data through Sat 24 Oct → week ending 18 Oct
+    assert (w["startDate"], w["endDate"], w["compareStartDate"], w["compareEndDate"]) == \
+        ("2026-10-12", "2026-10-18", "2026-10-05", "2026-10-11")
+    assert window.resolve_weeks(1, dt.date(2026, 10, 28))["endDate"] == "2026-10-25"  # data through Sunday itself
+    assert "(8 Mon–Sun weeks)" in window.as_of_line(window.resolve_weeks(8, dt.date(2026, 10, 30)), generated_at="X")
+    for bad in (lambda: window.resolve_weeks(0), lambda: window.resolve_weeks(2, source="snapshot")):
+        try:
+            bad()
+            raise AssertionError("expected ValueError")
+        except ValueError:
+            pass
+
+
 if __name__ == "__main__":
     main(globals())

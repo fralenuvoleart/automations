@@ -59,5 +59,15 @@ def test_section_window_snapshot_and_coverage_wording():
     assert "1 with impressions in the window" in md and "**No impressions:**" in md
 
 
+
+def test_definitions_cover_only_terms_used():
+    md = build_report.build(GOOD, generated_at="X")
+    assert "## Definitions" in md and "- **Clicks** —" in md
+    assert "**Engagement rate**" not in md  # not mentioned in this report
+    assert build_report.definitions("Sessions fell; engagement rate held.").count("- **") == 2
+    assert build_report.definitions("Nothing measurable here.") == ""
+    assert "Tracked keywords" not in build_report.definitions("a core idea")  # type names match case-sensitively
+
+
 if __name__ == "__main__":
     main(globals())

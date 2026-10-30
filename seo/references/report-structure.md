@@ -18,6 +18,8 @@ the rendered report.
 6. **Sections** — heading, optional data-window line (`sections[].window`, when the data covers a
    different period than the report window), prose body, optional table.
 7. **Action list** — prioritized, concrete.
+8. **Definitions** *(automatic)* — `build_report.py` appends plain-language definitions for the
+   metrics the report uses, from [`definitions.json`](definitions.json).
 
 ## Rules
 - Plain language; tables carry the numbers.

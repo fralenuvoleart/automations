@@ -43,13 +43,14 @@ def _parse_response(raw: str):
 
 
 def _window_ok(args: dict, state: dict) -> str | None:
-    """GSC startDate/endDate and GA4 date_ranges must match the run (or comparison) window."""
+    """GSC startDate/endDate and GA4 date_ranges must match the run window, its comparison or one of its weeks."""
     win = state.get("window") or {}
     if win.get("source") == "snapshot":
         return None
     allowed = [(win.get("startDate"), win.get("endDate"))]
     if win.get("compareStartDate"):
         allowed.append((win.get("compareStartDate"), win.get("compareEndDate")))
+    allowed += [(w.get("startDate"), w.get("endDate")) for w in win.get("weeks") or [] if isinstance(w, dict)]
     pairs = []
     if "startDate" in args or "endDate" in args:
         pairs.append((args.get("startDate"), args.get("endDate")))
@@ -58,7 +59,7 @@ def _window_ok(args: dict, state: dict) -> str | None:
             pairs.append((r.get("start_date"), r.get("end_date")))
     bad = [p for p in pairs if p not in allowed]
     if bad:
-        return f"window {bad} matches neither the run window nor its comparison window {allowed}"
+        return f"window {bad} matches neither the run window, its comparison window nor its weeks {allowed}"
     return None
 
 

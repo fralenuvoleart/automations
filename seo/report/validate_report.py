@@ -115,6 +115,10 @@ def validate_structure(findings) -> list[str]:
         issues.append(f"window.startDate {start} is after endDate {end}")
     if end and as_of and source != "snapshot" and end >= as_of:
         issues.append(f"window.endDate {end} is not before as_of {as_of} (never include today; respect the data lag)")
+    for i, w in enumerate(win.get("weeks") or []):
+        ws, we = _date((w or {}).get("startDate")), _date((w or {}).get("endDate"))
+        if not ws or not we or ws > we or (start and ws < start) or (end and we > end):
+            issues.append(f"window.weeks[{i}] must be dated and inside the window")
     if ("compareStartDate" in win) != ("compareEndDate" in win):
         issues.append("window needs both compareStartDate and compareEndDate (or neither)")
     elif "compareStartDate" in win:

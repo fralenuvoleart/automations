@@ -65,7 +65,7 @@
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Per-site overrides of seo/gsc_metrics.py DEFAULTS (see domain-knowledge.md for meaning).",
+      "description": "Per-site overrides of seo/gsc_metrics.py and seo/ga4_metrics.py DEFAULTS (see domain-knowledge.md for meaning).",
       "properties": {
         "min_impressions": {
           "type": "number"
@@ -101,6 +101,12 @@
           "type": "integer"
         },
         "curve_min_impressions": {
+          "type": "number"
+        },
+        "reconcile_divergence_pts": {
+          "type": "number"
+        },
+        "not_set_share_max": {
           "type": "number"
         }
       }

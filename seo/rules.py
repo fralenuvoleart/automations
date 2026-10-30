@@ -12,7 +12,9 @@ Usage (all print JSON):
     python3 seo/rules.py --site pbservices.ge classify --channel "chatgpt.com / referral"
     python3 seo/rules.py --site pbservices.ge breakdown --by category --cur F [--prev F]       # query rows
     python3 seo/rules.py --site pbservices.ge breakdown --by page_tag|language --cur F [--prev F]  # page rows
-    python3 seo/rules.py --site pbservices.ge keywords --query F [--prev F]  # tracked set (+ status vs previous)
+    python3 seo/rules.py --site pbservices.ge keywords --query F [--prev F] [--countries F]  # tracked set (+ status, top countries)
+    python3 seo/rules.py --site pbservices.ge targets --page-query F   # tracked keyword ranking with its target page?
+    python3 seo/rules.py --site pbservices.ge trend --by category|page_tag|language|keyword --rows W1 W2 …  # one file per week
 Exit codes: 0 = ok, 1 = error.
 """
 from __future__ import annotations
@@ -31,6 +33,7 @@ RULES_DIR = HERE / "config" / "rules"
 BRAND, GENERIC = "Brand", "Generic"
 TRACKED_TYPES = ("Core", "Brand")
 LISTS = {"query_categories": "category", "page_tags": "tag", "page_languages": "language", "channels": "channel"}
+METRIC_KEYS = {"clicks", "impressions", "ctr", "position"}
 UNPORTABLE = re.compile(r"\(\?(?!:)|\\[1-9]")  # only (?:…) allowed: lookarounds, flags, backrefs aren't RE2/JS-portable
 SCRIPT_LANG = (("ru", re.compile(r"[Ѐ-ӿ]")), ("ar", re.compile(r"[؀-ۿ]")),
                ("zh", re.compile(r"[一-鿿]")))
@@ -110,8 +113,9 @@ def validate(data: dict, domain: str | None = None) -> list[str]:
     if BRAND not in categories or GENERIC not in categories:
         issues.append(f"query_categories: must define '{BRAND}' and '{GENERIC}'")
     ch = data["channels"]
-    if ch.get("ai_channel") not in {r["channel"] for r in ch["rules"]}:
-        issues.append("channels.ai_channel: must name one of the channel rules")
+    for key in ("ai_channel", "organic_channel"):
+        if ch.get(key) not in {r["channel"] for r in ch["rules"]}:
+            issues.append(f"channels.{key}: must name one of the channel rules")
 
     kw = data.get("keywords")
     if not isinstance(kw, dict) or not isinstance(kw.get("tracked"), list) or not isinstance(kw.get("auto"), dict):
@@ -133,6 +137,9 @@ def validate(data: dict, domain: str | None = None) -> list[str]:
         if key in seen:
             issues.append(f"keywords.tracked[{i}] ({k}): duplicate of '{seen[key]}' (same key '{key}')")
         seen[key] = k
+        tp = t.get("target_page")
+        if tp is not None and (not isinstance(tp, str) or not tp.startswith(f"https://{data.get('domain')}/")):
+            issues.append(f"keywords.tracked[{i}] ({k}): target_page must be an absolute https://{data.get('domain')}/ URL")
     auto = kw["auto"]
     for path in ("lookback_days", "max_words", "proven.slots", "proven.min_clicks", "opportunity.slots",
                  "opportunity.min_impressions", "opportunity.position_from", "opportunity.position_to", "generic.slots"):
@@ -218,6 +225,94 @@ class Rules:
         name = self.data["channels"]["ai_channel"]
         return next(r["regex"] for r in self.data["channels"]["rules"] if r["channel"] == name)
 
+    def collapse_fragments(self, rows: list[dict]) -> list[dict]:
+        """Jump-link (#) variants of a URL show in the same result: clicks summed, impressions/position from the largest."""
+        if not rows or "page" not in rows[0]:
+            return rows
+        groups: dict = {}
+        for r in rows:
+            k = tuple(sorted((d, v) for d, v in r.items() if d not in METRIC_KEYS and d != "page"))
+            groups.setdefault((k, str(r["page"]).split("#", 1)[0]), []).append(r)
+        out = []
+        for (k, base), rs in groups.items():
+            top = max(rs, key=lambda r: r["impressions"])
+            clicks = sum(r["clicks"] for r in rs)
+            imp = top["impressions"]
+            out.append({**dict(k), "page": base, "clicks": clicks, "impressions": imp,
+                        "ctr": clicks / imp if imp else 0.0, "position": top["position"]})
+        return out
+
+    def targets(self, page_query_rows: list[dict]) -> dict:
+        """Does each tracked keyword with a target page rank with that page? (query × page rows)."""
+        import gsc_metrics as G
+        rows = [r for r in self.collapse_fragments(page_query_rows) if _norm(r["query"]) in self.tracked]
+        agg = G.aggregate(rows, lambda r: (_norm(r["query"]), self.clean(r["page"])))
+        by_q: dict = {}
+        for (q, page), m in agg.items():
+            by_q.setdefault(q, {})[page] = m
+        out = []
+        for k, t in self.tracked.items():
+            if not t.get("target_page"):
+                continue
+            target, pages = self.clean(t["target_page"]), by_q.get(k, {})
+            ranked = sorted(pages.items(), key=lambda kv: (-kv[1]["impressions"], -kv[1]["clicks"], kv[0]))
+            total = sum(m["impressions"] for m in pages.values())
+            tm = pages.get(target)
+            status = ("no impressions" if not ranked else "ok" if ranked[0][0] == target
+                      else "wrong page" if tm else "target not ranking")
+            row = {"keyword": t["keyword"], "type": t["type"], "category": t["category"], "target_page": target,
+                   "status": status, "pages_ranking": len(ranked),
+                   "target": ({**G._r(tm), "share": round(tm["impressions"] / total, 3)} if tm else None)}
+            if ranked and ranked[0][0] != target:
+                row["top_page"] = {"page": ranked[0][0], **G._r(ranked[0][1]),
+                                   "share": round(ranked[0][1]["impressions"] / total, 3)}
+            out.append(row)
+        order = {"wrong page": 0, "target not ranking": 1, "ok": 2, "no impressions": 3}
+        out.sort(key=lambda r: (order[r["status"]], -((r.get("top_page") or r.get("target") or {}).get("impressions", 0))))
+        return {"targets": out, "truncated": G.is_truncated(page_query_rows),
+                "basis": "query × page rows (named queries); jump-link (#) variants merged into their page"}
+
+    def trend(self, weeks: list[tuple[str, list[dict]]], by: str, min_impressions: float = 0) -> dict:
+        """Week-by-week clicks / impressions / position per segment (one row set per Mon–Sun week)."""
+        import gsc_metrics as G
+        if by == "keyword":
+            picked = self.select_keywords([r for _, rows in weeks for r in rows])["keywords"]
+            kind = {_norm(k["keyword"]): k["type"] for k in picked}
+            keyf, order = (lambda r: _norm(r["query"]) if _norm(r["query"]) in kind else None), list(kind)
+        else:
+            keyf, order = {
+                "category": (lambda r: self.query_category(r["query"]), self.services() + [BRAND, GENERIC]),
+                "page_tag": (lambda r: self.page_tag(r["page"]), self.sections()),
+                "language": (lambda r: self.page_language(r["page"]), self.languages()),
+            }[by]
+        per_week, totals = [], []
+        for _, rows in weeks:
+            rows = self.collapse_fragments(rows)
+            agg = G.aggregate(rows, keyf)
+            agg.pop(None, None)
+            per_week.append(agg)
+            tot = G.aggregate(rows, lambda r: "t" if keyf(r) is not None else None).get("t")
+            totals.append(tot)
+        names = [n for n in order if any(n in w for w in per_week)]
+        names += sorted({n for w in per_week for n in w} - set(names))
+
+        def series(ms, name):
+            return {by: name, "clicks": [round(m["clicks"], 1) if m else 0 for m in ms],
+                    "impressions": [round(m["impressions"], 1) if m else 0 for m in ms],
+                    "position": [round(m["position"], 1) if m and m["impressions"] else None for m in ms],
+                    "low_volume": [(m or {}).get("impressions", 0) < min_impressions for m in ms]}
+
+        rows_out = [series([w.get(n) for w in per_week], n) for n in names]
+        if by == "keyword":
+            for r in rows_out:
+                r["type"] = kind[r["keyword"]]
+        total_name = "Tracked keywords" if by == "keyword" else "Total"
+        return {"by": by, "weeks": [lbl for lbl, _ in weeks], "rows": rows_out, "total": series(totals, total_name),
+                "truncated_weeks": [lbl for lbl, rows in weeks if G.is_truncated(rows)],
+                "low_volume_below_impressions": min_impressions,
+                "basis": ("named queries only (anonymized queries excluded)" if by in ("category", "keyword")
+                          else "page rows (include anonymized-query traffic); jump-link (#) variants merged")}
+
     # derived profile values
     def services(self) -> list[str]:
         caps = list((self.auto.get("category_caps") or {}).keys())
@@ -247,6 +342,8 @@ class Rules:
             "page_tag": (lambda r: self.page_tag(r["page"]), self.sections()),
             "language": (lambda r: self.page_language(r["page"]), self.languages()),
         }[by]
+        rows = self.collapse_fragments(rows)
+        prev_rows = self.collapse_fragments(prev_rows) if prev_rows is not None else None
         cur = G.aggregate(rows, keyf)
         prev = G.aggregate(prev_rows, keyf) if prev_rows is not None else None
         names = [n for n in order if n in cur or (prev and n in prev)]
@@ -265,15 +362,17 @@ class Rules:
         tot_c = G.aggregate(rows, lambda r: "t").get("t")
         tot_p = G.aggregate(prev_rows, lambda r: "t").get("t") if prev_rows is not None else None
         basis = ("named queries only (anonymized queries excluded)" if by == "category"
-                 else "page rows (include anonymized-query traffic)")
+                 else "page rows (include anonymized-query traffic); jump-link (#) variants merged")
         return {"by": by, "rows": out, "total": line("Total", tot_c, tot_p), "basis": basis,
                 "low_volume_below_impressions": min_impressions, "truncated": G.is_truncated(rows)}
 
-    def select_keywords(self, query_rows: list[dict], prev_rows: list[dict] | None = None) -> dict:
+    def select_keywords(self, query_rows: list[dict], prev_rows: list[dict] | None = None,
+                        country_rows: list[dict] | None = None) -> dict:
         """Tracked set as the sheet builds it: Core + Brand (manual), then Proven, Opportunity, Generic (auto).
 
         With ``prev_rows``: previous metrics and the sheet's status (New / Lost / No impressions);
-        a truncated pull never yields New/Lost (status "beyond row cutoff")."""
+        a truncated pull never yields New/Lost (status "beyond row cutoff"). With ``country_rows``
+        (country × query): each keyword's top 3 countries by impressions, as in the sheet."""
         import gsc_metrics as G
         a = self.auto
         pool = []
@@ -335,12 +434,41 @@ class Rules:
                 k["position_change"] = (round(k["prev"]["position"] - k["position"], 1) if now and before else None)
                 k["status"] = ("" if now and before else "No impressions" if not now and not before
                                else "beyond row cutoff" if cut else "New" if now else "Lost")
+        if country_rows is not None:
+            by_q: dict = {}
+            for r in country_rows:
+                d = by_q.setdefault(_norm(r["query"]), {})
+                d[str(r["country"]).upper()] = d.get(str(r["country"]).upper(), 0.0) + r["impressions"]
+            for k in out:
+                c = by_q.get(_norm(k["keyword"]), {})
+                tot = sum(c.values())
+                top = sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+                k["countries"] = [{"country": cc, "share": round(v / tot, 3)} for cc, v in top] if tot else []
+                k["countries_text"] = (", ".join(f"{cc} {'<1' if v / tot < 0.005 else round(v / tot * 100)}%"
+                                                 for cc, v in top) if tot else "No data")
         unclassified = [{k: (round(p[k], 1) if isinstance(p[k], float) else p[k])
                          for k in ("keyword", "clicks", "impressions", "position")}
                         for p in by_clicks if p["unclassified"]][:50]
-        return {"keywords": out, "unclassified_to_review": unclassified, "truncated": G.is_truncated(query_rows),
+        res = {"keywords": out, "unclassified_to_review": unclassified, "truncated": G.is_truncated(query_rows),
                 "lookback_days": a["lookback_days"],
                 "note": "auto picks are only as complete as the query pull: use a lookback_days window"}
+        if country_rows is not None:
+            res["countries_truncated"] = G.is_truncated(country_rows)
+        return res
+
+
+def _week_label(path: str) -> str:
+    """Week start from the recorded call's startDate (context.json), else the file name."""
+    p = Path(path)
+    ctx = p.parent.parent / "context.json"
+    if ctx.exists():
+        try:
+            for c in json.loads(ctx.read_text()).get("calls", []):
+                if c.get("file") == f"{p.parent.name}/{p.name}" and (c.get("args") or {}).get("startDate"):
+                    return c["args"]["startDate"]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return p.stem
 
 
 def load(domain: str) -> Rules:
@@ -372,6 +500,12 @@ def main(argv: list[str] | None = None) -> int:
     k = sub.add_parser("keywords")
     k.add_argument("--query", required=True)
     k.add_argument("--prev", help="previous-period query rows: adds prev metrics and New/Lost status")
+    k.add_argument("--countries", help="country × query rows (gsc.geo_query): top 3 countries per keyword")
+    t = sub.add_parser("targets")
+    t.add_argument("--page-query", dest="page_query", required=True)
+    tr = sub.add_parser("trend")
+    tr.add_argument("--by", choices=["category", "page_tag", "language", "keyword"], required=True)
+    tr.add_argument("--rows", nargs="+", required=True, help="one recorded file per week, oldest first")
     a = ap.parse_args(argv)
     try:
         if a.command == "validate":
@@ -402,8 +536,16 @@ def main(argv: list[str] | None = None) -> int:
             thr = site_profile.thresholds(a.site)
             res = r.breakdown(G.load_rows(a.cur, dims), a.by, G.load_rows(a.prev, dims) if a.prev else None,
                               min_impressions=thr["min_impressions"])
+        elif a.command == "keywords":
+            res = r.select_keywords(G.load_rows(a.query, ["query"]), G.load_rows(a.prev, ["query"]) if a.prev else None,
+                                    G.load_rows(a.countries, ["country", "query"]) if a.countries else None)
+        elif a.command == "targets":
+            res = r.targets(G.load_rows(a.page_query, ["query", "page"]))
         else:
-            res = r.select_keywords(G.load_rows(a.query, ["query"]), G.load_rows(a.prev, ["query"]) if a.prev else None)
+            import site_profile
+            dims = ["query"] if a.by in ("category", "keyword") else ["page"]
+            weeks = [(_week_label(f), G.load_rows(f, dims)) for f in a.rows]
+            res = r.trend(weeks, a.by, min_impressions=site_profile.thresholds(a.site)["min_impressions"])
     except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError) as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1

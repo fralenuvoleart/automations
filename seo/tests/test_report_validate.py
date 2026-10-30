@@ -156,5 +156,14 @@ def test_report_checks():
     assert V.validate(GOOD, report_text=md) == []
 
 
+
+def test_window_weeks_must_sit_inside_the_window():
+    d = _clone()
+    d["window"]["weeks"] = [{"startDate": d["window"]["startDate"], "endDate": d["window"]["endDate"]}]
+    assert V.validate_structure(d) == []
+    d["window"]["weeks"] = [{"startDate": "2020-01-01", "endDate": "2020-01-07"}]
+    assert any("window.weeks[0]" in i for i in V.validate_structure(d))
+
+
 if __name__ == "__main__":
     main(globals())

@@ -87,5 +87,19 @@ def test_end_to_end_evidence_gate():
         assert issues == ["URL not found in recorded evidence (possible hallucination): https://x.ge/made-up/"]
 
 
+
+def test_weekly_run_accepts_each_week_and_rejects_partial_weeks():
+    import contextlib
+    import io
+    with tempfile.TemporaryDirectory() as d:
+        with contextlib.redirect_stdout(io.StringIO()):
+            orchestrate.main(["--skill", "seo-rank-tracking", "--weeks", "8", "--as-of", "2026-10-30", "--out-dir", d])
+        a = {"siteUrl": "sc-domain:x.ge"}
+        record.record(Path(d), "query_w8", "{}", cap="gsc.query", args={**a, "startDate": "2026-10-19", "endDate": "2026-10-25"})
+        record.record(Path(d), "geo", "{}", cap="gsc.geo_query", args={**a, "startDate": "2026-08-31", "endDate": "2026-10-25"})
+        _expect_error(lambda: record.record(Path(d), "bad", "{}", cap="gsc.query",
+                                            args={**a, "startDate": "2026-10-20", "endDate": "2026-10-25"}), "its weeks")
+
+
 if __name__ == "__main__":
     main(globals())

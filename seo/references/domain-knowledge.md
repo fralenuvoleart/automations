@@ -24,6 +24,12 @@ not the site's own measured data is a **heuristic** and must be labelled as such
 - **Windows.** Every windowed call uses the run window from `.run_state.json`
   (`seo/record.py` rejects others). A tool that cannot take the window (e.g. a fixed lookback)
   must have its own period stated in that section (`sections[].window`).
+- **Calendar weeks.** Weekly reporting uses Monday–Sunday weeks ending with the latest complete
+  week (`orchestrate.py --weeks N`, each week listed in `window.weeks`), as in the SEO sheet. Pull
+  one week per call: on this site an 8-week query × date or page × date pull exceeds 25,000 rows.
+- **Jump links.** Search Console reports `page#section` jump links as separate URLs that repeat
+  the page's impressions in the same result. Page-level analyses in `seo/rules.py` merge them into
+  their page: clicks summed, impressions and position from the largest variant.
 
 ## Search intent taxonomy
 | Intent | Signal | Page format |
@@ -88,6 +94,21 @@ wins, so labels are mutually exclusive (`gsc_metrics.py decay`):
 | 4 | `ctr_loss` | position and impressions held, clicks down | Rewrite title/meta; check new SERP features taking clicks |
 
 Never recommend retiring a page on GSC data alone; prefer 301 to deletion.
+
+## Search Console vs GA4
+- Search Console counts Google clicks; GA4 counts sessions from every search engine and can split
+  a visit into two sessions — totals never match, so compare **trends**
+  (`ga4_metrics.py reconcile`). Diverging trends or a high `(not set)` landing-page share
+  (sessions without a page_view) point to a tracking problem before an SEO one.
+- GA4 channels, page types and languages come from the site rules (`ga4.landing_source` rows
+  classified by `ga4_metrics.py breakdown`), so they match the SEO sheet.
+
+## Tracked keywords and target pages
+- The tracked set = Core + Brand (in the rules file) + automatic Proven / Opportunity / Generic
+  picks (`rules.py keywords`); top 3 countries per keyword come from `gsc.geo_query`.
+- Each tracked keyword has a `target_page`. `rules.py targets` flags **wrong page** (Google shows
+  another page more often) and **target not ranking**; fix with internal links/anchors and
+  title/H1 alignment, or change the target when the ranking page is the better answer.
 
 ## Brand vs non-brand
 - Brand match: the `Brand` query category of the site rules (`seo/config/rules/<domain>.json`,

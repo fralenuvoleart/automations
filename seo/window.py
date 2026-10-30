@@ -12,6 +12,7 @@ Usage:
     python3 seo/window.py --days 90 --compare            # vs the previous 90 days
     python3 seo/window.py --days 90 --compare --yoy      # vs the same dates a year earlier
     python3 seo/window.py --days 28 --source ga4 --as-of 2026-10-29
+    python3 seo/window.py --weeks 8                      # 8 calendar weeks (Mon–Sun) ending with the latest complete week
     python3 seo/window.py --source snapshot
 """
 from __future__ import annotations
@@ -66,6 +67,42 @@ def resolve(days: int = 28, as_of: dt.date | None = None, lag: int | None = None
     return out
 
 
+def resolve_weeks(weeks: int = 1, as_of: dt.date | None = None, lag: int | None = None,
+                  compare: bool = False, source: str = "gsc") -> dict:
+    """Calendar weeks (Monday–Sunday) ending with the latest complete week the source's lag allows.
+
+    ``weeks`` lists each week, so one pull per week stays inside the run window; ``compare``
+    adds the same number of weeks just before.
+    """
+    if source not in ("gsc", "ga4"):
+        raise ValueError("weekly windows need a dated source (gsc or ga4)")
+    if weeks < 1:
+        raise ValueError("weeks must be >= 1")
+    today = as_of or dt.datetime.now(dt.timezone.utc).date()
+    lag = DEFAULT_LAGS[source] if lag is None else lag
+    if lag < 1:
+        raise ValueError("lag must be >= 1 (never include today)")
+    latest = today - dt.timedelta(days=lag)
+    end = latest - dt.timedelta(days=(latest.weekday() + 1) % 7)  # last Sunday with data
+    start = end - dt.timedelta(days=7 * weeks - 1)
+    out = {
+        "source": source,
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "days": 7 * weeks,
+        "lag": lag,
+        "as_of": today.isoformat(),
+        "weeks": [{"startDate": (start + dt.timedelta(days=7 * i)).isoformat(),
+                   "endDate": (start + dt.timedelta(days=7 * i + 6)).isoformat()} for i in range(weeks)],
+    }
+    if compare:
+        cend = start - dt.timedelta(days=1)
+        out["compareStartDate"] = (cend - dt.timedelta(days=7 * weeks - 1)).isoformat()
+        out["compareEndDate"] = cend.isoformat()
+        out["compareMode"] = "previous"
+    return out
+
+
 def as_of_line(window: dict, generated_at: str | None = None) -> str:
     """Human-readable provenance line for report output."""
     stamp = generated_at or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
@@ -73,6 +110,8 @@ def as_of_line(window: dict, generated_at: str | None = None) -> str:
     if source == "snapshot":
         return f"Snapshot as of {window.get('as_of') or window.get('endDate')} (live data) · generated {stamp}"
     span = f"{window['startDate']}→{window['endDate']}"
+    if window.get("weeks"):
+        span += f" ({len(window['weeks'])} Mon–Sun week{'s' if len(window['weeks']) > 1 else ''})"
     if "compareStartDate" in window and "compareEndDate" in window:
         tag = "YoY " if window.get("compareMode") == "yoy" else ""
         span += f" (vs {tag}{window['compareStartDate']}→{window['compareEndDate']})"
@@ -83,6 +122,7 @@ def as_of_line(window: dict, generated_at: str | None = None) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days", type=int, default=28)
+    ap.add_argument("--weeks", type=int, default=None, help="calendar weeks (Mon–Sun) instead of --days")
     ap.add_argument("--lag", type=int, default=None, help="override the source's default lag")
     ap.add_argument("--source", choices=SOURCES, default="gsc")
     ap.add_argument("--as-of", dest="as_of", default=None, help="YYYY-MM-DD anchor date (default: today UTC)")
@@ -90,7 +130,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--yoy", action="store_true", help="compare with the same dates 52 weeks earlier")
     args = ap.parse_args(argv)
     as_of = dt.date.fromisoformat(args.as_of) if args.as_of else None
-    window = resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source)
+    if args.weeks and args.yoy:
+        ap.error("--yoy is not available with --weeks")
+    window = (resolve_weeks(args.weeks, as_of, args.lag, args.compare, args.source) if args.weeks
+              else resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source))
     print(json.dumps(window, indent=2))
     print(as_of_line(window), file=sys.stderr)
     return 0

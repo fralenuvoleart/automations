@@ -1,0 +1,18 @@
+{
+  "$comment": "Plain-language definitions appended to every report (build_report.py) for the terms it uses. `match` = case-insensitive word stems unless `case` is true.",
+  "terms": [
+    {"term": "Clicks", "match": ["click"], "text": "Clicks from Google Search results to the site (Search Console)."},
+    {"term": "Impressions", "match": ["impression"], "text": "Times a link to the site was shown in Google results (Search Console)."},
+    {"term": "CTR", "match": ["ctr"], "text": "Click-through rate: clicks ÷ impressions."},
+    {"term": "Position", "match": ["position"], "text": "Average ranking in Google results, weighted by impressions; 1 is the top result, so lower is better."},
+    {"term": "Anonymized queries", "match": ["anonymi", "unattributed"], "text": "Rare searches Google hides for privacy: counted in site totals, missing from query-level rows."},
+    {"term": "Session", "match": ["session"], "text": "One visit to the site (GA4)."},
+    {"term": "Engaged session", "match": ["engaged session", "engagedsession"], "text": "A visit that lasted 10+ seconds, viewed 2+ pages or completed a key event (GA4)."},
+    {"term": "Engagement rate", "match": ["engagement rate", "engagementrate"], "text": "Engaged sessions ÷ sessions."},
+    {"term": "Key event", "match": ["key event", "keyevent"], "text": "An action marked as important in GA4, such as a form submission (formerly called a conversion)."},
+    {"term": "Low volume", "match": ["low volume", "low_volume"], "text": "Too few impressions to call a change a trend (below the min_impressions threshold)."},
+    {"term": "Striking distance", "match": ["striking"], "text": "Queries ranking just below the top results, where a small gain reaches page one."},
+    {"term": "Tracked keywords", "match": ["Core", "Proven", "Opportunity"], "case": true, "text": "Core = chosen by the team; Brand = brand names; Proven = service searches with the most clicks; Opportunity = service searches with many impressions just below the top results; Generic = top non-service searches. Proven, Opportunity and Generic are picked automatically by the site rules."},
+    {"term": "Target page", "match": ["target page", "wrong page"], "text": "The page that should rank for a tracked keyword; 'wrong page' means Google shows another page more often."}
+  ]
+}

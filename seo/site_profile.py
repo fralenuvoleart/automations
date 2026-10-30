@@ -210,10 +210,12 @@ def get(domain: str, key: str, lang: str | None = None) -> object:
 
 
 def thresholds(domain: str) -> dict:
-    """Analysis thresholds: gsc_metrics defaults overridden by the profile's `thresholds`."""
+    """Analysis thresholds: gsc_metrics + ga4_metrics defaults overridden by the profile's `thresholds`."""
     sys.path.insert(0, str(HERE))
+    import ga4_metrics
     import gsc_metrics
-    return {**gsc_metrics.DEFAULTS, **(load_profile(domain).get("thresholds") or {})}
+    return {**gsc_metrics.DEFAULTS, **ga4_metrics.DEFAULTS,
+            **(load_profile(domain, derived=False).get("thresholds") or {})}
 
 
 def ga4_ai_filter(domain: str) -> dict:

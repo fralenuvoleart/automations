@@ -10,6 +10,7 @@ Refuses to overwrite an existing run unless `--force` is given.
 Usage:
     python3 seo/orchestrate.py --skill seo-audit --days 90 --compare --out-dir .output/seo-audit
     python3 seo/orchestrate.py --skill seo-technical --source snapshot --out-dir .output/seo-technical
+    python3 seo/orchestrate.py --skill seo-rank-tracking --weeks 8 --out-dir .output/seo-rank-tracking
 Exit codes: 0 = written, 1 = refused (run exists).
 """
 from __future__ import annotations
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skill", required=True)
     ap.add_argument("--days", type=int, default=28)
+    ap.add_argument("--weeks", type=int, default=None, help="calendar weeks (Mon–Sun) instead of --days")
     ap.add_argument("--lag", type=int, default=None)
     ap.add_argument("--source", choices=window.SOURCES, default="gsc")
     ap.add_argument("--compare", action="store_true")
@@ -39,7 +41,10 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     as_of = dt.date.fromisoformat(args.as_of) if args.as_of else None
-    win = window.resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source)
+    if args.weeks and args.yoy:
+        ap.error("--yoy is not available with --weeks")
+    win = (window.resolve_weeks(args.weeks, as_of, args.lag, args.compare, args.source) if args.weeks
+           else window.resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source))
     run_dir = Path(args.out_dir)
     targets = [run_dir / n for n in (".run_state.json", "context.json", "findings.json")]
     existing = [p for p in targets if p.exists()]

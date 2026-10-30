@@ -165,6 +165,71 @@ def test_breakdown_by_category_and_page_tag():
     assert langs == {"EN": 41, "RU": 2}
 
 
+def test_jump_link_variants_merge_into_their_page():
+    rows = [row(query="ип в грузии", page="https://pbservices.ge/ru/blog/registracziya-ip-v-gruzii/", clicks=13, impressions=1123, position=7.5),
+            row(query="ип в грузии", page="https://pbservices.ge/ru/blog/registracziya-ip-v-gruzii/#section_1", clicks=1, impressions=1060, position=7.8),
+            row(query="ип в грузии", page="https://pbservices.ge/ru/blog/registracziya-ip-v-gruzii/#section_4", impressions=1060, position=7.8)]
+    out = R.collapse_fragments(rows)
+    assert len(out) == 1 and out[0]["impressions"] == 1123 and out[0]["clicks"] == 14 and out[0]["position"] == 7.5
+
+
+def test_targets_flag_wrong_page_and_not_ranking():
+    blog = "https://pbservices.ge/blog/georgias-ten-best-banks/"
+    rows = [  # 90-day Search Console rows for tracked keywords (2026-10-30)
+        row(query="bank account georgia", page=blog, impressions=53, position=11.7),
+        row(query="bank account georgia", page=blog + "#ranking", impressions=3, position=9.3),
+        row(query="bank account georgia", page="https://pbservices.ge/services/bank-account-georgia/", clicks=1, impressions=26, position=22.3),
+        row(query="внж грузии по ип", page="https://pbservices.ge/ru/blog/oformlenie-vnzh-gruzii-po-ip/", clicks=55, impressions=762, position=2.8),
+        row(query="residence permit georgia", page="https://pbservices.ge/blog/georgian-residence-permit-for-it-specialists/", clicks=1, impressions=123, position=12.8),
+        row(query="not tracked", page=blog, impressions=999, position=1)]
+    res = {t["keyword"]: t for t in R.targets(rows)["targets"]}
+    bank = res["bank account georgia"]
+    assert bank["status"] == "wrong page" and bank["top_page"]["page"] == blog and bank["top_page"]["impressions"] == 53
+    assert bank["target"]["position"] == 22.3 and bank["target"]["share"] == round(26 / 79, 3)
+    assert res["внж грузии по ип"]["status"] == "ok" and "top_page" not in res["внж грузии по ип"]
+    assert res["residence permit georgia"]["status"] == "target not ranking" and res["residence permit georgia"]["target"] is None
+    assert res["статус малого бизнеса в грузии"]["status"] == "no impressions"
+    assert list(res)[0] == "bank account georgia" or res[list(res)[0]]["status"] == "wrong page"  # wrong page first
+
+
+def test_every_tracked_keyword_has_a_target_page():
+    assert all(t.get("target_page", "").startswith("https://pbservices.ge/") for t in R.tracked.values())
+    bad = copy.deepcopy(DATA)
+    bad["keywords"]["tracked"][0]["target_page"] = "/ru/blog/x/"
+    assert any("target_page must be an absolute" in i for i in rules.validate(bad))
+
+
+def test_keywords_top_countries_like_the_sheet():
+    q = [row(query="открыть ип в грузии", clicks=7, impressions=37, position=7.4)]
+    geo = [row(country="rus", query="открыть ип в грузии", impressions=34), row(country="ltu", query="открыть ип в грузии", impressions=2),
+           row(country="uzb", query="открыть ип в грузии", impressions=1), row(country="kaz", query="открыть ип в грузии", impressions=0)]
+    ks = {k["keyword"]: k for k in R.select_keywords(q, country_rows=geo)["keywords"]}
+    assert ks["открыть ип в грузии"]["countries_text"] == "RUS 92%, LTU 5%, UZB 3%"  # sheet: "RUS 92%, LTU 5%, UZB 3%"
+    assert ks["внж грузии"]["countries_text"] == "No data"
+    tiny = [row(country="geo", query="pb services", impressions=999), row(country="prt", query="pb services", impressions=1)]
+    ks = {k["keyword"]: k for k in R.select_keywords([], country_rows=tiny)["keywords"]}
+    assert ks["pb services"]["countries_text"] == "GEO 100%, PRT <1%"
+
+
+def test_trend_by_week_for_categories_pages_and_keywords():
+    w1 = [row(query="pb services", page="https://pbservices.ge/", clicks=35, impressions=111, position=1.3),
+          row(query="ипотека в грузии", page="https://pbservices.ge/ru/blog/ipoteka/", clicks=6, impressions=44, position=4.4)]
+    w2 = [row(query="pb services", page="https://pbservices.ge/", clicks=41, impressions=173, position=1.5),
+          row(query="pb services", page="https://pbservices.ge/#about", clicks=1, impressions=170, position=1.5)]
+    cat = R.trend([("2026-10-12", w1), ("2026-10-19", w2)], "category", min_impressions=50)
+    rows_ = {r["category"]: r for r in cat["rows"]}
+    assert cat["weeks"] == ["2026-10-12", "2026-10-19"]
+    assert rows_["Brand"]["clicks"] == [35, 42] and rows_["Real estate"]["clicks"] == [6, 0]
+    assert rows_["Real estate"]["position"] == [4.4, None] and rows_["Real estate"]["low_volume"] == [True, True]
+    assert cat["total"]["clicks"] == [41, 42]
+    tags = {r["page_tag"]: r for r in R.trend([("w1", w1), ("w2", w2)], "page_tag")["rows"]}
+    assert tags["Homepage"]["impressions"] == [111, 173]  # #about merged into the homepage, not double-counted
+    kw = R.trend([("w1", w1), ("w2", w2)], "keyword")
+    names = {r["keyword"]: r for r in kw["rows"]}
+    assert names["pb services"]["type"] == "Brand" and names["ипотека в грузии"]["type"] == "Proven"
+    assert kw["total"]["keyword"] == "Tracked keywords" and kw["truncated_weeks"] == []
+
+
 def test_cli_classify_validate_keywords():
     def run(*args):
         buf = io.StringIO()
@@ -182,6 +247,33 @@ def test_cli_classify_validate_keywords():
     assert code == 0 and any(k["type"] == "Proven" for k in json.loads(out)["keywords"])
     with contextlib.redirect_stderr(io.StringIO()):
         assert rules.main(["--site", "no-such-site.ge", "validate"]) == 1
+
+
+def test_cli_trend_labels_weeks_from_recorded_calls_and_targets():
+    import orchestrate
+    import record
+    with tempfile.TemporaryDirectory() as d:
+        with contextlib.redirect_stdout(io.StringIO()):
+            orchestrate.main(["--skill", "seo-rank-tracking", "--weeks", "2", "--as-of", "2026-10-30", "--out-dir", d])
+        files = []
+        for i, (s, e) in enumerate((("2026-10-12", "2026-10-18"), ("2026-10-19", "2026-10-25"))):
+            raw = json.dumps({"rows": [{"keys": ["pb services"], "clicks": 10 + i, "impressions": 100, "ctr": 0.1, "position": 1.2}]})
+            record.record(Path(d), f"query_w{i + 1}", raw, cap="gsc.query",
+                          args={"siteUrl": "sc-domain:pbservices.ge", "startDate": s, "endDate": e})
+            files.append(f"{d}/data/query_w{i + 1}.json")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            assert rules.main(["--site", "pbservices.ge", "trend", "--by", "category", "--rows", *files]) == 0
+        out = json.loads(buf.getvalue())
+        assert out["weeks"] == ["2026-10-12", "2026-10-19"] and out["total"]["clicks"] == [10, 11]
+        raw = json.dumps({"rows": [{"keys": ["vasp georgia", "https://pbservices.ge/services/crypto-license-georgia/"],
+                                    "clicks": 5, "impressions": 129, "ctr": 0.04, "position": 6.8}]})
+        record.record(Path(d), "pq", raw, cap="gsc.page_query",
+                      args={"siteUrl": "sc-domain:pbservices.ge", "startDate": "2026-10-12", "endDate": "2026-10-25"})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            assert rules.main(["--site", "pbservices.ge", "targets", "--page-query", f"{d}/data/pq.json"]) == 0
+        assert {t["keyword"]: t["status"] for t in json.loads(buf.getvalue())["targets"]}["vasp georgia"] == "ok"
 
 
 if __name__ == "__main__":
