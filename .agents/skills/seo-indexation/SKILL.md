@@ -50,7 +50,7 @@ While running this skill, do not read from or write to `memory-bank/` (repo-leve
 | `gsc.page` | `search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate) | Page-level totals, including anonymized-query clicks |
 | `gsc.inspect` | `search-console` → `inspection_inspect` {"engine": "google"} (supply: siteUrl, urls) | URL Inspection: coverage state, canonicals, last crawl (quota 2,000/day/property) |
 | `gsc.sites_list` | `search-console` → `sites_list` {"engine": "google"} | Verified Search Console properties |
-| `gsc.indexing` | `search-console` → `indexing_submit` {"method": "standard", "engine": "google"} (supply: siteUrl, urls) | Indexing API submission — only after explicit user confirmation *(agent call, only when a step needs it)* |
+| `gsc.indexing` | `search-console` → `indexing_submit` {"method": "standard", "engine": "google"} (supply: siteUrl, urls) | Indexing API submission — WRITE outside this workspace; the pipeline refuses it unless the step sets "confirm": true and the run allows writes *(agent call, only when a step needs it)* |
 
 <!--/include-->
 

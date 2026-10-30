@@ -4,8 +4,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
-
 SEO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SEO))
 sys.path.insert(0, str(SEO / "tests"))
@@ -14,9 +12,34 @@ import ga4_metrics  # noqa: E402
 import gsc_metrics  # noqa: E402
 import pipeline as P  # noqa: E402
 import resolve  # noqa: E402
+import rules  # noqa: E402
+from _runner import main  # noqa: E402
 
 SITE = "pbservices.ge"
 URL = "https://pbservices.ge/"
+R = rules.load(SITE)
+
+
+class _Raises:
+    """Minimal `pytest.raises` stand-in: `with raises(Exc) as err:` exposes `err.value`."""
+
+    def __init__(self, exc):
+        self.exc, self.value = exc, None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, et, ev, tb):
+        if et is None:
+            raise AssertionError(f"expected {self.exc.__name__}")
+        if issubclass(et, self.exc):
+            self.value = ev
+            return True
+        return False
+
+
+def raises(exc):
+    return _Raises(exc)
 
 
 class _Clients:
@@ -34,6 +57,13 @@ class _Clients:
     def call(self, server, tool, args):
         self.calls.append((server, tool, args))
         return {"content": [{"type": "text", "text": "{}"}], "isError": False}
+
+
+def _ctx(clients):
+    """A Context over a seeded run dir (Context.__init__ reads .run_state.json)."""
+    run_dir = Path(tempfile.mkdtemp())
+    (run_dir / ".run_state.json").write_text(json.dumps({"window": {"source": "gsc"}}))
+    return P.Context(SITE, run_dir, {}, clients, resolve.load()[1])
 
 
 # — A3: the one capability that changes state outside the workspace
@@ -59,8 +89,8 @@ def test_confirmed_write_step_passes_the_plan_check():
 
 def test_context_refuses_a_write_capability_unless_approved():
     clients = _Clients()
-    ctx = P.Context(SITE, Path(tempfile.mkdtemp()), {}, clients, resolve.load()[1])
-    with pytest.raises(P.StepFailed) as err:
+    ctx = _ctx(clients)
+    with raises(P.StepFailed) as err:
         ctx.call_raw("gsc.indexing", {"urls": [URL]})
     assert "confirm" in str(err.value)
     assert clients.calls == [], "the write tool must not be reached without approval"
@@ -72,8 +102,8 @@ def test_context_refuses_a_write_capability_unless_approved():
 
 def test_confirmation_alone_is_not_enough_without_allow_write():
     clients = _Clients()
-    ctx = P.Context(SITE, Path(tempfile.mkdtemp()), {}, clients, resolve.load()[1])
-    with pytest.raises(P.StepFailed):
+    ctx = _ctx(clients)
+    with raises(P.StepFailed):
         ctx.call_raw("gsc.indexing", {"urls": [URL]}, confirm=True)
     assert clients.calls == []
 
@@ -82,7 +112,7 @@ def test_confirmation_alone_is_not_enough_without_allow_write():
 
 def test_gsc_row_missing_a_metric_raises_instead_of_reading_zero():
     payload = {"rows": [{"keys": ["q"], "clicks": 5}]}  # impressions, ctr and position absent
-    with pytest.raises(ValueError):
+    with raises(ValueError):
         gsc_metrics.parse_rows(payload, ["query"])
 
 
@@ -105,8 +135,9 @@ def test_ga4_measured_zero_stays_zero():
 
 
 def test_ga4_key_event_rate_is_none_when_events_are_not_tracked():
-    cur = [{"sessionDefaultChannelGroup": "Organic Search", "sessions": "10", "engagedSessions": "5"}]
-    out = ga4_metrics.breakdown(cur, [], "sessionDefaultChannelGroup")
+    rows = [{"landingPage": "/", "sessionSourceMedium": "google / organic",
+             "sessions": "10", "engagedSessions": "5"}]  # no keyEvents metric at all
+    out = ga4_metrics.breakdown(R, rows, "channel")
     assert out["key_events_tracked"] is False
     assert out["rows"][0]["key_event_rate"] is None
 
@@ -119,3 +150,7 @@ def test_rows_returned_reads_a_wrapped_mcp_payload():
     assert P._rows_returned({"rows": [1, 2, 3]}) == 3
     assert P._rows_returned({"content": [{"text": "not json"}]}) is None
     assert P._rows_returned([]) is None
+
+
+if __name__ == "__main__":
+    main(globals())
