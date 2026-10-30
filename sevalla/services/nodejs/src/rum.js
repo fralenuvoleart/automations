@@ -317,6 +317,8 @@ function inMaintenance(h) {
 /**
  * Views per Tbilisi hour, plus the maintenance window vs the rest of the day,
  * so admin purges in the morning can be told apart from normal behaviour.
+ * Each row also has the form funnel and click counts, to check whether leads
+ * per hour follow cold-edge hours or simply the visitors' local time.
  */
 function hourReport(views) {
   const timed = views.filter((v) => typeof v.t === 'number');
@@ -324,7 +326,9 @@ function hourReport(views) {
     const known = list.filter((v) => ['hit', 'miss', 'none'].includes(v.edge));
     return known.length ? Math.round((known.filter((v) => v.edge === 'none').length / known.length) * 100) : null;
   };
-  const row = (list) => ({ views: list.length, edge_miss_pct: pct(list), skip_cache_pct: skip(list), ttfb_ms: median(list.map((v) => v.ttfb)) });
+  // Same fields as the other sections (views, timings, form and click counts),
+  // so leads per hour can be compared with cold-edge hours.
+  const row = (list) => Object.assign({ edge_miss_pct: pct(list), skip_cache_pct: skip(list) }, group(list));
   const hours = [];
   for (let h = 0; h < 24; h++) {
     const list = timed.filter((v) => tbilisiHour(v.t) === h);
