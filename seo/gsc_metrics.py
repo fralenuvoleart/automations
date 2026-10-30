@@ -115,6 +115,16 @@ def _num(v) -> float:
     return float(v)
 
 
+def _metric(v, field: str) -> float:
+    """A metric the payload must carry; absent or unreadable raises — absent is not a zero (A2)."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        raise ValueError(f"row is missing metric '{field}': absent is not 0")
+    try:
+        return _num(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"row has unreadable metric '{field}': {v!r}") from None
+
+
 def parse_rows(payload, dims: list[str]) -> list[dict]:
     """Normalise a GSC response into [{<dim>: value, clicks, impressions, ctr, position}]."""
     payload = _unwrap(payload)
@@ -145,12 +155,18 @@ def parse_rows(payload, dims: list[str]) -> list[dict]:
                 if d not in r:
                     raise ValueError(f"row lacks dimension '{d}': {sorted(r)}")
                 row[d] = r[d]
-        clicks, imps = _num(r.get("clicks")), _num(r.get("impressions"))
+        if not any(k in r for k in ("clicks", "impressions", "ctr", "position")):
+            # insight/query payloads carry no metric fields at all: no metrics, not zeroed metrics
+            row.update({"clicks": 0.0, "impressions": 0.0, "ctr": 0.0, "position": 0.0})
+            out.append(row)
+            continue
+        clicks, imps = _metric(r.get("clicks"), "clicks"), _metric(r.get("impressions"), "impressions")
         ctr = r.get("ctr")
-        ctr = (clicks / imps if imps else 0.0) if ctr in (None, "") else _num(ctr)
+        ctr = (clicks / imps if imps else 0.0) if ctr in (None, "") else _metric(ctr, "ctr")
         if ctr > 1:
             ctr /= 100.0
-        row.update({"clicks": clicks, "impressions": imps, "ctr": ctr, "position": _num(r.get("position"))})
+        row.update({"clicks": clicks, "impressions": imps, "ctr": ctr,
+                    "position": _metric(r.get("position"), "position")})
         out.append(row)
     return out
 

@@ -73,19 +73,41 @@ def split_ranges(rows: list[dict]) -> tuple[list[dict], list[dict] | None]:
             [r for r in rows if r["dateRange"] == "date_range_1"])
 
 
+def _metric(r: dict, m: str) -> float | None:
+    """A metric the row carries; None when absent — an absent metric is not a measured 0 (A2)."""
+    v = r.get(m)
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _agg(rows: list[dict], keyf) -> dict:
     acc: dict = {}
+    carried: dict = {}
     for r in rows:
-        a = acc.setdefault(keyf(r), dict.fromkeys(METRICS, 0.0))
+        k = keyf(r)
+        a = acc.setdefault(k, dict.fromkeys(METRICS, 0.0))
+        c = carried.setdefault(k, dict.fromkeys(METRICS, False))
         for m in METRICS:
-            a[m] += _num(r.get(m))
-    for a in acc.values():
-        a["engagementRate"] = round(a["engagedSessions"] / a["sessions"], 3) if a["sessions"] else None
+            v = _metric(r, m)
+            if v is None:
+                continue
+            c[m] = True
+            a[m] += v
+    for k, a in acc.items():
+        for m in METRICS:
+            if not carried[k][m]:
+                a[m] = None  # no row carried this metric: untracked, not a measured zero
+        a["engagementRate"] = (round(a["engagedSessions"] / a["sessions"], 3)
+                               if a["sessions"] and a["engagedSessions"] is not None else None)
     return acc
 
 
-def _pct(new: float, old: float) -> float | None:
-    return None if not old else round((new - old) / old * 100, 1)
+def _pct(new: float | None, old: float | None) -> float | None:
+    return None if not old or new is None else round((new - old) / old * 100, 1)
 
 
 def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = None,
@@ -108,7 +130,7 @@ def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = N
         c = c or {**dict.fromkeys(METRICS, 0.0), "engagementRate": None}
         row = {by: name, **{k: (round(v, 1) if isinstance(v, float) and k in METRICS else v) for k, v in c.items()}}
         if prev is not None:
-            row["prev_sessions"] = round(p["sessions"], 1) if p else 0
+            row["prev_sessions"] = round(p["sessions"] or 0.0, 1) if p else 0
             row["sessions_change_pct"] = _pct(c["sessions"], p["sessions"]) if p else None
             row["prev_engagementRate"] = p["engagementRate"] if p else None
         return row
@@ -118,14 +140,20 @@ def breakdown(rules, rows: list[dict], by: str, prev_rows: list[dict] | None = N
     out_rows = [line(n, cur.get(n), (prev or {}).get(n)) for n in names]
     total_sessions = (tot_c or {}).get("sessions") or 0
     for row in out_rows:
-        row["session_share"] = round(row["sessions"] / total_sessions, 4) if total_sessions else None
-        row["key_event_rate"] = round(row["keyEvents"] / row["sessions"], 4) if row.get("sessions") else None
-    out = {"by": by, "organic_only": organic_only, "rows": out_rows, "total": line("Total", tot_c, tot_p)}
+        row["session_share"] = (round(row["sessions"] / total_sessions, 4)
+                                if total_sessions and row["sessions"] is not None else None)
+        row["key_event_rate"] = (round(row["keyEvents"] / row["sessions"], 4)
+                                 if row.get("sessions") and row.get("keyEvents") is not None else None)
+        row["key_events_tracked"] = row.get("keyEvents") is not None
+    out = {"by": by, "organic_only": organic_only, "rows": out_rows, "total": line("Total", tot_c, tot_p),
+           # false here means the property reported no key-event metric at all: a 0% rate would be an artefact
+           "key_events_tracked": any(r.get("keyEvents") is not None for r in out_rows)}
     if by == "channel":  # headline of the AI sections: AI sessions ÷ organic sessions (a lower bound)
         ai, org = rules.data["channels"]["ai_channel"], organic
 
         def share(agg):
-            a, o = (agg or {}).get(ai, {}).get("sessions", 0), (agg or {}).get(org, {}).get("sessions", 0)
+            a = (agg or {}).get(ai, {}).get("sessions") or 0
+            o = (agg or {}).get(org, {}).get("sessions") or 0
             return round(a / o, 4) if o else None
         out["ai_share_of_organic"] = {"current": share(cur), "previous": share(prev) if prev is not None else None,
                                       "label": "lower bound — some AI visits arrive as direct or unlisted referrers"}
@@ -140,10 +168,10 @@ def reconcile(rules, ga4_rows: list[dict], gsc_totals: list[dict], ga4_prev: lis
 
     def side(g4, gsc):
         org = [r for r in g4 if rules.channel(r["sessionSourceMedium"]) == organic]
-        sess = sum(_num(r.get("sessions")) for r in org)
+        sess = sum(_metric(r, "sessions") or 0.0 for r in org)
         ns = [r for r in org if str(r.get("landingPage")) == NOT_SET]
-        ns_sess = sum(_num(r.get("sessions")) for r in ns)
-        ns_eng = sum(_num(r.get("engagedSessions")) for r in ns)
+        ns_sess = sum(_metric(r, "sessions") or 0.0 for r in ns)
+        ns_eng = sum(_metric(r, "engagedSessions") or 0.0 for r in ns)
         clicks = sum(r["clicks"] for r in gsc)
         return {"gsc_clicks": round(clicks, 1), "ga4_organic_sessions": round(sess, 1),
                 "clicks_per_session": round(clicks / sess, 2) if sess else None,
@@ -175,14 +203,15 @@ def _landing(r: dict) -> str | None:
 def top_pages(rules, rows: list[dict], limit: int = 3) -> list[dict]:
     """Landing pages by sessions (absolute, cleaned URLs; "(not set)" skipped)."""
     agg = _agg([r for r in rows if _landing(r) and _landing(r) != NOT_SET], lambda r: rules.clean(_landing(r)))
-    return [{"page": p, "sessions": round(m["sessions"], 1), "keyEvents": round(m["keyEvents"], 1)}
-            for p, m in sorted(agg.items(), key=lambda kv: (-kv[1]["sessions"], kv[0]))[:limit]]
+    return [{"page": p, "sessions": round(m["sessions"] or 0.0, 1),
+             "keyEvents": None if m["keyEvents"] is None else round(m["keyEvents"], 1)}
+            for p, m in sorted(agg.items(), key=lambda kv: (-(kv[1]["sessions"] or 0.0), kv[0]))[:limit]]
 
 
 def misses(rules, ga4_rows: list[dict], gsc_page_rows: list[dict], limit: int = 5) -> list[dict]:
     """Pages with the most organic clicks that got no sessions in the GA4 rows (e.g. no AI referrals)."""
     import gsc_metrics
-    seen = {rules.clean(_landing(r)) for r in ga4_rows if _landing(r) and _num(r.get("sessions")) > 0}
+    seen = {rules.clean(_landing(r)) for r in ga4_rows if _landing(r) and (_metric(r, "sessions") or 0) > 0}
     tops = gsc_metrics.top_pages(gsc_page_rows, "clicks", 10 ** 6)
     return [p for p in tops if rules.clean(p["page"]) not in seen][:limit]
 

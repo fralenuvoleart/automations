@@ -24,6 +24,7 @@
 - CI gate `seo/check.sh` (`--check` + `--validate-live` + all tests) — 14 test suites green.
 - **2026-10-30 architecture audit** — [`plans/seo-architecture-audit-2026-10-30.md`](../plans/seo-architecture-audit-2026-10-30.md): 8.1/10 systems-design grade; taxonomy matrix (44 caps / 6 servers / T0–T6 tiers), per-domain scores, anti-pattern teardown, P0–P3 refactor blueprint.
 - **2026-10-30 audit fixes applied (all 51 issues + optional items)** — evidence recording + gate, deterministic GSC/crawl/DFS/Ads analysis modules, registry v7 (rowLimit/engine pinned, `keyEvents`, profile-driven AI filter), marker-based re-rendering with shared includes, planner API limits + historical metrics, offline-portable CI (`--validate-cached`). 18 SEO test suites + report-export green.
+- **Fresh architecture audit on registry v8** — [`plans/seo-architecture-audit-v8.md`](../plans/seo-architecture-audit-v8.md): 8.1/10 weighted on a new rubric; 44 capabilities × 6 servers × function-class matrix, 13-skill pull-overlap matrix, 9 anti-patterns (A1–A9) with file references, P0–P3 blueprint, residual risk register. Supersedes the 2026-10-30 audit.
 
 ## In Progress
 

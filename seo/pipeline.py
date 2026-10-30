@@ -138,6 +138,10 @@ def validate_plan(plan: dict, caps: dict | None = None) -> list[str]:
             extra = set(st.get("args") or {}) - set(c.get("runtime") or [])
             if extra:
                 issues.append(f"{where} ({name}): {sorted(extra)} are not runtime args of {st['cap']}")
+            if (c.get("policy") or {}).get("write") and st.get("confirm") is not True:
+                # A3: a plan may not silently submit/index anything; the step must say the user approved it
+                issues.append(f"{where} ({name}): {st['cap']} changes state outside this workspace — "
+                              "it needs \"confirm\": true (explicit user approval)")
             if st.get("period") and st["period"] not in PERIODS:
                 issues.append(f"{where} ({name}): period must be one of {PERIODS}")
             if st.get("period") == "lookback" and not (st.get("lookback_days") and st.get("allow_window")):
@@ -204,6 +208,7 @@ class Context:
         self.profile = site_profile.load_profile(site)
         self._gsc_property = self.profile.get("gsc_property")
         self.dry_run = False
+        self.write_ok = False  # set by execute(allow_write=...): a write capability refuses without it
 
     # values
     def scalar(self, name: str, item=None, i: int | None = None):
@@ -246,8 +251,12 @@ class Context:
                 raise StepFailed(f"no Search Console property for {dom} in sites_list")
         return self._gsc_property
 
-    def call_raw(self, cap: str, args: dict) -> dict:
+    def call_raw(self, cap: str, args: dict, confirm: bool = False) -> dict:
         c = self.caps[cap]
+        if (c.get("policy") or {}).get("write") and not (confirm and self.write_ok):
+            # A3: the one capability that changes state outside this workspace needs explicit approval
+            raise StepFailed(f"{cap} changes state outside this workspace: it needs \"confirm\": true "
+                             "on the step and a run started with --allow-write")
         res = self.clients.call(c["server"], c["tool"], {**(c.get("args") or {}), **args})
         if not isinstance(res, dict) or res.get("isError"):
             text = " ".join(x.get("text", "") for x in (res or {}).get("content", []) if isinstance(x, dict))
@@ -449,6 +458,24 @@ def _items(ctx: Context, st: dict) -> list:
     return [("item", v) for v in vals]
 
 
+def _rows_returned(raw) -> int | None:
+    """Data rows in an MCP response, without assuming one particular tool's envelope."""
+    if not isinstance(raw, dict):
+        return None
+    for key in ("rows", "data", "results", "items"):
+        if isinstance(raw.get(key), list):
+            return len(raw[key])
+    for x in raw.get("content") or []:
+        if isinstance(x, dict) and isinstance(x.get("text"), str):
+            try:
+                n = _rows_returned(json.loads(x["text"]))
+            except json.JSONDecodeError:
+                n = None
+            if n is not None:
+                return n
+    return None
+
+
 def run_step(ctx: Context, st: dict, report: list) -> None:
     kind = next(k for k in KINDS if k in st)
     reason = ctx.when(st.get("when"))
@@ -478,10 +505,16 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 if record.record_from_cache(ctx.run_dir, name, st["cap"], args, st.get("allow_window")):
                     entry["status"] = "cached"
                     continue
-                raw = ctx.call_raw(st["cap"], args)
+                raw = ctx.call_raw(st["cap"], args, confirm=st.get("confirm") is True)
                 record.record(ctx.run_dir, name, json.dumps(raw, ensure_ascii=False), st["cap"], args=args,
                               allow_window=st.get("allow_window"))
                 entry["status"] = "ok"
+                rows, cap_limit = _rows_returned(raw), args.get("rowLimit") or args.get("limit")
+                if rows is not None:
+                    entry["rows"] = rows
+                    if cap_limit and rows >= int(cap_limit):
+                        # A1: cut at the server row limit — no headline figure may be built on this pull
+                        entry["truncated"] = True
             except (StepFailed, TimeoutError, RuntimeError, OSError, ValueError) as e:
                 if not ((st.get("optional") or ctx.dry_run) and len(items) > 1):
                     raise
@@ -519,7 +552,7 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
 def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None = None, clients=None,
             as_of: dt.date | None = None, days: int | None = None, weeks: int | None = None,
             compare: bool | None = None, yoy: bool = False, tag: str | None = None, out_dir: str | None = None,
-            force: bool = False, dry_run: bool = False) -> tuple[Path, dict]:
+            force: bool = False, dry_run: bool = False, allow_write: bool = False) -> tuple[Path, dict]:
     plan = load_plan(skill, mode)
     caps = resolve.load()[1]
     issues = validate_plan(plan, caps)
@@ -549,6 +582,7 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
     clients = clients or MCPClients()
     ctx = Context(site, run_dir, inputs, clients, caps)
     ctx.dry_run = dry_run
+    ctx.write_ok = allow_write
     report: list = []
     status = "ok"
     try:
@@ -588,7 +622,9 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
             u["affects"] += f"; {affects}"
     summary = {"skill": skill, "mode": mode, "site": site, "status": status, "steps": report,
                "unavailable": unavailable, "computed": sorted(p.name for p in (run_dir / "computed").glob("*.json"))
-               if (run_dir / "computed").exists() else []}
+               if (run_dir / "computed").exists() else [],
+               # A1: pulls cut at the server row limit — no headline figure may be built on them
+               "truncated": [e["name"] for e in report if e.get("truncated")]}
     (run_dir / "pipeline.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
     fp = run_dir / "findings.json"
     f = json.loads(fp.read_text())
@@ -631,6 +667,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="resolve the plan in a temp folder; call nothing")
     ap.add_argument("--check-plans", action="store_true")
+    ap.add_argument("--allow-write", action="store_true",
+                    help="permit write capabilities whose step sets \"confirm\": true")
     a = ap.parse_args(argv)
     if a.check_plans:
         issues = check_plans()
@@ -646,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
             run_dir, summary = execute(
                 a.skill, a.site, a.mode, inputs, DryRunClient() if a.dry_run else None,
                 dt.date.fromisoformat(a.as_of) if a.as_of else None, a.days, a.weeks, a.compare, a.yoy, a.tag,
-                tmp if a.dry_run else None, a.force, dry_run=a.dry_run)
+                tmp if a.dry_run else None, a.force, dry_run=a.dry_run, allow_write=a.allow_write)
             if a.dry_run:
                 for e in summary["steps"]:
                     what = e.get("cap") or (e.get("run") or [""])[0]
@@ -664,6 +702,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"run_dir: {run_dir}")
     print(f"{summary['status'].upper()} — {ok} steps done ({cached} from cache), "
           f"{len(summary['unavailable'])} unavailable, computed: {', '.join(summary['computed']) or 'none'}")
+    if summary.get("truncated"):
+        print(f"WARNING truncated at the server row limit: {', '.join(summary['truncated'])} — no headline "
+              "figure may be reported from these pulls; split the window or page the pull")
     for u in summary["unavailable"]:
         print(f"  unavailable: {u['source']} → {u['affects']}" + (f" ({u['reason']})" if u.get("reason") else ""))
     if summary["status"] != "ok":
