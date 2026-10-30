@@ -32,9 +32,9 @@ def _doc(name: str) -> dict:
 
 def test_seo_skills_present():
     names = _names()
-    assert len(names) == 12, names
+    assert len(names) == 13, names
     for required in (
-        "seo-audit", "seo-ai-visibility", "seo-backlink-check", "seo-brand-split",
+        "seo-audit", "seo-ai-visibility", "seo-backlink-check", "seo-brand-split", "seo-brief",
         "seo-content-brief", "seo-content-refresh", "seo-indexation", "seo-internal-links",
         "seo-keyword-strategy", "seo-paid-organic", "seo-rank-tracking", "seo-technical",
     ):

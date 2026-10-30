@@ -3,7 +3,7 @@
 Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
-> **Status (2026-10-30):** 12 `seo-*` skills, registry v7, CI gate [`check.sh`](check.sh) ALL GREEN offline.
+> **Status (2026-10-30):** 13 `seo-*` skills (12 reports + the weekly `seo-brief`), registry v8, CI gate [`check.sh`](check.sh) ALL GREEN offline.
 > Implements every fix from [`plans/seo-skills-audit-2026-10-30.md`](../plans/seo-skills-audit-2026-10-30.md).
 
 ## Layout
@@ -20,6 +20,8 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
 | [`ga4_metrics.py`](ga4_metrics.py) | GA4 landing page × source/medium rows classified with the site rules: `breakdown` per channel / page type / language (sessions, engaged sessions, engagement rate, key events) and `reconcile` (Search Console clicks vs GA4 organic sessions, `(not set)` share). |
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
+| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed, git-ignored run folders (`<run_root>/<site>/<date>/<skill>/`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
+| [`digest.py`](digest.py) | The weekly brief (`seo-brief`): 8-week KPIs, actions merged and ranked across the latest reports, new vs open since, `[done]` history, due reports. |
 | [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate**) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
 | [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client and the cached tool schemas used for offline validation. |
@@ -29,10 +31,10 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 
 | Phase | Mechanism |
 |---|---|
-| **Orchestrate** | `orchestrate.py` fixes the window in `.run_state.json`; that is the only window tools may receive. |
-| **Record** | after every MCP/tool call, `record.py` stores the raw response and its full call spec. |
-| **Compute** | `gsc_metrics.py`, `coverage.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` turn recorded data into findings-ready numbers. |
-| **Write** | the LLM writes `findings.json` ([schema](references/findings-schema.json)) from those outputs. |
+| **Orchestrate** | `orchestrate.py --site D` creates the run folder `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`run_root` in [`config/settings.json`](config/settings.json), git-ignored — it refuses a root that could be committed) and fixes the window in `.run_state.json`; that is the only window tools may receive. |
+| **Record** | `record.py --from-cache` first: an identical earlier call (same capability + args, still valid) is reused from `<run_root>/<site>/_cache/`; otherwise, after the MCP/tool call, `record.py` stores the raw response, its full call spec, and a cache copy (dated windows kept; live tools per `policy.cache_ttl_days`; errors never). |
+| **Compute** | `gsc_metrics.py`, `rules.py`, `ga4_metrics.py`, `coverage.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` turn recorded data into findings-ready numbers. |
+| **Write** | the LLM writes `findings.json` ([schema](references/findings-schema.json)) from those outputs; actions are objects (`action`, `impact`, `effort`, `page`/`keyword`, `why`) so `seo-brief` can merge them. |
 | **Validate** | `validate_report.py --data context.json`: structure, dates, labels, and every URL against recorded evidence. |
 | **Build** | `build_report.py` renders Markdown; a second validation checks the rendered report. |
 
@@ -68,6 +70,7 @@ frontmatter (name/description/license/compatibility) → mechanical-vs-analytica
 | `seo-ai-visibility` | AI-assistant referrals, cited pages, AI share of organic, AI-crawler access | search-console | analytics (headline) |
 | `seo-backlink-check` | backlink profile, anchor mix, velocity, link gap, referral cross-check | analytics | dataforseo |
 | `seo-brand-split` | brand vs non-brand per language, unattributed share | search-console + site rules | — |
+| `seo-brief` | weekly one-pager: 8-week KPIs, top actions merged from every report, changes, due reports | search-console + latest reports | — |
 | `seo-content-brief` | SERP-driven brief for one keyword, create vs expand | search-console | dataforseo, tavily, planner |
 | `seo-content-refresh` | declining pages with exclusive causes; evidence-gated retire | search-console | analytics, dataforseo |
 | `seo-indexation` | sampled index status, sitemaps, hreflang/canonical integrity | search-console | — |
@@ -124,8 +127,10 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/resolve.py --check \| --write \| --map \| --list` | render/validate skills; regenerate [`tool-map.md`](tool-map.md) |
 | `python3 seo/resolve.py --validate-cached \| --validate-live` | tool + args vs cached / live schemas |
 | `python3 seo/mcp_client.py [server]` | refresh `tool-schemas.json` (one server keeps the others) |
-| `python3 seo/orchestrate.py --skill S --days N [--compare\|--yoy] [--source gsc\|ga4\|snapshot] --out-dir D [--force]` | seed a run |
-| `python3 seo/record.py --run-dir D --cap ID --name N --args JSON --response-file F` | record evidence |
+| `python3 seo/orchestrate.py --skill S --site D (--days N [--compare\|--yoy] \| --weeks N) [--source gsc\|ga4\|snapshot] [--tag T] [--force]` | seed a run in the fixed run folder |
+| `python3 seo/record.py --run-dir D --cap ID --name N --args JSON (--response-file F \| --from-cache)` | record evidence (exit 3 = cache miss) |
+| `python3 seo/runs.py root \| list --site D \| latest --site D --skill S \| prune [--older-than N]` | run folders, latest report, retention |
+| `python3 seo/digest.py --site D --run-dir R` | build the weekly brief's findings |
 | `python3 seo/gsc_metrics.py <command> …` | GSC analyses (see the module docstring) |
 | `python3 seo/site_crawl.py robots\|sitemap\|crawl\|facts …` | crawler |
 | `python3 seo/coverage.py --site D --gsc data/query_cur.json [--gsc-pages data/page_cur.json]` | coverage block |

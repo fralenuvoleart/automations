@@ -1,0 +1,21 @@
+{
+  "$comment": "Toolkit settings (no secrets). run_root: where every SEO run and the shared data cache live — relative paths are from the repo root and must be git-ignored (orchestrate.py refuses otherwise). cadence_days: how often each report should be refreshed; seo-brief flags reports older than this.",
+  "run_root": ".output/seo",
+  "retention_days": 180,
+  "cache": true,
+  "brief_max_age_days": 45,
+  "cadence_days": {
+    "seo-brief": 7,
+    "seo-rank-tracking": 7,
+    "seo-brand-split": 7,
+    "seo-ai-visibility": 7,
+    "seo-audit": 30,
+    "seo-content-refresh": 30,
+    "seo-technical": 30,
+    "seo-indexation": 30,
+    "seo-internal-links": 30,
+    "seo-keyword-strategy": 30,
+    "seo-backlink-check": 90,
+    "seo-paid-organic": 90
+  }
+}

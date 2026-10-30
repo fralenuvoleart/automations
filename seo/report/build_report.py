@@ -108,8 +108,24 @@ def build(findings: dict, generated_at: str | None = None) -> str:
 
     actions = findings.get("actions") or []
     if actions:
-        out += "\n## Action list\n\n" + "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions)) + "\n"
+        out += "\n## Action list\n\n" + "\n".join(f"{i + 1}. {action_line(a)}" for i, a in enumerate(actions)) + "\n"
     return out + definitions(out)
+
+
+def action_line(a) -> str:
+    """One action as text: the action, then impact/effort and what it is about."""
+    if isinstance(a, str):
+        return a
+    about = "; ".join(x for x in (a.get("page"), f"“{a['keyword']}”" if a.get("keyword") else None) if x)
+    meta = f"impact {a['impact']}, effort {a['effort']}"
+    if a.get("est_clicks") is not None:
+        meta += f", ~{a['est_clicks']:g} clicks/month (estimate)"
+    line = f"{a['action'].strip()} _({meta})_"
+    if about:
+        line += f" — {about}"
+    if a.get("why"):
+        line += f". Why: {a['why'].strip()}"
+    return line
 
 
 def definitions(report_text: str) -> str:

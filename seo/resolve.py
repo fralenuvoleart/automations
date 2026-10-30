@@ -175,7 +175,7 @@ def _gen_configuration(caps_in: list[str], data: dict) -> str:
 def _gen_privacy(caps_in: list[str], data: dict, text: str) -> str:
     third = [(s, data["servers"][s]["third_party"]) for s in _servers_used(caps_in, data)
              if data["servers"].get(s, {}).get("third_party")]
-    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — keep them in the run directory and delete them when no longer needed."]
+    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`."]
     if third:
         names = ", ".join(f"{p} (`{s}`)" for s, p in third)
         lines.append(f"- Third-party calls: target domains/keywords/URLs are sent to {names} when those servers are used; everything else goes only to Google APIs via the configured MCP servers.")
@@ -198,6 +198,8 @@ def _render_include(name: str, attrs: dict, skill: str, text: str, data: dict) -
     if not path.exists():
         raise KeyError(f"unknown include '{name}' (no {path.relative_to(ROOT)})")
     out = path.read_text().strip("\n")
+    if "weeks" in attrs:  # weeks=8 -> "--weeks 8" instead of "--days N"
+        out = out.replace("--days <<days>>", "--weeks <<weeks>>")
     for k, v in {"skill": skill, **attrs}.items():
         if k == "flags":  # flags=--compare_--yoy -> "--compare --yoy"; flags=- -> none
             if v == "-":
@@ -264,6 +266,10 @@ def check_policies(caps: dict | None = None) -> int:
         tb = pol.get("timeout_budget_s")
         if tb is not None and tb >= budget:
             print(f"ERROR {cid}: policy.timeout_budget_s {tb} >= client timeout {budget}")
+            issues += 1
+        ttl = pol.get("cache_ttl_days")
+        if ttl is not None and (not isinstance(ttl, int) or isinstance(ttl, bool) or ttl < 0):
+            print(f"ERROR {cid}: policy.cache_ttl_days must be a non-negative integer")
             issues += 1
         if c["server"] == "google-ads-planner" and pol.get("retry", 0) != 0:
             print(f"ERROR {cid}: the planner server retries internally — policy.retry must be 0 (single retry layer)")

@@ -3,74 +3,263 @@
   "title": "SEO Findings",
   "description": "The LLM writes this; seo/report/validate_report.py checks it (structure, dates, evidence) and seo/report/build_report.py renders it.",
   "type": "object",
-  "required": ["skill", "as_of", "window", "verdict", "sections"],
+  "required": [
+    "skill",
+    "as_of",
+    "window",
+    "verdict",
+    "sections"
+  ],
   "properties": {
-    "skill": { "type": "string" },
-    "as_of": { "type": "string", "description": "YYYY-MM-DD anchor (from seo/window.py)" },
+    "skill": {
+      "type": "string"
+    },
+    "as_of": {
+      "type": "string",
+      "description": "YYYY-MM-DD anchor (from seo/window.py)"
+    },
     "window": {
       "type": "object",
-      "required": ["startDate", "endDate"],
+      "required": [
+        "startDate",
+        "endDate"
+      ],
       "description": "Copy verbatim from .run_state.json. endDate must be before as_of unless source is snapshot.",
       "properties": {
-        "source": { "enum": ["gsc", "ga4", "snapshot"], "description": "Sets the provenance line; default gsc" },
-        "startDate": { "type": "string" },
-        "endDate": { "type": "string" },
-        "compareStartDate": { "type": "string" },
-        "compareEndDate": { "type": "string" },
-        "compareMode": { "enum": ["previous", "yoy"] },
-        "days": { "type": "integer" },
-        "lag": { "type": "integer" },
-        "as_of": { "type": "string" }
+        "source": {
+          "enum": [
+            "gsc",
+            "ga4",
+            "snapshot"
+          ],
+          "description": "Sets the provenance line; default gsc"
+        },
+        "startDate": {
+          "type": "string"
+        },
+        "endDate": {
+          "type": "string"
+        },
+        "compareStartDate": {
+          "type": "string"
+        },
+        "compareEndDate": {
+          "type": "string"
+        },
+        "compareMode": {
+          "enum": [
+            "previous",
+            "yoy"
+          ]
+        },
+        "days": {
+          "type": "integer"
+        },
+        "lag": {
+          "type": "integer"
+        },
+        "as_of": {
+          "type": "string"
+        }
       }
     },
-    "verdict": { "type": "string" },
+    "verdict": {
+      "type": "string"
+    },
     "sections": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["heading", "body"],
+        "required": [
+          "heading",
+          "body"
+        ],
         "properties": {
-          "heading": { "type": "string", "description": "single line" },
-          "body": { "type": "string" },
-          "table": { "type": "array", "items": { "type": "object", "description": "scalar cells only" } },
-          "estimate": { "type": "boolean", "description": "true => body must carry an estimate/heuristic label" },
+          "heading": {
+            "type": "string",
+            "description": "single line"
+          },
+          "body": {
+            "type": "string"
+          },
+          "table": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "scalar cells only"
+            }
+          },
+          "estimate": {
+            "type": "boolean",
+            "description": "true => body must carry an estimate/heuristic label"
+          },
           "window": {
             "type": "object",
             "description": "Set when this section's data covers a different period than the report window (e.g. a tool's own lookback) — rendered under the heading.",
-            "properties": { "startDate": { "type": "string" }, "endDate": { "type": "string" }, "note": { "type": "string" } }
+            "properties": {
+              "startDate": {
+                "type": "string"
+              },
+              "endDate": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
           }
         }
       }
     },
-    "actions": { "type": "array", "items": { "type": "string" } },
+    "actions": {
+      "type": "array",
+      "description": "Prioritized actions. Objects feed seo-brief (merged and ranked across reports); plain strings are accepted for backward compatibility (treated as medium impact / medium effort).",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "impact",
+              "effort"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "description": "What to do, one sentence, doable in the CMS / Search Console / Ads / hosting panel."
+              },
+              "impact": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "description": "Expected effect on organic clicks or leads."
+              },
+              "effort": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "description": "Work needed: low = minutes/hours, medium = days, high = weeks."
+              },
+              "page": {
+                "type": "string",
+                "description": "Absolute URL the action is about (must be in the recorded evidence)."
+              },
+              "keyword": {
+                "type": "string",
+                "description": "Query the action is about."
+              },
+              "category": {
+                "type": "string",
+                "description": "Service category from the site rules."
+              },
+              "why": {
+                "type": "string",
+                "description": "The finding behind it, with its number (e.g. 'clicks -43% in 90 days')."
+              },
+              "est_clicks": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Estimated monthly clicks gained (estimate)."
+              }
+            }
+          }
+        ]
+      }
+    },
     "unavailable": {
       "type": "array",
       "description": "Sources that were expected but not available (graceful degradation). Rendered as a 'Data availability' section.",
       "items": {
         "type": "object",
-        "required": ["source", "affects"],
-        "properties": { "source": { "type": "string" }, "affects": { "type": "string" }, "reason": { "type": "string" } }
+        "required": [
+          "source",
+          "affects"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "affects": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       }
     },
     "coverage": {
       "type": "object",
       "description": "Output of seo/coverage.py, pasted verbatim. basis=gsc_impressions means covered = ≥1 impression in the window.",
       "properties": {
-        "basis": { "enum": ["gsc_impressions", "manual"] },
-        "priority_keywords": { "type": "array", "items": { "type": "string" } },
-        "priority_pages": { "type": "array", "items": { "type": "string" } },
-        "covered": { "type": "array", "items": { "type": "string" } },
-        "missing": { "type": "array", "items": { "type": "string" } },
+        "basis": {
+          "enum": [
+            "gsc_impressions",
+            "manual"
+          ]
+        },
+        "priority_keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority_pages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "covered": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "by_language": {
           "type": "object",
           "additionalProperties": {
             "type": "object",
-            "properties": { "total": { "type": "integer" }, "covered": { "type": "integer" }, "missing": { "type": "integer" } }
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "covered": {
+                "type": "integer"
+              },
+              "missing": {
+                "type": "integer"
+              }
+            }
           }
         },
-        "pages_covered": { "type": "array", "items": { "type": "string" } },
-        "pages_missing": { "type": "array", "items": { "type": "string" } }
+        "pages_covered": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pages_missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   }

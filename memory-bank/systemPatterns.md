@@ -35,7 +35,7 @@
 
 ## 🔎 SEO Skills — architecture & invariants
 
-The 12 `seo-*` skills in `.agents/skills/` run on a multi-server MCP stack; every non-skill SEO file lives in [`seo/`](../seo/) ([README](../seo/README.md)).
+The 13 `seo-*` skills in `.agents/skills/` (12 reports + the weekly `seo-brief`) run on a multi-server MCP stack; every non-skill SEO file lives in [`seo/`](../seo/) ([README](../seo/README.md)).
 
 **Registry + rendering.** [`seo/capabilities.json`](../seo/capabilities.json) is the single source of truth (server, tool, fixed `args`, `runtime`, `desc`, `policy`). Skills are authored with `{{cap:id}}`, `{{site:key}}` and `{{include:name}}` tokens; `python3 seo/resolve.py --write` renders them into `<!--cap:…-->…<!--/cap-->` blocks and **re-renders every block on each run** (registry edits and tool renames propagate). Never edit inside a block or hard-code tool names. Shared skill sections live in `seo/references/skill-common/`.
 
@@ -54,6 +54,9 @@ The 12 `seo-*` skills in `.agents/skills/` run on a multi-server MCP stack; ever
 Rules:
 - GSC: page metrics from `page` rows (include anonymized clicks), query metrics from `query` rows, `query×page` only for attribution; positions impression-weighted; truncated pulls (= row limit) never produce "lost/new".
 - Windows: GSC ends `today − 3`, GA4 `today − 2`; tools without a window get a per-section `window` note. Weekly runs use Monday–Sunday weeks (`--weeks N`, listed in `window.weeks`, one pull per week — 8-week date-dimension pulls truncate on this site).
+- Run folders are fixed: `<run_root>/<site>/<date>/<skill>[-<tag>]/` (`seo/config/settings.json`, git-ignored; `orchestrate.py` refuses a root that could be committed). `seo/runs.py` lists, finds the latest report and prunes by `retention_days`.
+- Shared cache (`record.py`): keyed by capability + full args per site; dated windows immutable, live tools per `policy.cache_ttl_days`, errors and undated live data never cached; `--from-cache` before each call.
+- Findings actions are objects (`action`, `impact`, `effort`, `page`/`keyword`, `why`, `est_clicks`); `seo-brief` (`seo/digest.py`) merges the latest report of every skill, drops `[done]` history items, ranks impact × effort and tracks first-seen dates in `brief_state.json`.
 - Page-level analyses merge `#fragment` jump links into their page (clicks summed, impressions from the largest variant) — `rules.collapse_fragments`.
 - Classification has one source: `seo/config/rules/<domain>.json` (ported from the SEO sheet, which should read the same file). Brand, query category, page tag/language, channel and tracked keywords come only from `seo/rules.py`; the site profile holds facts only and derives `languages`/`sections`/`services`/`priority_keywords` from the rules. Rule regexes stay RE2/JS-portable. GA4 channels/page types/languages are classified with the same rules (`ga4_metrics.py`, capability `ga4.landing_source`).
 - One degradation rule ([`data-source-map.md`](../seo/references/data-source-map.md)): required missing → stop; optional missing → `findings.unavailable`; never substitute estimates or memory.

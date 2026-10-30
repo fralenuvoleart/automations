@@ -38,5 +38,19 @@ def test_refuses_to_overwrite_without_force():
         assert _run(["--skill", "x", "--out-dir", d, "--as-of", "2026-10-29", "--force"]) == 0
 
 
+
+def test_site_name_is_validated_even_with_out_dir():
+    import contextlib
+    import io
+    import tempfile
+    with tempfile.TemporaryDirectory() as d, contextlib.redirect_stderr(io.StringIO()) as err:
+        try:
+            orchestrate.main(["--skill", "seo-audit", "--site", "../evil", "--days", "28", "--out-dir", d])
+            raise AssertionError("expected SystemExit")
+        except SystemExit as e:
+            assert e.code == 2
+    assert "invalid site" in err.getvalue()
+
+
 if __name__ == "__main__":
     main(globals())

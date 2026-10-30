@@ -165,5 +165,18 @@ def test_window_weeks_must_sit_inside_the_window():
     assert any("window.weeks[0]" in i for i in V.validate_structure(d))
 
 
+
+def test_structured_actions_are_validated():
+    d = _clone()
+    d["actions"] = ["legacy text action",
+                    {"action": "Add internal links to the target page", "impact": "high", "effort": "low",
+                     "page": "https://pbservices.ge/services/bank-account-georgia/", "why": "wrong page ranks", "est_clicks": 12}]
+    assert V.validate_structure(d) == []
+    d["actions"] = [{"action": "", "impact": "huge", "effort": "low", "page": "/x/", "est_clicks": -1, "owner": "me"}]
+    msg = " | ".join(V.validate_structure(d))
+    for part in ("non-empty 'action'", "impact must be", "absolute URL", "est_clicks", "unknown key 'owner'"):
+        assert part in msg, part
+
+
 if __name__ == "__main__":
     main(globals())

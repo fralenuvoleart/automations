@@ -60,9 +60,10 @@ Local tools: [`seo/dfs_metrics.py`](../../../seo/dfs_metrics.py) (`anchor-mix`, 
 <!--include:evidence days=28 flags=--compare_--source_ga4-->
 
 **Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-backlink-check --days 28 --compare --source ga4 --out-dir {run_dir}`. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-3. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+1. Seed the run: `python3 seo/orchestrate.py --skill seo-backlink-check --site <domain> --days 28 --compare --source ga4`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
+2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
+3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
+4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
 
 <!--/include-->
 
@@ -84,7 +85,7 @@ Provenance line first. **Verdict**: profile strength and, if asked, the gap vs t
 <!--include:pipeline-->
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-1. Write `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json); copy `window` verbatim from `.run_state.json`; set `sections[].window` when a section's data covers a different period.
+1. Write `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json); copy `window` verbatim from `.run_state.json`; set `sections[].window` when a section's data covers a different period. Write each action as an object — `{"action", "impact": high|medium|low, "effort": low|medium|high, "page" or "keyword", "why"}` (+ `est_clicks` only from a computed estimate) — so `seo-brief` can merge and rank actions across reports.
 2. Validate the findings: `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --data {run_dir}/context.json` — fix every error first.
 3. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 4. **Validate the report (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -147,7 +148,7 @@ Skill-specific: `seo/dfs_metrics.py` (Execute), [`seo/references/dataforseo-payl
 ## Privacy & Retention
 <!--include:privacy-->
 
-- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — keep them in the run directory and delete them when no longer needed.
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
 - Third-party calls: target domains/keywords/URLs are sent to DataForSEO (`dataforseo`) when those servers are used; everything else goes only to Google APIs via the configured MCP servers.
 
 <!--/include-->
@@ -156,7 +157,7 @@ Skill-specific: `seo/dfs_metrics.py` (Execute), [`seo/references/dataforseo-payl
 <!--include:output-structure-->
 
 ```
-{run_dir}/
+{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)

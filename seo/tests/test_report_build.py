@@ -69,5 +69,17 @@ def test_definitions_cover_only_terms_used():
     assert "Tracked keywords" not in build_report.definitions("a core idea")  # type names match case-sensitively
 
 
+
+def test_structured_actions_render_with_impact_effort_and_target():
+    d = json.loads(json.dumps(GOOD))
+    d["actions"] = [{"action": "Point internal links to the service page", "impact": "high", "effort": "low",
+                     "page": "https://pbservices.ge/services/bank-account-georgia/", "keyword": "bank account georgia",
+                     "why": "a blog post outranks it (11.7 vs 22.3)", "est_clicks": 12}, "Legacy action."]
+    md = build_report.build(d, generated_at="X")
+    assert ("1. Point internal links to the service page _(impact high, effort low, ~12 clicks/month (estimate))_ — "
+            "https://pbservices.ge/services/bank-account-georgia/; “bank account georgia”. Why: a blog post outranks it (11.7 vs 22.3)") in md
+    assert "2. Legacy action." in md
+
+
 if __name__ == "__main__":
     main(globals())

@@ -159,8 +159,10 @@ def validate_structure(findings) -> list[str]:
             issues.append(f"sections[{i}].estimate must be true/false")
 
     acts = findings.get("actions")
-    if acts is not None and (not isinstance(acts, list) or not all(isinstance(a, str) for a in acts)):
-        issues.append("actions must be a list of strings")
+    if acts is not None and not isinstance(acts, list):
+        issues.append("actions must be a list")
+    for i, a in enumerate(acts if isinstance(acts, list) else []):
+        issues += [f"actions[{i}]: {m}" for m in action_issues(a)]
     un = findings.get("unavailable")
     if un is not None:
         if not isinstance(un, list):
@@ -173,6 +175,34 @@ def validate_structure(findings) -> list[str]:
     if cov is not None and not isinstance(cov, dict):
         issues.append("coverage must be an object")
     return issues
+
+
+IMPACTS, EFFORTS = ("high", "medium", "low"), ("low", "medium", "high")
+ACTION_KEYS = {"action", "impact", "effort", "page", "keyword", "category", "why", "est_clicks"}
+
+
+def action_issues(a) -> list[str]:
+    """A structured action {action, impact, effort, …} or a legacy non-empty string."""
+    if isinstance(a, str):
+        return [] if a.strip() else ["empty action"]
+    if not isinstance(a, dict):
+        return ["must be an object (or a string)"]
+    out = [f"unknown key '{k}'" for k in sorted(set(a) - ACTION_KEYS)]
+    if not isinstance(a.get("action"), str) or not a["action"].strip():
+        out.append("needs a non-empty 'action'")
+    if a.get("impact") not in IMPACTS:
+        out.append(f"impact must be one of {IMPACTS}")
+    if a.get("effort") not in EFFORTS:
+        out.append(f"effort must be one of {EFFORTS}")
+    for k in ("page", "keyword", "category", "why"):
+        if k in a and not isinstance(a[k], str):
+            out.append(f"{k} must be a string")
+    if "page" in a and isinstance(a["page"], str) and not a["page"].startswith(("http://", "https://")):
+        out.append("page must be an absolute URL")
+    if "est_clicks" in a and (not isinstance(a["est_clicks"], (int, float)) or isinstance(a["est_clicks"], bool)
+                              or a["est_clicks"] < 0):
+        out.append("est_clicks must be a non-negative number")
+    return out
 
 
 # ------------------------------------------------------------------ validate ---

@@ -16,3 +16,6 @@ __pycache__/
 *.egg-info/
 venv/
 .venv/
+
+# SEO skills run folders + shared data cache (site data — never commit)
+.output/seo/

@@ -401,7 +401,11 @@ def _site(site: str | None):
         return dict(DEFAULTS), None
     import rules
     import site_profile
-    return site_profile.thresholds(site), rules.load(site)
+    try:
+        site_rules = rules.load(site)
+    except FileNotFoundError:
+        site_rules = None  # brand exclusion / brand-split unavailable; other analyses still run
+    return site_profile.thresholds(site), site_rules
 
 
 def main(argv: list[str] | None = None) -> int:

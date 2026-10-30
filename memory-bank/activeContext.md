@@ -10,16 +10,17 @@
 
 ## SEO/GEO skills toolkit (current state)
 
-**15 skills** in `.agents/skills/`:
-- **12 `seo-*` consolidated power skills** — `seo-audit`, `seo-ai-visibility`, `seo-backlink-check`, `seo-brand-split`, `seo-content-brief`, `seo-content-refresh`, `seo-indexation`, `seo-internal-links`, `seo-keyword-strategy`, `seo-paid-organic`, `seo-rank-tracking`, `seo-technical`.
+**16 skills** in `.agents/skills/`:
+- **13 `seo-*` skills** (12 reports + the weekly `seo-brief`) — `seo-audit`, `seo-ai-visibility`, `seo-backlink-check`, `seo-brand-split`, `seo-content-brief`, `seo-content-refresh`, `seo-indexation`, `seo-internal-links`, `seo-keyword-strategy`, `seo-paid-organic`, `seo-rank-tracking`, `seo-technical`.
 - **`kinsta-logs`** — Kinsta server-log analysis.
 - **`report-export`** — shared Markdown→PDF + email delivery; every report skill delegates to it.
 - **`web-to-pdf`** — webpage→PDF.
 
 **Non-skill SEO tooling** lives in `seo/`:
-- `capabilities.json` — single source of truth (capability → server + tool + `args` + `runtime` + `desc`), registry v7.
+- `capabilities.json` — single source of truth (capability → server + tool + `args` + `runtime` + `desc` + `policy`, incl. `cache_ttl_days`), registry v8.
 - `resolve.py` — renders `{{cap:}}` / `{{site:}}` / `{{include:}}` tokens into marker blocks and re-renders them on every `--write`; `--check` / `--validate-cached` / `--validate-live` / `--map`.
-- `record.py` (evidence), `gsc_metrics.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py` — deterministic run pipeline and analysis.
+- `record.py` (evidence + shared cache), `runs.py` (fixed git-ignored run folders, retention), `gsc_metrics.py`, `rules.py` (site classification shared with the SEO sheet), `ga4_metrics.py`, `site_crawl.py`, `dfs_metrics.py`, `ads_metrics.py`, `digest.py` (weekly brief) — deterministic run pipeline and analysis.
+- `config/settings.json` (run_root, retention, cache, brief cadence) and `config/rules/<domain>.json` (classification).
 - `site_profile.py` — per-site profile + action history (`config/sites/<domain>.json` / `.history.md`).
 - `coverage.py` — deterministic coverage block (flattened + per-language).
 - `window.py` / `orchestrate.py` — deterministic windows (GSC lag 3, GA4 lag 2, snapshot; previous/YoY) + run seeding (no silent overwrite).
@@ -44,6 +45,7 @@
 
 ## Recent Changes
 
+- **2026-10-30**: Efficiency + summary layer: fixed git-ignored run folder (`seo/config/settings.json` `run_root`, `seo/runs.py`, `orchestrate --site`, `.gitignore .output/seo/`); shared data cache in `record.py` (`--from-cache`, TTLs in capability `policy.cache_ttl_days`); structured actions (findings schema, validator, renderer); new `seo-brief` skill + `seo/digest.py` (8-week KPIs, merged/ranked actions, new vs open since, done history, due reports by `cadence_days`); `report-export` subject for `seo-brief`. CI green.
 - **2026-10-30**: Ported 5 more SEO-sheet practices: (1) target page per tracked keyword (19 proposed from 90-day GSC data, rule in the rules file) + `rules.py targets` (wrong page / not ranking); (2) top 3 countries per keyword (`gsc.geo_query` → `keywords --countries`); (3) Monday–Sunday weeks (`orchestrate --weeks N`, `window.weeks`, record accepts each week) + `rules.py trend` and rank-tracking weekly mode; (4) `ga4.landing_source` + `ga4_metrics.py breakdown` (channels/page types/languages by the rules; audit steps 8–9 now use it); (5) `ga4_metrics.py reconcile` (GSC clicks vs GA4 organic sessions, `(not set)` share) + automatic report Definitions (`references/definitions.json`). Jump-link (#) variants merged in page-level analyses. Registry v8. CI green.
 - **2026-10-30**: Ported the "PBS - SEO Rankings" sheet's Rules + Keyword Setup tabs into `seo/config/rules/pbservices.ge.json` (single classification source, meant to be read by the sheet's Apps Script too) with `seo/rules.py` (classify, `breakdown`, `keywords` with Proven/Opportunity/Generic picks + New/Lost status). Profile trimmed to site facts; `brand_terms`, `language_paths`, `ai_sources` removed (brand = `Brand` category, language = `page_languages`, AI filter = `AI assistants` channel); `priority_keywords` = Core keywords (20). Audit, rank-tracking, keyword-strategy use the breakdowns/tracked set. CI green.
 - **2026-10-30**: Applied every proposal from the 2026-10-30 audit (C1–C5, H1–H16, M1–M19, L1–L11 + optional items): evidence recording and a real hallucination gate; `gsc_metrics.py` replaces the window-ignoring `seo_audit` tool; page metrics from `page` rows; `rowLimit 25000` + `engine google` pinned; site CTR curve + labelled heuristic; planner limits (20/10), first-page reads, historical-metrics tool; Indexing API opt-in; `site_crawl.py` for link graph/hreflang/robots; profile cleanup (brand terms out of priority keywords, `Category` removed, AI hosts extended, Ads language constants); status-tagged history; all 12 skills rewritten from tokens + shared includes; offline CI. `seo/check.sh` ALL GREEN (offline). `.roo/mcp.json` and how credentials are read were left unchanged.

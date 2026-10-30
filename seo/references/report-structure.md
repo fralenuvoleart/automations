@@ -17,7 +17,7 @@ the rendered report.
    with `basis: gsc_impressions`, "covered" means ≥1 impression in the window.
 6. **Sections** — heading, optional data-window line (`sections[].window`, when the data covers a
    different period than the report window), prose body, optional table.
-7. **Action list** — prioritized, concrete.
+7. **Action list** — prioritized, concrete; each action an object with impact, effort and the page or keyword it concerns.
 8. **Definitions** *(automatic)* — `build_report.py` appends plain-language definitions for the
    metrics the report uses, from [`definitions.json`](definitions.json).
 

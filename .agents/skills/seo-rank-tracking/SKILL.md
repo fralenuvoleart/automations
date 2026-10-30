@@ -63,9 +63,10 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`), [`s
 <!--include:evidence days=28 flags=--compare-->
 
 **Run setup and evidence (mandatory).**
-1. Seed the run: `python3 seo/orchestrate.py --skill seo-rank-tracking --days 28 --compare --out-dir {run_dir}`. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
-2. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
-3. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
+1. Seed the run: `python3 seo/orchestrate.py --skill seo-rank-tracking --site <domain> --days 28 --compare`. It prints `run_dir: <path>` — the fixed, git-ignored run folder (`<run_root>/<site>/<date>/<skill>/`); use that path as `{run_dir}` below. The window in `{run_dir}/.run_state.json` is the only one you may pass to tools.
+2. **Cache first.** Before each data call, run `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args, JSON>' --from-cache`: exit 0 = the identical call was already made (same window and args, still valid) and is now recorded — skip the call; exit 3 = miss — make the call.
+3. After **every** tool call, save the raw response: `python3 seo/record.py --run-dir {run_dir} --cap <capability ID> --name <short_name> --args '<the runtime args you supplied, JSON>' --response-file <file or ->`. The capability ID is the one in the HTML comment around each call below (e.g. `gsc.page`). Non-MCP data (crawler, profile, user input) uses `--source site_crawl|site_profile|user`. `record.py` rejects non-runtime args and off-window dates.
+4. Compute with the scripts named in the steps, from the recorded `{run_dir}/data/*.json` files — never by eye. Every number and URL in the findings must come from a recorded response.
 
 <!--/include-->
 
@@ -79,7 +80,7 @@ Local tools: [`seo/gsc_metrics.py`](../../../seo/gsc_metrics.py) (`movers`), [`s
 5. **Bing divergence (optional).** Only if diagnostics shows Bing connected: <!--cap:gsc.compare_engines-->`search-console` → `compare_engines` (supply: siteUrl, dimension, startDate, endDate)<!--/cap--> with `dimension: query` for the same window.
 6. **SERP spot-check (optional).** DataForSEO configured → <!--cap:dfs.serp-->`dataforseo` → `api_request` {"method": "POST", "path": "/v3/serp/google/organic/live/advanced"} (supply: data)<!--/cap--> for the 3–5 most valuable losers ([payloads](../../../seo/references/dataforseo-payloads.md)); the section is a live snapshot (`window` note).
 
-7. **Weekly mode** (the SEO sheet's weekly report — use when asked for the weekly report, "this week" or a trend). Seed with `python3 seo/orchestrate.py --skill seo-rank-tracking --weeks 8 --out-dir {run_dir}` instead: 8 Monday–Sunday weeks ending with the latest complete week, each listed in `window.weeks`. For each week, oldest first: <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`query_w1` … `query_w8`) and <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`page_w1` … `page_w8`) — one pull per week, because a single 8-week query × date or page × date pull exceeds the 25,000-row limit on this site. Over the whole window: <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`pq`) and <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`geo`). Then:
+7. **Weekly mode** (the SEO sheet's weekly report — use when asked for the weekly report, "this week" or a trend). Seed with `python3 seo/orchestrate.py --skill seo-rank-tracking --site <domain> --weeks 8 --tag weekly` instead: 8 Monday–Sunday weeks ending with the latest complete week, each listed in `window.weeks`. For each week, oldest first: <!--cap:gsc.query-->`search-console` → `analytics_query` {"dimensions": ["query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`query_w1` … `query_w8`) and <!--cap:gsc.page-->`search-console` → `analytics_query` {"dimensions": ["page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`page_w1` … `page_w8`) — one pull per week, because a single 8-week query × date or page × date pull exceeds the 25,000-row limit on this site. Over the whole window: <!--cap:gsc.page_query-->`search-console` → `analytics_query` {"dimensions": ["query", "page"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`pq`) and <!--cap:gsc.geo_query-->`search-console` → `analytics_query` {"dimensions": ["country", "query"], "rowLimit": 25000, "engine": "google"} (supply: siteUrl, startDate, endDate)<!--/cap--> (`geo`). Then:
    - `python3 seo/rules.py --site <domain> trend --by category --rows {run_dir}/data/query_w1.json … query_w8.json`, the same with `--by keyword`, and `--by page_tag` / `--by language` with `page_w1.json … page_w8.json` → week-by-week clicks, impressions and position (`low_volume` cells are noise, never trends);
    - report week vs previous week: `movers --cur query_w8.json --prev query_w7.json` (step 3), `rules.py keywords --query query_w8.json --prev query_w7.json --countries geo.json` (step 3b), `rules.py targets --page-query pq.json` (step 3c).
 
@@ -93,7 +94,7 @@ Provenance line first. **Verdict**: net movement and the single biggest move (an
 <!--include:pipeline-->
 
 ### Deliverable pipeline (mechanical — never hand-edit the rendered report)
-1. Write `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json); copy `window` verbatim from `.run_state.json`; set `sections[].window` when a section's data covers a different period.
+1. Write `{run_dir}/findings.json` per [`findings-schema.json`](../../../seo/references/findings-schema.json); copy `window` verbatim from `.run_state.json`; set `sections[].window` when a section's data covers a different period. Write each action as an object — `{"action", "impact": high|medium|low, "effort": low|medium|high, "page" or "keyword", "why"}` (+ `est_clicks` only from a computed estimate) — so `seo-brief` can merge and rank actions across reports.
 2. Validate the findings: `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --data {run_dir}/context.json` — fix every error first.
 3. Render: `python3 seo/report/build_report.py --findings {run_dir}/findings.json --out {run_dir}/report.md`.
 4. **Validate the report (mandatory):** `python3 seo/report/validate_report.py --findings {run_dir}/findings.json --report {run_dir}/report.md --data {run_dir}/context.json`.
@@ -158,7 +159,7 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute).
 ## Privacy & Retention
 <!--include:privacy-->
 
-- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — keep them in the run directory and delete them when no longer needed.
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the git-ignored run folder (`python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
 - Third-party calls: target domains/keywords/URLs are sent to Tavily (`tavily`), DataForSEO (`dataforseo`) when those servers are used; everything else goes only to Google APIs via the configured MCP servers.
 
 <!--/include-->
@@ -167,7 +168,7 @@ Skill-specific: `seo/gsc_metrics.py` (Execute), `seo/rules.py` (Execute).
 <!--include:output-structure-->
 
 ```
-{run_dir}/
+{run_dir}/             # <run_root>/<site>/<date>/<skill>/ (seo/runs.py; git-ignored)
   .run_state.json     # window + paths (seo/orchestrate.py)
   context.json        # evidence index (seo/record.py)
   data/*.json         # raw tool responses (seo/record.py)

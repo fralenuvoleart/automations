@@ -136,5 +136,17 @@ def test_cli_reads_dims_from_recorded_context():
         assert rc == 0 and json.loads(buf.getvalue())["pages"][0]["class"] == "demand_drop"
 
 
+
+def test_site_without_rules_still_runs_non_brand_analyses():
+    import rules
+    saved = rules.load
+    rules.load = lambda site: (_ for _ in ()).throw(FileNotFoundError(site))
+    try:
+        thr, site_rules = G._site("pbservices.ge")
+        assert site_rules is None and thr["min_impressions"] == G.DEFAULTS["min_impressions"]
+    finally:
+        rules.load = saved
+
+
 if __name__ == "__main__":
     main(globals())

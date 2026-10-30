@@ -101,5 +101,95 @@ def test_weekly_run_accepts_each_week_and_rejects_partial_weeks():
                                             args={**a, "startDate": "2026-10-20", "endDate": "2026-10-25"}), "its weeks")
 
 
+
+def _site_run(root, skill, as_of="2026-10-30", extra=()):
+    import contextlib
+    import io
+    import runs
+    runs.settings = lambda: {"run_root": str(root), "cache": True, "retention_days": 180}
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert orchestrate.main(["--skill", skill, "--site", "pbservices.ge", "--days", "28", "--compare",
+                                 "--as-of", as_of, *extra]) == 0
+    return runs.run_dir("pbservices.ge", as_of, skill, None if not extra else extra[-1])
+
+
+def test_cache_reuses_windowed_data_across_skills_and_skips_errors():
+    import runs
+    saved = runs.settings
+    with tempfile.TemporaryDirectory() as root:
+        try:
+            a, b = _site_run(Path(root), "seo-audit"), _site_run(Path(root), "seo-brand-split")
+            win = json.loads((a / ".run_state.json").read_text())["window"]
+            args = {"siteUrl": "sc-domain:pbservices.ge", "startDate": win["startDate"], "endDate": win["endDate"]}
+            assert record.record_from_cache(b, "query_cur", "gsc.query", args) is None          # miss
+            record.record(a, "query_cur", '{"rows": [{"keys": ["x"], "clicks": 1}]}', cap="gsc.query", args=args)
+            out = record.record_from_cache(b, "query_cur", "gsc.query", args)                    # hit in another skill's run
+            assert json.loads(out.read_text())["rows"][0]["keys"] == ["x"]
+            call = json.loads((b / "context.json").read_text())["calls"][0]
+            assert call["cached_from"] and call["args"]["rowLimit"] == 25000
+            other = {**args, "siteUrl": "sc-domain:other.ge"}
+            assert record.record_from_cache(b, "q2", "gsc.query", other) is None                # different args: miss
+            record.record(a, "page_cur", '{"error": "quota exceeded"}', cap="gsc.page", args=args)
+            assert record.record_from_cache(b, "page_cur", "gsc.page", args) is None             # errors never cached
+            record.record(a, "diag", '{"ok": true}', cap="gsc.diagnostics")
+            assert record.cached(b, "gsc.diagnostics", {}) is None                                # undated live data: not cached
+            _expect_error(lambda: record.record_from_cache(b, "bad", "gsc.query", {**args, "startDate": "2020-01-01"}),
+                          "matches neither")                                                      # guards still apply
+        finally:
+            runs.settings = saved
+
+
+def test_cache_ttl_for_live_capabilities():
+    import datetime as dt
+    import runs
+    saved = runs.settings
+    with tempfile.TemporaryDirectory() as root:
+        try:
+            a = _site_run(Path(root), "seo-technical")
+            args = {"url": "https://pbservices.ge/", "strategy": "mobile"}
+            record.record(a, "psi", '{"lighthouseResult": {}}', cap="gsc.pagespeed", args=args)
+            assert record.cached(a, "gsc.pagespeed", args) is not None
+            later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=8)
+            assert record.cached(a, "gsc.pagespeed", args, now=later) is None                     # 7-day TTL
+            runs.settings = lambda: {"run_root": root, "cache": False}
+            assert record.cached(a, "gsc.pagespeed", args) is None                                # cache switched off
+        finally:
+            runs.settings = saved
+
+
+def test_cli_from_cache_exit_codes():
+    import contextlib
+    import io
+    import runs
+    saved = runs.settings
+    with tempfile.TemporaryDirectory() as root:
+        try:
+            a = _site_run(Path(root), "seo-audit")
+            win = json.loads((a / ".run_state.json").read_text())["window"]
+            args = json.dumps({"siteUrl": "sc-domain:pbservices.ge", "startDate": win["startDate"], "endDate": win["endDate"]})
+            base = ["--run-dir", str(a), "--cap", "gsc.page", "--name", "page_cur", "--args", args]
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert record.main([*base, "--from-cache"]) == record.CACHE_MISS
+                f = Path(root) / "resp.json"
+                f.write_text('{"rows": []}')
+                assert record.main([*base, "--response-file", str(f)]) == 0
+                assert record.main([*base, "--from-cache"]) == 0
+        finally:
+            runs.settings = saved
+
+
+
+def test_only_final_dated_windows_are_kept_forever():
+    import datetime as dt
+    today = dt.date(2026, 10, 30)
+    gsc, ga4 = {"server": "search-console"}, {"server": "analytics"}
+    assert record._final_window(gsc, {"startDate": "2026-09-01", "endDate": "2026-10-27"}, today)        # lag 3
+    assert not record._final_window(gsc, {"startDate": "2026-10-01", "endDate": "2026-10-28"}, today)    # may still change
+    assert record._final_window(ga4, {"date_ranges": [{"start_date": "2026-10-01", "end_date": "2026-10-28"}]}, today)
+    assert not record._final_window(ga4, {"date_ranges": [{"start_date": "28daysAgo", "end_date": "yesterday"}]}, today)
+    assert not record._final_window(gsc, {"startDate": "2026-09-01", "endDate": "2026-10-20",
+                                          "compareStartDate": "x", "compareEndDate": "2026-08-31"}, today)
+
+
 if __name__ == "__main__":
     main(globals())

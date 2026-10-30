@@ -60,7 +60,7 @@ def test_render_is_idempotent_and_expands_tokens():
     assert "{{cap:" not in once and "{{include:" not in once and "{{site:" not in once
     assert "<!--cap:gsc.page-->`search-console` → `analytics_query`" in once
     assert "| `gsc.page` |" in once and "| `gsc.query` |" in once          # generated table
-    assert "--days 28 --compare --out-dir" in once                      # include attrs
+    assert "--site <domain> --days 28 --compare`" in once               # include attrs (fixed run folder, no --out-dir)
     assert resolve.render(once, "seo-demo") == once
 
 

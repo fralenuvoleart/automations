@@ -7,10 +7,14 @@ responses, and a `findings.json` skeleton conforming to
 [`seo/references/findings-schema.json`](references/findings-schema.json).
 Refuses to overwrite an existing run unless `--force` is given.
 
+The run folder is fixed (seo/runs.py): `<run_root>/<site>/<as_of>/<skill>[-<tag>]/`, with
+`run_root` from seo/config/settings.json; it must be git-ignored. Prints `run_dir: <path>`.
+`--out-dir` overrides the location (tests, one-off runs).
+
 Usage:
-    python3 seo/orchestrate.py --skill seo-audit --days 90 --compare --out-dir .output/seo-audit
-    python3 seo/orchestrate.py --skill seo-technical --source snapshot --out-dir .output/seo-technical
-    python3 seo/orchestrate.py --skill seo-rank-tracking --weeks 8 --out-dir .output/seo-rank-tracking
+    python3 seo/orchestrate.py --skill seo-audit --site pbservices.ge --days 90 --compare
+    python3 seo/orchestrate.py --skill seo-technical --site pbservices.ge --source snapshot
+    python3 seo/orchestrate.py --skill seo-rank-tracking --site pbservices.ge --weeks 8 --tag weekly
 Exit codes: 0 = written, 1 = refused (run exists).
 """
 from __future__ import annotations
@@ -23,6 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import runs  # noqa: E402
 import window  # noqa: E402
 
 
@@ -36,7 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare", action="store_true")
     ap.add_argument("--yoy", action="store_true")
     ap.add_argument("--as-of", dest="as_of", default=None, help="YYYY-MM-DD anchor (default: today UTC)")
-    ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--site", help="domain, e.g. pbservices.ge (run folder under run_root)")
+    ap.add_argument("--tag", help="suffix for a second run of the same skill on one day, e.g. weekly")
+    ap.add_argument("--out-dir", help="explicit run folder (overrides the run_root layout)")
     ap.add_argument("--force", action="store_true", help="overwrite an existing run directory's files")
     args = ap.parse_args(argv)
 
@@ -45,17 +52,36 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--yoy is not available with --weeks")
     win = (window.resolve_weeks(args.weeks, as_of, args.lag, args.compare, args.source) if args.weeks
            else window.resolve(args.days, as_of, args.lag, args.compare, args.yoy, args.source))
-    run_dir = Path(args.out_dir)
+    if args.site:
+        try:
+            runs._name(args.site, "site")
+        except ValueError as e:
+            ap.error(str(e))
+    if args.out_dir:
+        run_dir = Path(args.out_dir)
+    elif args.site:
+        try:
+            run_dir = runs.run_dir(args.site, win["as_of"], args.skill, args.tag)
+        except ValueError as e:
+            ap.error(str(e))
+        problem = runs.ignore_problem()
+        if problem:
+            print(f"ERROR {problem}: add it to .gitignore or set run_root in seo/config/settings.json", file=sys.stderr)
+            return 1
+    else:
+        ap.error("pass --site (fixed run folder) or --out-dir")
     targets = [run_dir / n for n in (".run_state.json", "context.json", "findings.json")]
     existing = [p for p in targets if p.exists()]
     if existing and not args.force:
         print(f"ERROR run already seeded ({', '.join(p.name for p in existing)} exist in {run_dir}); "
-              f"use a new --out-dir or pass --force to overwrite", file=sys.stderr)
+              f"use --tag, a new --out-dir or pass --force to overwrite", file=sys.stderr)
         return 1
     (run_dir / "data").mkdir(parents=True, exist_ok=True)
 
     (run_dir / ".run_state.json").write_text(json.dumps({
         "skill": args.skill,
+        "site": args.site,
+        "tag": args.tag,
         "window": win,
         "paths": {
             "context": str(run_dir / "context.json"),
@@ -75,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     }, indent=2) + "\n")
 
     print(f"wrote {run_dir}/.run_state.json, context.json, findings.json and data/ ({window.as_of_line(win).split(' · generated')[0]})")
+    print(f"run_dir: {run_dir}")
     return 0
 
 
