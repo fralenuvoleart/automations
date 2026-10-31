@@ -151,6 +151,11 @@ def test_every_capability_is_used_by_a_skill():
     assert set(caps) == used, f"unused: {sorted(set(caps) - used)}"
 
 
+def test_tool_map_is_not_stale():
+    """`--map` output is compared to the file: a registry edit that is not re-rendered fails CI."""
+    assert resolve.map_text() == (SEO / "tool-map.md").read_text()
+
+
 def test_data_sources_come_from_the_plan_plus_agent_calls():
     text = resolve.render("## Data Sources\n{{include:datasources}}\n\n1. Fallback {{cap:web.extract}}.\n"
                           "{{include:privacy}}\n", "seo-ai-visibility")

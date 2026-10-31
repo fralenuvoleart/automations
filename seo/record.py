@@ -3,7 +3,8 @@
 
 Every number or URL in a report must trace back to a recorded response. Call this
 right after each MCP/tool call: it stores the raw response in
-``{run_dir}/data/<name>.json`` and appends provenance (capability, full call
+``{run_dir}/data/<name>.json`` plus, when the tool wrapped it, ``<name>.rows.json`` with the same answer
+as plain rows (what a spreadsheet wants); it appends provenance (capability, full call
 args incl. the registry's fixed args, timestamp) to ``{run_dir}/context.json``.
 ``validate_report.py --data {run_dir}/context.json`` then checks every URL in the
 findings against these files.
@@ -45,6 +46,33 @@ import window  # noqa: E402
 CACHE_MISS = 3
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _tabular(payload) -> bool:
+    """Does this answer contain rows (a list of objects)? Only then is a `.rows.json` copy useful."""
+    if isinstance(payload, list):
+        return any(isinstance(x, dict) for x in payload)
+    if isinstance(payload, dict):
+        return any(isinstance(v, list) and any(isinstance(x, dict) for x in v) for v in payload.values())
+    return False
+
+
+def unwrapped(parsed):
+    """The tool's answer without the transport wrapper (content[].text), or None when it is already plain.
+
+    Saved as ``data/<name>.rows.json`` so the same answer can be read as plain rows without knowing
+    how the tool layered it.
+    """
+    if not isinstance(parsed, dict) or "content" not in parsed:
+        return None
+    for part in parsed.get("content") or []:
+        text = part.get("text") if isinstance(part, dict) else None
+        if isinstance(text, str) and text.strip().startswith(("{", "[")):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return None
+    return None
 
 
 def _parse_response(raw: str):
@@ -202,6 +230,10 @@ def record(run_dir: Path, name: str, raw: str, cap: str | None = None, source: s
     out = data_dir / f"{name}.json"
     parsed = _parse_response(raw)
     out.write_text(json.dumps(parsed, ensure_ascii=False, indent=1) + "\n")
+    plain = unwrapped(parsed)
+    if plain is not None and _tabular(plain):  # the same answer as plain rows (see runs.py export)
+        (data_dir / f"{name}.rows.json").write_text(json.dumps(plain, ensure_ascii=False, indent=1) + "\n")
+        entry["rows_file"] = f"data/{name}.rows.json"
     if cap and not _cached_from and "window_exception" not in entry:
         _store(run_dir, cap, c, entry["args"], parsed)
     entry["file"] = f"data/{name}.json"

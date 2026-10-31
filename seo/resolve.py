@@ -202,7 +202,7 @@ def _gen_configuration(caps_in: list[str], data: dict) -> str:
 def _gen_privacy(caps_in: list[str], data: dict, text: str, plan_scripts: bool = False) -> str:
     third = [(s, data["servers"][s]["third_party"]) for s in _servers_used(caps_in, data)
              if data["servers"].get(s, {}).get("third_party")]
-    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`."]
+    lines = ["- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` (or `pipeline.py --prune`) deletes runs and cache entries older than `retention_days`."]
     if third:
         names = ", ".join(f"{p} (`{s}`)" for s, p in third)
         lines.append(f"- Third-party calls: target domains/keywords/URLs are sent to {names} when those servers are used; everything else goes only to Google APIs via the configured MCP servers.")
@@ -511,8 +511,8 @@ def write(skills: Path | None = None) -> int:
     return 0
 
 
-def write_map() -> int:
-    """Regenerate seo/tool-map.md from the registry."""
+def map_text() -> str:
+    """The generated seo/tool-map.md content (a test compares it to the file, so drift fails CI)."""
     data, caps, disp, _alias = load()
     out = ["# MCP Tool Map (SEO)", "",
            "Generated from [`capabilities.json`](capabilities.json) by `python3 seo/resolve.py --map`. Do not edit by hand.", "",
@@ -522,7 +522,12 @@ def write_map() -> int:
     out += ["", "## Capabilities", "", "| Capability | Call | Purpose |", "|---|---|---|"]
     for cid in sorted(caps):
         out.append(f"| `{cid}` | {disp[cid]} | {caps[cid].get('desc', '')} |")
-    (HERE / "tool-map.md").write_text("\n".join(out) + "\n")
+    return "\n".join(out) + "\n"
+
+
+def write_map() -> int:
+    """Regenerate seo/tool-map.md from the registry."""
+    (HERE / "tool-map.md").write_text(map_text())
     print("wrote seo/tool-map.md")
     return 0
 

@@ -28,6 +28,7 @@ sys.path.insert(0, str(HERE.parent))  # seo/
 import window  # noqa: E402
 sys.path.insert(0, str(HERE))
 from number_check import Index, check as number_issues  # noqa: E402
+import schema_lite  # noqa: E402
 
 URL_RE = re.compile(r"https?://[^\s)\]\"'<>|`]+")
 TRAILING = ".,;:!?)]}'\"»”’…"
@@ -101,7 +102,7 @@ def _where(path) -> str:
 
 
 def _schema_messages(err, schema) -> list[str]:
-    """Readable messages for one jsonschema error (the schema's `x-message` when it has one)."""
+    """Readable messages for one schema failure (the schema's `x-message` when it has one)."""
     where = _where(err.absolute_path)
     pre = f"{where}: " if where else ""
     v = err.validator
@@ -142,14 +143,14 @@ def _schema_messages(err, schema) -> list[str]:
 
 
 def validate_structure(findings) -> list[str]:
-    """Structure from findings-schema.json (jsonschema, Draft 7), then the cross-field rules a schema
-    cannot express. Safe on any input."""
-    try:
-        import jsonschema
-    except ImportError:
-        return ["jsonschema is required to validate findings — pip install jsonschema (see seo/requirements.txt)"]
+    """Structure from findings-schema.json (schema_lite, Draft-7 subset), then the cross-field rules a
+    schema cannot express. Safe on any input."""
     schema = json.loads(SCHEMA_PATH.read_text())
-    errors = sorted(jsonschema.Draft7Validator(schema).iter_errors(findings), key=lambda e: list(map(str, e.absolute_path)))
+    try:
+        schema_lite.check_schema(schema)  # fail loudly if the schema grows a keyword we cannot enforce
+        errors = sorted(schema_lite.iter_errors(findings, schema), key=lambda e: list(map(str, e.absolute_path)))
+    except schema_lite.SchemaUnsupported as e:  # the schema grew a keyword we cannot enforce: fail loudly
+        return [f"findings-schema.json uses an unsupported keyword at {e} — extend seo/report/schema_lite.py"]
     issues = list(dict.fromkeys(m for e in errors for m in _schema_messages(e, schema)))
     if issues:
         return issues

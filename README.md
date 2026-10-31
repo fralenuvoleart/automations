@@ -18,6 +18,15 @@ services/
 └── python/               ← Future: AI/NLP, data analytics, image processing
 ```
 
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [`docs/SEO.md`](docs/SEO.md) | the 13 SEO reports: what each answers, what it needs, where the output lands, cadence, known limits |
+| [`seo/COMMANDS.md`](seo/COMMANDS.md) | every command worth remembering: running a report, history and spreadsheets, validation, cache, site setup, health checks |
+| [`seo/README.md`](seo/README.md) | the toolkit internals: registry, data plans, pipeline, evidence gate |
+| [`docs/WARMER.md`](docs/WARMER.md) | the cache warmer in `services/nodejs/` |
+
 ## Sevalla
 
 | App | Build path | Pod | Cost |

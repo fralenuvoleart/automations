@@ -158,7 +158,7 @@ Skill-specific: `seo/site_crawl.py` (Execute), `seo/gsc_metrics.py` (Execute), [
 ## Privacy & Retention
 <!--include:privacy-->
 
-- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` deletes runs older than `retention_days`.
+- Findings, raw tool responses (`context.json`, `data/`) and the report contain the site's own data — they stay in the run folder outside git (`run_root` in `seo/config/settings.json`; `python3 seo/runs.py root`); `python3 seo/runs.py prune` (or `pipeline.py --prune`) deletes runs and cache entries older than `retention_days`.
 - Third-party calls: target domains/keywords/URLs are sent to DataForSEO (`dataforseo`), Tavily (`tavily`) when those servers are used; everything else goes only to Google APIs via the configured MCP servers.
 - `seo/site_crawl.py` fetches public pages directly from the target site (polite rate, identifying User-Agent).
 

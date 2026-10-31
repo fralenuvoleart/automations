@@ -24,7 +24,6 @@ Exit codes: 0 = done (see pipeline.json for optional gaps), 1 = plan error or a 
 from __future__ import annotations
 
 import argparse
-import copy
 import datetime as dt
 import json
 import re
@@ -40,6 +39,7 @@ import mcp_client  # noqa: E402
 import orchestrate  # noqa: E402
 import record  # noqa: E402
 import resolve  # noqa: E402
+import runs  # noqa: E402
 import site_profile  # noqa: E402
 
 PLANS = HERE / "data-plans"
@@ -53,7 +53,12 @@ class PlanError(Exception):
 
 
 class StepFailed(Exception):
-    pass
+    """A call or step failed. ``kind`` is "transient" or "permanent" when the source knows it
+    (see `Context.call_raw`); the retry decision prefers it over the message pattern."""
+
+    def __init__(self, message: str, kind: str | None = None):
+        super().__init__(message)
+        self.kind = kind
 
 
 # ---------------------------------------------------------------- clients ---
@@ -222,8 +227,10 @@ class Context:
         self.profile = site_profile.load_profile(site)
         self._gsc_property = self.profile.get("gsc_property")
         self.dry_run = False
+        self.force = False     # set by execute(force=...): fetch everything again instead of reusing saved answers
         self.write_ok = False  # set by execute(allow_write=...): a write capability refuses without it
         self.retries = 0       # temporary failures retried in this run (pipeline.json)
+        self.retry_slept = 0.0  # seconds spent waiting between retries (bounded by MAX_RETRY_SLEEP_S)
         self.sleep = time.sleep
 
     # values
@@ -282,13 +289,20 @@ class Context:
                 res = self.clients.call(c["server"], c["tool"], {**(c.get("args") or {}), **args})
                 if not isinstance(res, dict) or res.get("isError"):
                     text = " ".join(x.get("text", "") for x in (res or {}).get("content", []) if isinstance(x, dict))
-                    raise StepFailed(text[:300] or "MCP tool returned an error")
+                    # classify where the text is still the server's own words
+                    raise StepFailed(text[:300] or "MCP tool returned an error",
+                                     kind="transient" if _transient_text(text) else "permanent")
                 return res
             except (StepFailed, TimeoutError, RuntimeError) as e:
                 if attempt >= retries or not _transient(e):
                     raise
+                delay = RETRY_BASE_S * 3 ** attempt
+                if self.retry_slept + delay > MAX_RETRY_SLEEP_S:  # a pull may make up to 64 calls: bound the waiting
+                    raise StepFailed(f"{cap}: retry budget spent ({self.retry_slept:.0f}s of {MAX_RETRY_SLEEP_S:.0f}s "
+                                     f"already waited this run)", kind="permanent")
                 self.retries += 1
-                self.sleep(RETRY_BASE_S * 3 ** attempt)
+                self.retry_slept += delay
+                self.sleep(delay)
         raise AssertionError("unreachable")
 
     def fetch(self, cap: str, args: dict, confirm: bool = False) -> tuple[dict, dict]:
@@ -557,9 +571,15 @@ def _items(ctx: Context, st: dict) -> list:
 
 DEFAULT_RETRY = 2           # retries of a temporary failure when the capability sets no policy.retry
 RETRY_BASE_S = 2.0          # waits 2 s, then 6 s
+MAX_RETRY_SLEEP_S = 120.0   # total waiting per run: a split/paged pull can make 64 calls
+# Classification, in this order: an explicit retryable marker wins, then an explicit client error, then the
+# broad "something temporary happened" pattern (5xx, timeouts, a crashed server).
+RETRYABLE_RE = re.compile(r"resource.?exhausted|quota|rate.?limit|too many requests|\b429\b", re.I)
+PERMANENT_RE = re.compile(r"\b(400|401|403|404|409|422)\b|invalid|unauthor|permission denied|not found"
+                          r"|does not exist|missing required|bad request", re.I)
 TRANSIENT_RE = re.compile(r"\b(429|500|502|503|504)\b|too many requests|rate.?limit|timed? ?out|timeout|temporar"
-                          r"|unavailable|deadline exceeded|try again|backend error|connection reset|exited with code",
-                          re.I)
+                          r"|unavailable|deadline exceeded|try again|backend error|connection reset|exited with code"
+                          r"|resource.?exhausted|quota|overloaded", re.I)
 GA4_DEFAULT_LIMIT = 10000   # GA4 runReport returns at most this many rows when no limit is given
 MAX_CALLS_PER_PULL = 64     # splitting / paging budget for one pull
 META = "_pipeline"          # completeness marker the pipeline adds to a merged response
@@ -571,9 +591,23 @@ def _timed(entry: dict, t0: float, retries: int) -> None:
         entry["retries"] = retries
 
 
+def _transient_text(text: str) -> bool:
+    """Does this error text describe something temporary? Retryable markers first, client errors second."""
+    if RETRYABLE_RE.search(text or ""):
+        return True
+    if PERMANENT_RE.search(text or ""):
+        return False
+    return bool(TRANSIENT_RE.search(text or ""))
+
+
 def _transient(e: Exception) -> bool:
-    """Worth retrying: a timeout, or an error whose text names a temporary condition (never bad args/auth)."""
-    return isinstance(e, TimeoutError) or bool(TRANSIENT_RE.search(str(e)))
+    """Worth retrying: a timeout, a failure classified transient at the source, or (backstop) the message."""
+    if isinstance(e, TimeoutError):
+        return True
+    kind = getattr(e, "kind", None)
+    if kind is not None:
+        return kind == "transient"
+    return _transient_text(str(e))
 
 
 def _payload(raw):
@@ -683,7 +717,7 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                     continue
                 c = ctx.caps[st["cap"]]
                 full = {**(c.get("args") or {}), **args}
-                hit = record.cached(ctx.run_dir, st["cap"], args)
+                hit = None if ctx.force else record.cached(ctx.run_dir, st["cap"], args)
                 hit_pl = _payload(hit["response"]) if hit is not None else None
                 meta = hit_pl.get(META) if isinstance(hit_pl, dict) else None
                 # reuse a cached pull unless it is a plain response cut at the limit (re-fetched and completed);
@@ -718,6 +752,9 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                 entry["run"] = [run[0], *_argv(ctx, run)]
             except StepFailed as e:
                 entry["run"] = [run[0], f"<{e}>"]
+            entry.update({"status": "skipped", "reason": "dry run: not executed"})
+            continue
+        if kind == "compute" and ctx.dry_run:  # nothing was pulled, so there is nothing to compute
             entry.update({"status": "skipped", "reason": "dry run: not executed"})
             continue
         t0 = time.monotonic()
@@ -785,6 +822,7 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
         as_of=as_of, tag=tag if tag is not None else (mode or None), out_dir=out_dir, force=force)
     ctx = Context(site, run_dir, inputs, clients, caps)
     ctx.dry_run = dry_run
+    ctx.force = force
     ctx.write_ok = allow_write
     report: list = []
     status = "ok"
@@ -836,6 +874,7 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
                # validate_report.py refuses figures found only there
                "truncated": [e["name"] for e in report if e.get("truncated")],
                "retries": ctx.retries,
+               "retry_seconds": round(ctx.retry_slept, 1),
                "tainted": [e["file"] for e in report if e.get("tainted_by") and e.get("file")]}
     (run_dir / "pipeline.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
     fp = run_dir / "findings.json"
@@ -864,6 +903,17 @@ def check_plans() -> list[str]:
     return issues
 
 
+def prune_old() -> list[str]:
+    """Delete runs and cache entries older than `retention_days` (the retention policy is otherwise manual)."""
+    removed = runs.prune()
+    days = runs.settings().get("retention_days")
+    print(f"pruned {len(removed)} item(s) older than {days} days" if removed else
+          f"nothing older than {days} days to prune")
+    for item in removed:
+        print(f"  - {item}")
+    return removed
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skill")
@@ -876,9 +926,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare", action="store_true", default=None)
     ap.add_argument("--yoy", action="store_true")
     ap.add_argument("--tag")
-    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="fetch every call again (ignore the saved answers) and overwrite an existing run folder")
     ap.add_argument("--dry-run", action="store_true", help="resolve the plan in a temp folder; call nothing")
     ap.add_argument("--check-plans", action="store_true")
+    ap.add_argument("--prune", action="store_true",
+                    help="first delete runs and cache entries older than retention_days (alone: just prune)")
     ap.add_argument("--allow-write", action="store_true",
                     help="permit write capabilities whose step sets \"confirm\": true")
     a = ap.parse_args(argv)
@@ -888,6 +941,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR {i}")
         print("OK — every data plan is valid" if not issues else f"{len(issues)} issue(s)")
         return 1 if issues else 0
+    if a.prune:  # before seeding, so the run about to start is never a candidate
+        prune_old()
+        if not a.skill:
+            return 0
     if not a.skill or not a.site:
         ap.error("--skill and --site are required")
     inputs = dict(kv.split("=", 1) for kv in a.input if "=" in kv)

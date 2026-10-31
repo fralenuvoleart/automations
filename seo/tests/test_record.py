@@ -191,5 +191,35 @@ def test_only_final_dated_windows_are_kept_forever():
                                           "compareStartDate": "x", "compareEndDate": "2026-08-31"}, today)
 
 
+def test_a_wrapped_answer_also_gets_a_plain_rows_file():
+    """data/<name>.json stays exactly as received; <name>.rows.json is the same answer, readable."""
+    import runs
+    saved = runs.settings
+    with tempfile.TemporaryDirectory() as root:
+        try:
+            d = _site_run(Path(root), "seo-audit")
+            win = json.loads((d / ".run_state.json").read_text())["window"]
+            args = {"siteUrl": "sc-domain:pbservices.ge", "startDate": win["startDate"], "endDate": win["endDate"]}
+            wrapped = {"content": [{"type": "text", "text": json.dumps({"rows": [{"keys": ["https://x.ge/a/"],
+                                                                                  "clicks": 3}]})}],
+                       "isError": False}
+            record.record(d, "page_cur", json.dumps(wrapped), cap="gsc.page", args=args)
+            assert json.loads((d / "data" / "page_cur.json").read_text()) == wrapped          # untouched
+            rows = json.loads((d / "data" / "page_cur.rows.json").read_text())
+            assert rows["rows"][0]["clicks"] == 3                                              # plain
+            call = json.loads((d / "context.json").read_text())["calls"][0]
+            assert call["rows_file"] == "data/page_cur.rows.json" and call["file"] == "data/page_cur.json"
+            record.record(d, "plain", '{"rows": []}', cap="gsc.page", args=args)               # already plain
+            assert not (d / "data" / "plain.rows.json").exists()
+            record.record(d, "diag", json.dumps({"content": [{"type": "text", "text": '{"ok": true}'}]}),
+                          cap="gsc.diagnostics")                                                # not a table
+            assert not (d / "data" / "diag.rows.json").exists()
+            record.record(d, "crawl", '{"pages": {}}', source="site_crawl")                     # local step
+            assert not (d / "data" / "crawl.rows.json").exists()
+        finally:
+            runs.settings = saved
+
+
 if __name__ == "__main__":
     main(globals())
+

@@ -1,0 +1,7 @@
+# Development-only dependency (never needed to run the toolkit or its CI gate).
+# The reference JSON-Schema validator is used as an *oracle* by
+# seo/tests/test_schema_equivalence.py to prove seo/report/schema_lite.py enforces what
+# references/findings-schema.json declares. Without it that test prints SKIP and passes.
+#
+# The Keyword Planner MCP server has its own venv and pins: see seo/requirements.txt.
+jsonschema>=4.18,<5

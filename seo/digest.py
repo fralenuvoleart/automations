@@ -32,6 +32,7 @@ import site_profile  # noqa: E402
 
 BRIEF = "seo-brief"
 STATE = "brief_state.json"
+PLANS = HERE / "data-plans"
 IMPACT = {"high": 3, "medium": 2, "low": 1}
 EFFORT = {"low": 3, "medium": 2, "high": 1}
 
@@ -71,20 +72,40 @@ def _pct(new, old):
 
 
 # ---------------------------------------------------------------- collect ---
+def _blocked(skill: str, ok) -> list[str]:
+    """Servers the skill's plan insists on but that are not configured: such a report can never run, so it is
+    'blocked', not merely 'due' (`plan.requires_servers` is the same rule the pipeline enforces)."""
+    p = PLANS / f"{skill}.json"
+    if not p.exists():
+        return []
+    try:
+        need = json.loads(p.read_text()).get("requires_servers") or {}
+    except json.JSONDecodeError:
+        return []
+    return [srv for srv in need if not ok(srv)]
+
+
 def latest_reports(site: str, as_of: dt.date, max_age: int, cadence: dict) -> tuple[list[dict], list[dict]]:
-    """(reports to include, status of every skill incl. due ones)."""
+    """(reports to include, status of every skill incl. due and blocked ones)."""
     included, status = [], []
     skills = (set(cadence) | {r["skill"] for r in runs.runs(site) if r.get("skill")}) - {BRIEF}
-    for skill in sorted(skills):
-        every = cadence.get(skill)  # None = on demand (never due)
-        last = runs.latest(site, skill, as_of=as_of)
-        age = (as_of - dt.date.fromisoformat(last["as_of"])).days if last else None
-        if every is not None:
-            status.append({"skill": skill, "last_run": last["as_of"] if last else None, "age_days": age,
-                           "cadence_days": every, "due": last is None or age > every})
-        if last and age <= max_age:
-            f = json.loads((Path(last["path"]) / "findings.json").read_text())
-            included.append({"skill": skill, "as_of": last["as_of"], "path": last["path"], "findings": f})
+    import pipeline  # local import: one rule for "is this server usable", no cycle at module load
+    clients = pipeline.MCPClients()
+    try:
+        for skill in sorted(skills):
+            every = cadence.get(skill)  # None = on demand (never due)
+            last = runs.latest(site, skill, as_of=as_of)
+            age = (as_of - dt.date.fromisoformat(last["as_of"])).days if last else None
+            blocked = _blocked(skill, lambda srv, c=clients: pipeline.server_ok(c, srv))
+            if every is not None:
+                status.append({"skill": skill, "last_run": last["as_of"] if last else None, "age_days": age,
+                               "cadence_days": every, "due": (last is None or age > every) and not blocked,
+                               "blocked": blocked})
+            if last and age <= max_age:
+                f = json.loads((Path(last["path"]) / "findings.json").read_text())
+                included.append({"skill": skill, "as_of": last["as_of"], "path": last["path"], "findings": f})
+    finally:
+        clients.close()
     return included, status
 
 
@@ -124,6 +145,7 @@ def build(site: str, run_dir: Path, top: int = 7) -> dict:
     as_of = dt.date.fromisoformat(win["as_of"])
     cfg = runs.settings()
     unavailable, sections = [], []
+    changes = {}
 
     calls = json.loads((run_dir / "context.json").read_text()).get("calls", [])
     totals = next((c for c in calls if c.get("cap") == "gsc.daily_totals"), None)
@@ -131,6 +153,9 @@ def build(site: str, run_dir: Path, top: int = 7) -> dict:
     if totals and win.get("weeks"):
         kpis = weekly_kpis(gsc_metrics.load_rows(run_dir / totals["file"], ["date"]), win["weeks"])
         last, prev = kpis[-1], kpis[-2] if len(kpis) > 1 else None
+        if prev:
+            changes = {"clicks_pct": _pct(last["clicks"], prev["clicks"]),
+                       "impressions_pct": _pct(last["impressions"], prev["impressions"])}
         body = "Search Console property totals (all searches, incl. anonymized), Monday–Sunday weeks; latest week last."
         if prev:
             body += (f" Latest week vs previous: clicks {_pct(last['clicks'], prev['clicks']):+.1f}%, "
@@ -168,13 +193,17 @@ def build(site: str, run_dir: Path, top: int = 7) -> dict:
                          f"{cfg.get('brief_max_age_days', 45)} days."})
 
     due = [s for s in status if s["due"]]
+    blocked = [s for s in status if s["blocked"]]
     rep_rows = [{"report": r["skill"], "date": r["as_of"],
                  "verdict": (r["findings"].get("verdict", "")[:160] + ("…" if len(r["findings"].get("verdict", "")) > 160 else ""))}
                 for r in reports]
     sections.append({"heading": "Reports", "window": {"note": "each report keeps its own window; see its date"},
                      "body": (f"{len(reports)} reports included. Due now: "
                               + (", ".join(f"{s['skill']} ({'never run' if s['last_run'] is None else str(s['age_days']) + ' days old'})"
-                                           for s in due) if due else "none") + "."),
+                                           for s in due) if due else "none") + "."
+                              + (" Cannot run (missing source): "
+                                 + ", ".join(f"{s['skill']} (needs {', '.join(s['blocked'])})" for s in blocked)
+                                 + " — connect the source or drop the report from the cadence." if blocked else "")),
                      **({"table": rep_rows} if rep_rows else {})})
     if not reports:
         unavailable.append({"source": "SEO reports", "affects": "actions (no completed report in the last "
@@ -190,12 +219,25 @@ def build(site: str, run_dir: Path, top: int = 7) -> dict:
     parts.append(f"{len(ranked)} open actions ({sum(r['status'] == 'new' for r in rows)} new in the top {len(rows)})")
     if due:
         parts.append(f"{len(due)} reports due")
+    if blocked:
+        parts.append(f"{len(blocked)} cannot run (missing source)")
     verdict = "; ".join(parts) + "."
     findings = {"skill": BRIEF, "as_of": win["as_of"], "window": win, "verdict": verdict, "sections": sections,
                 "actions": [{x: a[x] for x in ("action", "impact", "effort", "page", "keyword", "category", "why", "est_clicks")
                              if x in a} for a in ranked[:top]]}
     if unavailable:
         findings["unavailable"] = unavailable
+    numbers = {  # everything the brief states, so seo/report/number_check.py can trace it
+        "kpis": kpis, "latest_week_change_pct": changes,
+        "actions": {"open": len(ranked), "in_top": len(rows),
+                    "new_in_top": sum(r["status"] == "new" for r in rows), "closed_since_last": len(closed)},
+        "reports": {"included": len(reports),
+                    "due": [{"skill": s_["skill"], "age_days": s_["age_days"]} for s_ in due],
+                    "blocked": [{"skill": s_["skill"], "needs": s_["blocked"]} for s_ in blocked]},
+    }
+    computed = run_dir / "computed"
+    computed.mkdir(exist_ok=True)
+    (computed / "brief.json").write_text(json.dumps(numbers, ensure_ascii=False, indent=1) + "\n")
     (run_dir / STATE).write_text(json.dumps({"first_seen": first_seen, "top": top_keys}, ensure_ascii=False, indent=1) + "\n")
     (run_dir / "findings.json").write_text(json.dumps(findings, ensure_ascii=False, indent=2) + "\n")
     return findings
@@ -213,23 +255,11 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1
-    if a.json:
-        print(json.dumps(numbers(f), ensure_ascii=False, indent=1))
+    if a.json:  # the pipeline stores this as computed/brief.json — identical to what build() wrote
+        print((Path(a.run_dir) / "computed" / "brief.json").read_text(), end="")
     else:
         print(f"wrote {a.run_dir}/findings.json — {f['verdict']}")
     return 0
-
-
-def numbers(f: dict) -> dict:
-    """Every count and change the brief states, so the number check can trace them."""
-    sec = {s["heading"]: s for s in f["sections"]}
-    kpis = (sec.get("KPIs (last 8 weeks)") or {}).get("table") or []
-    top = (sec.get("Top actions") or {}).get("table") or []
-    out = {"kpis": kpis, "top_actions": len(top), "new_actions": sum(r.get("status") == "new" for r in top)}
-    nums = [float(x) for x in re.findall(r"[-+]?\d+(?:\.\d+)?", " ".join(s.get("body", "") for s in f["sections"])
-                                          + " " + f["verdict"])]
-    out["stated"] = nums  # the digest wrote these itself
-    return out
 
 
 if __name__ == "__main__":

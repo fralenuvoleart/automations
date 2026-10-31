@@ -15,7 +15,9 @@
  "steps": [
   {
    "pull": "diagnostics",
-   "cap": "gsc.diagnostics"
+   "cap": "gsc.diagnostics",
+   "optional": true,
+   "affects": "diagnostics (health probe)"
   },
   {
    "pull": "currency",

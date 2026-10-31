@@ -49,6 +49,7 @@ def test_robots_matrix_flags_search_bots_only_as_risk():
     assert v["OAI-SearchBot"]["verdict"].startswith("VISIBILITY RISK")
     assert v["Googlebot"]["homepage_allowed"] is True
     assert rep["sitemaps"] == ["https://x.ge/sm.xml"]
+    assert rep["crawler_agent"] == C.USER_AGENT and "crawler_agent" in rep["note"]
 
 
 def test_robots_5xx_is_unknown_not_allowed():
@@ -149,6 +150,17 @@ def test_facts_gate_checks_each_host_once():
     assert gate.check("https://other.com/public/y") == (True, None)
     assert gate.check("https://third.net/a") == (True, None)  # 404 robots.txt = no rules
     assert seen == ["https://other.com/robots.txt", "https://third.net/robots.txt"]
+
+
+def test_svg_icon_titles_do_not_pollute_the_page_title():
+    html = ('<html lang="en"><head><title>Real page title</title></head><body>'
+            '<a href="/en/"><svg><title>English</title></svg></a>'
+            '<a href="/x/"><svg><title>Telegram</title></svg>Link</a>'
+            '</body></html>')
+    p = C.parse_page(html)
+    assert p.title == "Real page title", p.title          # svg titles never reach the page title
+    assert p.links[0][1] == "English"                     # an icon-only link keeps its accessible label
+    assert p.links[1][1] == "Link"                        # real text wins over the icon label
 
 
 if __name__ == "__main__":

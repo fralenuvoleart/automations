@@ -531,8 +531,101 @@ def test_pipeline_json_records_seconds_and_retries():
         finally:
             P.RETRY_BASE_S = saved
     assert s["status"] == "ok" and s["retries"] == 1
+    assert "retry_seconds" in s
     assert all("seconds" in st for st in s["steps"] if st.get("status") in ("ok", "cached"))
     assert any(st.get("retries") == 1 for st in s["steps"])
+
+
+def test_errors_are_classified_by_marker_not_by_a_bare_number():
+    args = {"siteUrl": f"{U}/", "startDate": "2026-10-01", "endDate": "2026-10-07"}
+    # a quota message is retryable even without an HTTP status
+    ctx, waits = _retry_ctx(_Flaky(1, "RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Queries'"))
+    assert ctx.call_raw("gsc.query", args)["isError"] is False and waits == [2.0]
+    # a client error that happens to contain 500 is not
+    ctx, waits = _retry_ctx(_Flaky(1, "rowLimit 500 is invalid for this dimension"))
+    try:
+        ctx.call_raw("gsc.query", args)
+        raise AssertionError("a client error must not be retried")
+    except P.StepFailed as e:
+        assert e.kind == "permanent" and waits == []
+
+
+def test_retry_waiting_is_capped_per_run():
+    saved = P.MAX_RETRY_SLEEP_S
+    P.MAX_RETRY_SLEEP_S = 10.0
+    try:
+        ctx, waits = _retry_ctx(_Flaky(99, "HTTP 503 backend unavailable"))
+        args = {"siteUrl": f"{U}/", "startDate": "2026-10-01", "endDate": "2026-10-07"}
+        for _ in range(2):  # 2 + 6 s, then 2 s = 10 s: the budget
+            try:
+                ctx.call_raw("gsc.query", args)
+            except P.StepFailed:
+                pass
+        try:
+            ctx.call_raw("gsc.query", args)
+            raise AssertionError("the budget must stop the waiting")
+        except P.StepFailed as e:
+            assert "retry budget" in str(e), e
+        assert sum(waits) <= 10.0, waits
+    finally:
+        P.MAX_RETRY_SLEEP_S = saved
+
+
+def test_force_fetches_everything_again_instead_of_reusing_saved_answers():
+    with _isolated_cache():
+        _run("seo-brand-split", FakeClients())                    # first run fills the cache
+        reuse = FakeClients(servers=("search-console",))
+        _, s_reuse = _run("seo-brand-split", reuse, force=True, tag="reuse")
+        # force ignores the saved answers: every pull is made again
+        assert [t for _, t, _ in reuse.calls if t != "diagnostics"], "force must re-fetch"
+        assert {st["status"] for st in s_reuse["steps"] if st["kind"] == "pull"} <= {"ok", "skipped"}, s_reuse["steps"]
+        plain = FakeClients(servers=("search-console",))
+        _, s_plain = _run("seo-brand-split", plain, tag="plain")
+        assert {st["status"] for st in s_plain["steps"] if st["kind"] == "pull" and st["name"] != "diagnostics"} == {"cached"}
+
+
+def test_prune_flag_applies_the_retention_policy():
+    """retention_days only bites when something runs it: `pipeline.py --prune` (alone, or before a run)."""
+    import contextlib
+    import io
+    import os
+    import time
+    with _isolated_cache():
+        site = runs.run_root() / SITE
+        old = site / (dt.date.today() - dt.timedelta(days=200)).isoformat() / "seo-audit"
+        new = site / (dt.date.today() - dt.timedelta(days=5)).isoformat() / "seo-audit"
+        for d in (old, new):
+            d.mkdir(parents=True)
+            (d / ".run_state.json").write_text(json.dumps({"skill": "seo-audit", "window": {"as_of": d.parent.name}}))
+        cache = site / "_cache" / "gsc.page"
+        cache.mkdir(parents=True)
+        stale, fresh = cache / "stale.json", cache / "fresh.json"
+        for f in (stale, fresh):
+            f.write_text("{}")
+        long_ago = time.time() - 200 * 86400
+        os.utime(stale, (long_ago, long_ago))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert P.main(["--prune"]) == 0          # alone: prune and stop
+        assert not old.exists() and new.exists()
+        assert not stale.exists() and fresh.exists()
+        assert "pruned 2 item(s)" in out.getvalue(), out.getvalue()
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert P.main(["--prune", "--dry-run", "--skill", "seo-brand-split", "--site", SITE,
+                           "--as-of", AS_OF.isoformat()]) == 0   # prune applies before the run, no calls made
+        assert not old.exists()
+
+
+def test_a_dry_run_marks_compute_steps_as_skipped_not_failed():
+    with _isolated_cache():
+        _, s = _run("seo-brand-split", DryRun(), dry_run=True)
+    computes = [st for st in s["steps"] if st["kind"] == "compute"]
+    assert computes and all(st["status"] == "skipped" for st in computes), computes
+    assert all("dry run" in (st.get("reason") or "") for st in computes)
+
+
+class DryRun(P.DryRunClient):
+    pass
 
 
 def test_a_crashed_server_is_restarted_on_the_next_call():

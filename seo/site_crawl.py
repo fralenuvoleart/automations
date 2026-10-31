@@ -106,6 +106,8 @@ class PageParser(HTMLParser):
         self._a: list | None = None
         self._h: list | None = None
         self._title = False
+        self._a_title: list | None = None   # a <title> inside an <a> (icon label)
+        self._a_label: str | None = None    # used as the anchor text only when the link has none
         self._ld: list | None = None
         self.main_text: list[str] = []
 
@@ -129,7 +131,13 @@ class PageParser(HTMLParser):
             elif name == "description":
                 self.meta_description = a.get("content", "")
         elif tag == "title":
-            self._title = True
+            # SVG icons (flags, social logos) carry their own <title>: never part of the page title, but a
+            # usable accessible label when the link itself has no text
+            if set(self._stack[:-1]) & self.SKIP:
+                if self._a is not None:
+                    self._a_title = []
+            elif not self.title.strip():
+                self._title = True
         elif tag in ("h1", "h2", "h3"):
             self._h = [tag, []]
         elif tag == "table":
@@ -141,9 +149,14 @@ class PageParser(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == "a" and self._a is not None:
-            self.links.append((self._a[0], " ".join("".join(self._a[1]).split()), self._a[2]))
+            text = " ".join("".join(self._a[1]).split())
+            self.links.append((self._a[0], text or (self._a_label or ""), self._a[2]))
             self._a = None
+            self._a_label = None
         elif tag == "title":
+            if self._a_title is not None:
+                self._a_label = " ".join("".join(self._a_title).split())  # only used if the link has no text
+                self._a_title = None
             self._title = False
         elif tag in ("h1", "h2", "h3") and self._h is not None:
             self.headings.append((self._h[0], " ".join("".join(self._h[1]).split())))
@@ -156,17 +169,21 @@ class PageParser(HTMLParser):
                 break
 
     def handle_data(self, data):
-        if self._ld is not None:
+        if self._ld is not None:  # JSON-LD: taken verbatim, the surrounding <script> is skipped otherwise
             self._ld.append(data)
             return
-        if self._title:
-            self.title += data
-        if self._a is not None:
-            self._a[1].append(data)
-        if self._h is not None:
-            self._h[1].append(data)
-        if not (set(self._stack) & (self.SKIP | self.CHROME)) and data.strip():
-            self.main_text.append(data.strip())
+        if self._a_title is not None:
+            self._a_title.append(data)  # an icon's label, kept for the anchor fallback only
+        blocked = bool(set(self._stack) & self.SKIP)  # script/style/svg text is never content
+        if not blocked:
+            if self._title:
+                self.title += data
+            if self._a is not None:
+                self._a[1].append(data)
+            if self._h is not None:
+                self._h[1].append(data)
+            if not (set(self._stack) & self.CHROME) and data.strip():
+                self.main_text.append(data.strip())
 
 
 def parse_page(html: str) -> PageParser:
@@ -294,7 +311,9 @@ def robots_report(site: str, fetch=http_fetch, urls: list[str] | None = None) ->
         bots.append({"token": token, "operator": op, "purpose": purpose, "kind": kind,
                      "homepage_allowed": "/" not in blocked, "blocked_paths": blocked, "verdict": verdict})
     return {"robots_txt_status": status, "sitemaps": sitemaps, "paths_checked": paths, "bots": bots,
-            "note": "robots.txt only; WAF/CDN bot rules are not visible here — confirm them in the host's firewall."}
+            "crawler_agent": USER_AGENT,  # the verdicts are rules; our own fetches obey them for this agent
+            "note": "robots.txt only; WAF/CDN bot rules are not visible here — confirm them in the host's firewall. "
+                    "Verdicts are per bot token; our own crawler fetches as the `crawler_agent` above."}
 
 
 # ----------------------------------------------------------------- sitemap ---

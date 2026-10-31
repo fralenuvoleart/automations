@@ -3,6 +3,7 @@ import contextlib
 import datetime as dt
 import io
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -123,6 +124,33 @@ def test_brief_without_reports_or_kpis_degrades():
         assert validate_report.validate_structure(f) == []
 
 
+def test_a_report_whose_source_is_missing_is_blocked_not_due():
+    import pipeline
+
+    class NoDFS:
+        """dataforseo is the one server seo-backlink-check insists on (`plan.requires_servers`)."""
+        def available(self, server):
+            return server != "dataforseo"
+
+        def close(self):
+            pass
+
+    with sandbox():
+        cfg = runs.settings()  # the backlink report is on a 90-day cadence, so it is in the report list
+        runs.settings = lambda: {**cfg, "cadence_days": {**cfg["cadence_days"], "seo-backlink-check": 90}}
+        saved = pipeline.MCPClients
+        pipeline.MCPClients = NoDFS
+        try:
+            f = digest.build(SITE, _brief("2026-10-30"), top=3)
+        finally:
+            pipeline.MCPClients = saved
+        body = next(s for s in f["sections"] if s["heading"] == "Reports")["body"]
+        assert "Cannot run (missing source): seo-backlink-check (needs dataforseo)" in body, body
+        due_part = body.split("Due now:")[1].split("Cannot run")[0]
+        assert "seo-backlink-check" not in due_part, body
+        assert "cannot run (missing source)" in f["verdict"], f["verdict"]
+
+
 def test_cli():
     with sandbox():
         d = _brief("2026-10-30")
@@ -151,6 +179,21 @@ def test_first_seen_tracks_actions_outside_the_top_and_on_demand_reports():
         t = next(s for s in f2["sections"] if s["heading"] == "Top actions")["table"][0]
         assert t["action"] == "Add FAQ to the IE page" and t["status"] == "open since 2026-10-30"
         assert list(json.loads((d2 / digest.STATE).read_text())["first_seen"].values()) == ["2026-10-30"]  # closed one pruned
+
+
+def test_the_brief_passes_the_evidence_and_number_gate():
+    """Alpha guarantee: a generated brief must survive `validate_report.py --data`, like any other report."""
+    with sandbox():
+        src = _seed("seo-audit", "2026-10-20")
+        _finish(src, [{"action": "Rewrite the bank account page title", "impact": "high", "effort": "low",
+                       "page": BANK, "why": "clicks fell", "est_clicks": 12}])
+        d = _brief("2026-10-30")
+        digest.build(SITE, d, top=3)
+        assert (d / "computed" / "brief.json").exists()      # the figures the brief states are published
+        p = subprocess.run([sys.executable, str(SEO / "report" / "validate_report.py"),
+                            "--findings", str(d / "findings.json"), "--data", str(d / "context.json")],
+                           capture_output=True, text=True)
+        assert p.returncode == 0, p.stdout + p.stderr
 
 
 if __name__ == "__main__":

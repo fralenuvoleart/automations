@@ -34,11 +34,14 @@ Capabilities are declared once in [`seo/capabilities.json`](../capabilities.json
 ```json
 "policy": { "retry": 0, "timeout_budget_s": 40, "on_error": "degrade" }
 ```
-- Retries live in **one layer**: `seo/pipeline.py` retries a temporary failure (timeout, 429, 5xx,
-  "unavailable", a crashed server — which is restarted) `retry` times, default 2, waiting 2 s then 6 s.
-  Bad arguments, auth errors and write capabilities are never retried. The planner server retries
-  internally, so its policy has `retry: 0` — never re-call it in a loop. `pipeline.json` records
-  `retries` and each step's `seconds`.
+- Retries live in **one layer**: `seo/pipeline.py` retries a temporary failure (timeout, 429, quota /
+  `RESOURCE_EXHAUSTED`, 5xx, "unavailable", a crashed server — which is restarted) `retry` times, default 2,
+  waiting 2 s then 6 s, with the total waiting capped at `MAX_RETRY_SLEEP_S` (120 s) per run because one
+  split pull can make 64 calls. The failure is classified where the server's own message is available
+  (`StepFailed.kind`): a retryable marker wins, then an explicit client error (400–422, invalid, unauthor,
+  "does not exist"), then the generic pattern. Bad arguments, auth errors and write capabilities are never
+  retried. The planner server retries internally, so its policy has `retry: 0` — never re-call it in a loop.
+  `pipeline.json` records `retries`, `retry_seconds` and each step's `seconds`.
 - `timeout_budget_s` must stay **below the MCP client timeout** (default 60 s;
   `MCP_CLIENT_TIMEOUT_S`) so the server returns the real error instead of the client timing out.
 - `on_error: degrade` → apply the rule in [`data-source-map.md`](data-source-map.md).

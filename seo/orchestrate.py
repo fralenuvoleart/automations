@@ -64,6 +64,8 @@ def seed(skill: str, site: str | None = None, days: int = 28, weeks: int | None 
         raise SeedError(f"run already seeded ({', '.join(p.name for p in existing)} exist in {run_dir}); "
                         f"use --tag, a new --out-dir or pass --force to overwrite")
     (run_dir / "data").mkdir(parents=True, exist_ok=True)
+    if site and not out_dir:
+        runs.ensure_readme(site)  # every site folder explains itself in plain words
 
     (run_dir / ".run_state.json").write_text(json.dumps({
         "skill": skill,

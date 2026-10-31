@@ -179,9 +179,9 @@ def test_structured_actions_are_validated():
 
 
 def test_the_schema_is_the_structural_contract():
-    import jsonschema
+    import schema_lite
     schema = json.loads(V.SCHEMA_PATH.read_text())
-    jsonschema.Draft7Validator.check_schema(schema)
+    schema_lite.check_schema(schema)  # every keyword is one the validator enforces (fails loudly otherwise)
     assert V.validate_structure(GOOD) == []
     cases = {
         "missing required key: verdict": {k: v for k, v in GOOD.items() if k != "verdict"},

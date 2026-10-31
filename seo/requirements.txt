@@ -1,8 +1,6 @@
-# SEO toolkit: seo/report/validate_report.py (and build_report.py, digest.py) validate findings against
-# references/findings-schema.json with jsonschema (Draft 7). Everything else under seo/ is stdlib-only.
-jsonschema>=4.18,<5
-
 # Runtime dependencies for seo/mcp-servers/google-ads-planner/server.py.
+# Everything else under seo/ is stdlib-only — findings are validated by seo/report/schema_lite.py
+# (Draft-7 subset), so `bash seo/check.sh` needs no third-party package.
 # Pinned from the planner server venv (`pip freeze`); install into its own venv.
 # Pin these to reproduce the server environment.
 fastmcp==4.1.4

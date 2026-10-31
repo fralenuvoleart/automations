@@ -3,6 +3,9 @@
 Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 [`.agents/skills/`](../.agents/skills/) (they must, for discovery).
 
+> **Docs:** owner-facing guide to the reports — [`docs/SEO.md`](../docs/SEO.md); command reference —
+> [`COMMANDS.md`](COMMANDS.md).
+>
 > **Status (2026-10-30):** 13 `seo-*` skills (12 reports + the weekly `seo-brief`), registry v8, CI gate [`check.sh`](check.sh) ALL GREEN offline.
 > Review history and the status of every review item: [`memory-bank/activeContext.md`](../memory-bank/activeContext.md).
 
@@ -21,9 +24,9 @@ Everything SEO-related that is **not** an Agent Skill lives here. Skills stay in
 | [`rules.py`](rules.py) | Site classification shared with the SEO sheet: query categories (incl. brand), page tags, page languages, GA4 channels (incl. AI assistants), tracked keywords with automatic Proven / Opportunity / Generic picks, New/Lost status and top 3 countries; `targets` (does each keyword rank with its target page?); `breakdown` and 8-week `trend` per category / page type / language / keyword; jump-link (#) variants merged. |
 | [`ga4_metrics.py`](ga4_metrics.py) | GA4 landing page × source/medium rows classified with the site rules: `breakdown` per channel / page type / language (sessions, engaged sessions, engagement rate, key events) and `reconcile` (Search Console clicks vs GA4 organic sessions, `(not set)` share). |
 | [`site_profile.py`](site_profile.py) / [`coverage.py`](coverage.py) | Per-site facts (+ values derived from the rules, thresholds, GA4 AI filter, status-tagged action history); coverage block (GSC-impressions basis). |
-| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed run folders outside git (`<run_root>/<site>/<date>/<skill>/`; `run_root` = `~/Documents/seo-reports`), the shared cache location, latest report per skill, retention (`prune`); settings also hold the brief's cadence per report. |
+| [`runs.py`](runs.py) / [`config/settings.json`](config/settings.json) | Fixed run folders outside git (`<run_root>/<site>/<date>/<skill>/`; `run_root` = `~/Documents/seo-reports`), the shared cache location, latest report per skill, retention (`prune`), and `export` — the whole history as plain CSV files in `<site>/spreadsheets/<date>/` (one line per item, UTF-8 with BOM so Excel and Google Sheets both read it; a README in those folders lists each file). Every site folder gets a `README.md` that maps the layout in plain words. Settings also hold the brief's cadence per report. |
 | [`digest.py`](digest.py) | The weekly brief (`seo-brief`): 8-week KPIs, actions merged and ranked across the latest reports, new vs open since, `[done]` history, due reports. |
-| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate** for URLs and — via [`number_check.py`](report/number_check.py) — every figure) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
+| [`report/`](report/) | `validate_report.py` (structure, dates, labels, **evidence gate** for URLs and — via [`number_check.py`](report/number_check.py) — every figure), [`schema_lite.py`](report/schema_lite.py) (the Draft-7 subset that enforces [`findings-schema.json`](references/findings-schema.json) with no third-party package; an unknown keyword in the schema fails loudly) and `build_report.py` (refuses malformed findings; appends plain-language definitions of the metrics used). |
 | [`references/`](references/) | Shared contracts and methodology; [`skill-common/`](references/skill-common/) holds the shared skill sections. |
 | [`mcp_client.py`](mcp_client.py) / [`tool-schemas.json`](tool-schemas.json) | MCP stdio client (`Session`: one handshake, many calls; fails fast when a server exits) and the cached tool schemas used for offline validation. |
 | [`mcp-servers/google-ads-planner/`](mcp-servers/google-ads-planner/) | Local Keyword Planner server (ideas + historical metrics; API limits enforced). |
@@ -42,9 +45,21 @@ configured or fail become `unavailable` entries; a required one stops the run (e
   still cut (one day over the limit, or the 64-call budget spent) is listed in `pipeline.json` `truncated`,
   the outputs built on it in `tainted`, an `unavailable` entry is added, and the number check refuses
   figures found only there — at that volume use the Search Console BigQuery export.
-- **Temporary failures.** Timeouts, rate limits (429), 5xx and a crashed server are retried (`policy.retry`,
-  default 2; waits 2 s then 6 s; a crashed server is restarted). Bad requests and writes are not.
-  `pipeline.json` records `retries` and each step's `seconds`.
+- **Temporary failures.** Timeouts, rate limits (429), quota/`RESOURCE_EXHAUSTED`, 5xx and a crashed server are
+  retried (`policy.retry`, default 2; waits 2 s then 6 s; a crashed server is restarted). Bad requests and
+  writes are not: the error is classified where the server's own message is still available
+  (`StepFailed.kind`), and the pattern is only the backstop. Waiting is capped at `MAX_RETRY_SLEEP_S`
+  (120 s) per run, because one split pull can make 64 calls — over budget the pull fails instead of stalling.
+  `pipeline.json` records `retries`, `retry_seconds` and each step's `seconds`.
+- **Health probe.** `gsc.diagnostics` is `optional` in every plan that pulls it: Search Console being down is reported as an
+  `unavailable` entry, and the skill's real pulls decide whether the run can continue.
+- **Cache and retention.** Every pull is cache-first (`record.py`): a dated window is kept forever once it is
+  final (all dates ISO and ending at least the source lag ago), live tools per `policy.cache_ttl_days`
+  (1 day for `gsc.sitemaps`/`gsc.health`, 7 for PageSpeed/schema/URL Inspection/SERP extras, 30 for planner
+  and keyword/backlink estimates), errors and the one write capability never. Cache lives in
+  `<run_root>/<site>/_cache/<capability>/`; each saved answer is also written as `<name>.rows.json` (the same
+  answer as plain rows, for anyone opening the folder or a spreadsheet). Runs are kept until pruned — `python3 seo/runs.py prune` or
+  `python3 seo/pipeline.py --prune` (also valid before a run); nothing prunes automatically.
 - **Fail closed.** A plan can list `requires_servers`: without them the pipeline refuses to start (e.g.
   `seo-backlink-check` without DataForSEO — no backlink report without backlink data).
 - **Robots.txt.** The crawler respects robots.txt on every fetch (disallowed URLs are listed under
@@ -176,11 +191,11 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/resolve.py --check \| --write \| --map \| --list` | render/validate skills; regenerate [`tool-map.md`](tool-map.md) |
 | `python3 seo/resolve.py --validate-cached \| --validate-live` | tool + args vs cached / live schemas |
 | `python3 seo/mcp_client.py [server]` | refresh `tool-schemas.json` (one server keeps the others) |
-| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run] [--allow-write]` | run a skill's data plan (seed, pull, record, compute); `--allow-write` permits confirmed write steps |
+| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run] [--allow-write] [--prune]` | run a skill's data plan (seed, pull, record, compute); `--allow-write` permits confirmed write steps; `--prune` first applies `retention_days` (alone: prune only) |
 | `python3 seo/pipeline.py --check-plans` | validate every plan (capabilities, runtime args, scripts, names) |
 | `python3 seo/orchestrate.py --skill S --site D (--days N [--compare\|--yoy] \| --weeks N) [--source gsc\|ga4\|snapshot] [--tag T] [--force]` | seed a run in the fixed run folder |
 | `python3 seo/record.py --run-dir D --cap ID --name N --args JSON (--response-file F \| --from-cache)` | record evidence (exit 3 = cache miss) |
-| `python3 seo/runs.py root \| list --site D \| latest --site D --skill S \| prune [--older-than N]` | run folders, latest report, retention |
+| `python3 seo/runs.py root \| list --site D \| latest --site D --skill S \| prune [--older-than N] \| export --site D [--out DIR] [--tables runs,totals,pages,queries,actions]` | run folders, latest report, retention, CSV copies of the history for Excel/Sheets |
 | `python3 seo/digest.py --site D --run-dir R` | build the weekly brief's findings |
 | `python3 seo/gsc_metrics.py <command> …` | GSC analyses (see the module docstring) |
 | `python3 seo/site_crawl.py robots\|sitemap\|crawl\|facts …` | crawler |
@@ -189,6 +204,11 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/report/build_report.py --findings F --out R` | render |
 
 ## Configuration
+
+**Dependencies:** none beyond the Python standard library — `bash seo/check.sh` and every report phase run on
+any `python3` 3.10+. `seo/requirements-dev.txt` installs `jsonschema`, used only as the *oracle* by
+`tests/test_schema_equivalence.py` (which prints SKIP and passes where it is absent). `seo/requirements.txt`
+is only for the local Keyword Planner server.
 
 Server definitions and credentials live in `.roo/mcp.json` → `mcpServers.<server>.env`. Google servers use
 the service account at `GOOGLE_APPLICATION_CREDENTIALS`; `search-console` keeps its own OAuth file;
