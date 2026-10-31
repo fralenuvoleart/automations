@@ -3,7 +3,7 @@
 | Symptom | Cause | Fix |
 |---|---|---|
 | Tool/server error | server missing or not reloaded in `.roo/mcp.json` | add/reload it; then apply the degradation rule in [`data-source-map.md`](../data-source-map.md) |
-| `pipeline.py` exit 1 | a required step failed (see `pipeline.json`) or the plan needs an input | fix the source (server, credentials, profile value) and rerun with `--force`; pass inputs with `--input key=value`; `--dry-run` shows every call it would make |
+| `pipeline.py` exit 1 | a required step failed (see `pipeline.json`) or the plan needs an input | fix the source (server, credentials, profile value) and rerun with `--force` (overwrites the run folder, reuses the answers that already succeeded) or `--refresh` (fetches every call again); pass inputs with `--input key=value`; `--dry-run` shows every call it would make |
 | `pipeline.py`: "server not configured" | the server is not in `.roo/mcp.json` | optional steps are skipped and listed in `unavailable`; add the server for the full report |
 | Empty/zero rows | window inside the data lag, wrong property (`sc-domain:` vs URL-prefix) | use the window from `.run_state.json`; confirm the property with `gsc.sites_list` |
 | `truncated: true` from `gsc_metrics.py` | the pull hit 25,000 rows | report "beyond the row cutoff" items as such; narrow with a filter or shorter window if needed |

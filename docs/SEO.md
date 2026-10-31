@@ -113,7 +113,7 @@ two cannot disagree.
 | A report stops with `exit 1` | read the error in `{run_dir}/pipeline.json` — it names the source and the reason |
 | "Data availability" lists a source | that source is not configured or failed; the rest of the report is still valid |
 | The report quotes a figure you cannot find | it must appear in `data/` or `computed/` of that run folder, otherwise validation would have refused it |
-| A second run today seems instant | the saved answers from earlier today were reused (by design) — add `--force` to fetch everything again |
+| A second run today seems instant | the saved answers from earlier today were reused (by design); a second run needs `--tag` (keep both), `--force` (replace, reusing answers) or `--refresh` (replace, fetching again) |
 | You want the numbers in a spreadsheet | `python3 seo/runs.py export --site <domain>` |
 
 Health check of the toolkit itself: `bash seo/check.sh` (offline, no dependencies). It must print

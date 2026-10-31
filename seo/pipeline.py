@@ -227,7 +227,7 @@ class Context:
         self.profile = site_profile.load_profile(site)
         self._gsc_property = self.profile.get("gsc_property")
         self.dry_run = False
-        self.force = False     # set by execute(force=...): fetch everything again instead of reusing saved answers
+        self.refresh = False   # set by execute(refresh=...): fetch everything again instead of reusing saved answers
         self.write_ok = False  # set by execute(allow_write=...): a write capability refuses without it
         self.retries = 0       # temporary failures retried in this run (pipeline.json)
         self.retry_slept = 0.0  # seconds spent waiting between retries (bounded by MAX_RETRY_SLEEP_S)
@@ -717,7 +717,7 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
                     continue
                 c = ctx.caps[st["cap"]]
                 full = {**(c.get("args") or {}), **args}
-                hit = None if ctx.force else record.cached(ctx.run_dir, st["cap"], args)
+                hit = None if ctx.refresh else record.cached(ctx.run_dir, st["cap"], args)
                 hit_pl = _payload(hit["response"]) if hit is not None else None
                 meta = hit_pl.get(META) if isinstance(hit_pl, dict) else None
                 # reuse a cached pull unless it is a plain response cut at the limit (re-fetched and completed);
@@ -786,7 +786,8 @@ def run_step(ctx: Context, st: dict, report: list) -> None:
 def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None = None, clients=None,
             as_of: dt.date | None = None, days: int | None = None, weeks: int | None = None,
             compare: bool | None = None, yoy: bool = False, tag: str | None = None, out_dir: str | None = None,
-            force: bool = False, dry_run: bool = False, allow_write: bool = False) -> tuple[Path, dict]:
+            force: bool = False, dry_run: bool = False, allow_write: bool = False,
+            refresh: bool = False) -> tuple[Path, dict]:
     plan = load_plan(skill, mode)
     caps = resolve.load()[1]
     issues = validate_plan(plan, caps)
@@ -819,10 +820,10 @@ def execute(skill: str, site: str, mode: str | None = None, inputs: dict | None 
     run_dir = orchestrate.seed(
         skill, site, days=days or w.get("days", 28), weeks=weeks if weeks is not None else (None if days else w.get("weeks")),
         source=w.get("source", "gsc"), compare=w.get("compare", False) if compare is None else compare, yoy=yoy,
-        as_of=as_of, tag=tag if tag is not None else (mode or None), out_dir=out_dir, force=force)
+        as_of=as_of, tag=tag if tag is not None else (mode or None), out_dir=out_dir, force=force or refresh)
     ctx = Context(site, run_dir, inputs, clients, caps)
     ctx.dry_run = dry_run
-    ctx.force = force
+    ctx.refresh = refresh
     ctx.write_ok = allow_write
     report: list = []
     status = "ok"
@@ -926,8 +927,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare", action="store_true", default=None)
     ap.add_argument("--yoy", action="store_true")
     ap.add_argument("--tag")
-    ap.add_argument("--force", action="store_true",
-                    help="fetch every call again (ignore the saved answers) and overwrite an existing run folder")
+    ap.add_argument("--force", action="store_true", help="overwrite an existing run folder (saved answers are reused)")
+    ap.add_argument("--refresh", action="store_true",
+                    help="fetch every call again instead of reusing the saved answers (also overwrites the run folder)")
     ap.add_argument("--dry-run", action="store_true", help="resolve the plan in a temp folder; call nothing")
     ap.add_argument("--check-plans", action="store_true")
     ap.add_argument("--prune", action="store_true",
@@ -953,7 +955,8 @@ def main(argv: list[str] | None = None) -> int:
             run_dir, summary = execute(
                 a.skill, a.site, a.mode, inputs, DryRunClient() if a.dry_run else None,
                 dt.date.fromisoformat(a.as_of) if a.as_of else None, a.days, a.weeks, a.compare, a.yoy, a.tag,
-                tmp if a.dry_run else None, a.force, dry_run=a.dry_run, allow_write=a.allow_write)
+                tmp if a.dry_run else None, a.force, dry_run=a.dry_run, allow_write=a.allow_write,
+                refresh=a.refresh)
             if a.dry_run:
                 for e in summary["steps"]:
                     what = e.get("cap") or (e.get("run") or [""])[0]

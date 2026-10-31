@@ -571,17 +571,19 @@ def test_retry_waiting_is_capped_per_run():
         P.MAX_RETRY_SLEEP_S = saved
 
 
-def test_force_fetches_everything_again_instead_of_reusing_saved_answers():
+def test_force_overwrites_and_refresh_re_fetches():
+    """Two intents, two flags: --force re-runs into the same folder reusing saved answers; --refresh fetches again."""
     with _isolated_cache():
-        _run("seo-brand-split", FakeClients())                    # first run fills the cache
-        reuse = FakeClients(servers=("search-console",))
-        _, s_reuse = _run("seo-brand-split", reuse, force=True, tag="reuse")
-        # force ignores the saved answers: every pull is made again
-        assert [t for _, t, _ in reuse.calls if t != "diagnostics"], "force must re-fetch"
-        assert {st["status"] for st in s_reuse["steps"] if st["kind"] == "pull"} <= {"ok", "skipped"}, s_reuse["steps"]
-        plain = FakeClients(servers=("search-console",))
-        _, s_plain = _run("seo-brand-split", plain, tag="plain")
-        assert {st["status"] for st in s_plain["steps"] if st["kind"] == "pull" and st["name"] != "diagnostics"} == {"cached"}
+        _run("seo-brand-split", FakeClients())                       # fills the cache
+        again = FakeClients(servers=("search-console",))
+        _, s_force = _run("seo-brand-split", again, force=True)
+        assert [t for _, t, _ in again.calls if t != "diagnostics"] == [], "force must reuse the saved answers"
+        assert {st["status"] for st in s_force["steps"]
+                if st["kind"] == "pull" and st["name"] != "diagnostics"} == {"cached"}
+        fresh = FakeClients(servers=("search-console",))
+        _, s_refresh = _run("seo-brand-split", fresh, refresh=True)
+        assert [t for _, t, _ in fresh.calls if t != "diagnostics"], "refresh must fetch every call again"
+        assert {st["status"] for st in s_refresh["steps"] if st["kind"] == "pull"} <= {"ok", "skipped"}
 
 
 def test_prune_flag_applies_the_retention_policy():

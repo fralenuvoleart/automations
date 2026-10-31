@@ -96,10 +96,11 @@ def test_export_writes_readable_csv_files_from_the_whole_history():
             (d1 / "computed").mkdir(exist_ok=True)
             (d1 / "computed" / "totals.json").write_text(json.dumps({
                 "current": {"clicks": 100, "impressions": 1000, "ctr": 0.1, "position": 8.0},
-                "previous": {"clicks": 50, "impressions": 900, "ctr": 0.05, "position": 9.0}}))
+                "previous": {"clicks": 50, "impressions": 900, "ctr": 12.5, "position": 9.0}}))
             (d1 / "pipeline.json").write_text(json.dumps({
                 "skill": "seo-audit", "status": "ok", "unavailable": [],
-                "steps": [{"name": "page_cur", "kind": "pull", "status": "ok", "seconds": 1.5},
+                "steps": [{"name": "page_cur", "kind": "pull", "cap": "gsc.page", "status": "ok",
+                           "seconds": 1.5, "calls": 2},
                           {"name": "totals", "kind": "compute", "status": "ok", "seconds": 0.5}]}))
             f = json.loads((d1 / "findings.json").read_text())
             (d1 / "findings.json").write_text(json.dumps({**f, "actions": [
@@ -110,10 +111,29 @@ def test_export_writes_readable_csv_files_from_the_whole_history():
             (d1 / "data" / "page_cur.json").write_text(json.dumps({"content": [{"type": "text", "text": json.dumps(
                 {"rows": [{"keys": ["https://pbservices.ge/a/"], "clicks": 7, "impressions": 70, "ctr": 0.1,
                            "position": 4.5}]})}], "isError": False}))
-            (d1 / "data" / "query_cur.rows.json").write_text(json.dumps(
+            (d1 / "data" / "query_w1.json").write_text(json.dumps(
                 {"rows": [{"keys": ["\u0432\u043d\u0436"], "clicks": 3, "impressions": 30, "ctr": 0.1,
                            "position": 6}]}))
-            _seed("seo-rank-tracking", "2026-10-27", verdict="ok")
+            (d1 / "data" / "query_12m.json").write_text(json.dumps(
+                {"rows": [{"keys": ["off-window query"], "clicks": 9, "impressions": 90, "ctr": 0.1, "position": 9}]}))
+            (d1 / "context.json").write_text(json.dumps({"calls": [
+                {"name": "page_cur", "cap": "gsc.page", "file": "data/page_cur.json",
+                 "args": {"siteUrl": "sc-domain:pbservices.ge", "startDate": win["startDate"],
+                          "endDate": win["endDate"]}},
+                {"name": "query_w1", "cap": "gsc.query", "file": "data/query_w1.json",
+                 "args": {"siteUrl": "sc-domain:pbservices.ge", "startDate": "2026-09-01",
+                          "endDate": "2026-09-07"}},
+                {"name": "query_12m", "cap": "gsc.query", "file": "data/query_12m.json",
+                 "window_exception": "CTR curve lookback", "args": {"startDate": "2025-10-01",
+                                                                    "endDate": "2026-10-01"}},
+                {"name": "pq_cur", "cap": "gsc.page_query", "file": "data/page_cur.json",
+                 "args": {"startDate": win["startDate"], "endDate": win["endDate"]}}]}))
+            # a brief-style run: weekly KPIs must reach totals.csv
+            d2 = _seed("seo-brief", "2026-10-27", verdict="ok")
+            (d2 / "computed").mkdir(exist_ok=True)
+            (d2 / "computed" / "brief.json").write_text(json.dumps({"kpis": [
+                {"week": "2026-10-19", "days": 7, "clicks": 840, "impressions": 7000, "ctr": 12.0,
+                 "position": 8.0}]}))
 
             out = Path(tmp) / "spreadsheets"
             written = runs.export("pbservices.ge", out)
@@ -127,15 +147,20 @@ def test_export_writes_readable_csv_files_from_the_whole_history():
                     return list(csv.DictReader(fh))
 
             runs_rows = table("runs.csv")
-            assert [r["report"] for r in runs_rows] == ["seo-audit", "seo-rank-tracking"]  # oldest first
-            assert runs_rows[0]["status"] == "ok" and runs_rows[0]["tool_calls"] == "2"
-            assert runs_rows[0]["seconds"] == "2.0" and runs_rows[0]["period_start"] == win["startDate"]
+            assert [r["report"] for r in runs_rows] == ["seo-audit", "seo-brief"]       # oldest first
+            # only pulls count, and their real call count (the pull made 2 calls; the compute step is not a call)
+            assert runs_rows[0]["tool_calls"] == "2", runs_rows[0]
+            assert runs_rows[0]["status"] == "ok" and runs_rows[0]["seconds"] == "2.0"
             totals = table("totals.csv")
             assert {(t["period"], t["clicks"], t["click_rate_percent"]) for t in totals} >= {
-                ("current", "100", "10.0"), ("previous", "50", "5.0")}
+                ("current", "100", "10.0"), ("previous", "50", "12.5")}   # 12.5 stays 12.5: already a percentage
+            assert ("week", "840", "12.0") in {(t["period"], t["clicks"], t["click_rate_percent"]) for t in totals}
             pages = table("pages.csv")
             assert pages[0]["page"] == "https://pbservices.ge/a/" and pages[0]["clicks"] == "7"  # unwrapped
-            assert table("queries.csv")[0]["query"] == "\u0432\u043d\u0436"
+            assert pages[0]["period_start"] == win["startDate"]
+            queries = table("queries.csv")
+            assert [q["query"] for q in queries] == ["\u0432\u043d\u0436"]      # the off-window lookback is skipped
+            assert queries[0]["period_start"] == "2026-09-01" and queries[0]["period_end"] == "2026-09-07"
             actions = table("actions.csv")
             assert [a["action"] for a in actions] == ["Rewrite the title", "Plain string action"]
             assert actions[0]["estimated_clicks"] == "12" and actions[0]["impact"] == "high"

@@ -191,7 +191,7 @@ python3 seo/site_profile.py --site pbservices.ge --append-history "Rewrote /ru/v
 | `python3 seo/resolve.py --check \| --write \| --map \| --list` | render/validate skills; regenerate [`tool-map.md`](tool-map.md) |
 | `python3 seo/resolve.py --validate-cached \| --validate-live` | tool + args vs cached / live schemas |
 | `python3 seo/mcp_client.py [server]` | refresh `tool-schemas.json` (one server keeps the others) |
-| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force] [--dry-run] [--allow-write] [--prune]` | run a skill's data plan (seed, pull, record, compute); `--allow-write` permits confirmed write steps; `--prune` first applies `retention_days` (alone: prune only) |
+| `python3 seo/pipeline.py --skill S --site D [--mode M] [--input k=v] [--days N\|--weeks N] [--compare\|--yoy] [--force\|--refresh] [--dry-run] [--allow-write] [--prune]` | run a skill's data plan (seed, pull, record, compute); `--allow-write` permits confirmed write steps; `--prune` first applies `retention_days` (alone: prune only) |
 | `python3 seo/pipeline.py --check-plans` | validate every plan (capabilities, runtime args, scripts, names) |
 | `python3 seo/orchestrate.py --skill S --site D (--days N [--compare\|--yoy] \| --weeks N) [--source gsc\|ga4\|snapshot] [--tag T] [--force]` | seed a run in the fixed run folder |
 | `python3 seo/record.py --run-dir D --cap ID --name N --args JSON (--response-file F \| --from-cache)` | record evidence (exit 3 = cache miss) |

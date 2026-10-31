@@ -61,8 +61,9 @@ One line per item, ready for Excel or Google Sheets (File > Import > CSV).
 
 - `runs.csv` — one line per report: date, report, status, the period it covers, tool calls made.
 - `totals.csv` — clicks, impressions, click rate and average position per period.
-- `pages.csv` — one line per page per report.
-- `queries.csv` — one line per search query per report.
+- `pages.csv` — one line per page, for every period the report pulled (current, comparison and each week).
+- `queries.csv` — one line per search query, same coverage.
+- `totals.csv` — also carries the weekly brief's Monday–Sunday weeks (`period` = week).
 - `actions.csv` — every recommended action, with impact, effort, page, keyword and the reason.
 
 Dates are written as YYYY-MM-DD so both spreadsheets read them the same way.
@@ -239,10 +240,12 @@ def _first_key(row: dict) -> str:
 
 
 def _rate(value):
+    """A 0-1 rate as a percentage; a value already expressed in percent is left alone (as gsc_metrics does)."""
     try:
-        return round(float(value) * 100, 2)  # GSC returns a 0-1 rate: show it as a percentage
+        rate = float(value)
     except (TypeError, ValueError):
         return ""
+    return round(rate if abs(rate) > 1 else rate * 100, 2)
 
 
 def _number(value):
@@ -261,16 +264,27 @@ def _period_rows(run_dir: Path, window: dict) -> dict:
     return out
 
 
-def _key_rows(run_dir: Path, names: list[str], value_name: str, run_date: str, run) -> list[dict]:
+def _call_rows(run_dir: Path, cap: str, value_name: str, run_date: str, report: str) -> list[dict]:
+    """Rows of every pull made with ``cap`` — current, comparison and per-week pulls alike.
+
+    The call's own dates become the period, so a weekly run keeps its weeks and a comparison keeps its
+    window; calls recorded as an explicit off-window exception are skipped (they are not part of the report).
+    """
+    calls = _read(run_dir / "context.json") or {}
     out = []
-    for name in names:
-        source = run_dir / "data" / f"{name}.rows.json"
-        if not source.exists():
-            source = run_dir / "data" / f"{name}.json"
-        payload = _read(source)
+    for call in calls.get("calls") or []:
+        if not isinstance(call, dict) or call.get("cap") != cap or call.get("window_exception"):
+            continue
+        source = run_dir / call.get("rows_file", "") if call.get("rows_file") else None
+        if not source or not source.exists():
+            source = run_dir / (call.get("file") or "")
+        payload = _read(source) if source else None
+        args = call.get("args") or {}
+        ranges = args.get("date_ranges") or [{}]
+        start = args.get("startDate") or (ranges[0] or {}).get("start_date", "")
+        end = args.get("endDate") or (ranges[0] or {}).get("end_date", "")
         for row in plain_rows(payload) if payload is not None else []:
-            out.append({"date": run_date, "report": run.get("skill", ""),
-                        "period_start": run.get("startDate", ""), "period_end": run.get("endDate", ""),
+            out.append({"date": run_date, "report": report, "period_start": start, "period_end": end,
                         value_name: _first_key(row), "clicks": _number(row.get("clicks")),
                         "impressions": _number(row.get("impressions")),
                         "click_rate_percent": _rate(row.get("ctr")),
@@ -302,12 +316,20 @@ def export(site: str, out_dir=None, tables=None, as_of: dt.date | None = None) -
                 "period_start": window.get("startDate", ""), "period_end": window.get("endDate", ""),
                 "compared_with": (f"{window['compareStartDate']} to {window['compareEndDate']}"
                                   if window.get("compareStartDate") else ""),
-                "tool_calls": sum(1 for step in pipeline.get("steps") or []
-                                  if step.get("status") in ("ok", "cached")),
+                "tool_calls": sum(step.get("calls") or 1 for step in pipeline.get("steps") or []
+                                  if step.get("cap") and step.get("status") in ("ok", "cached")),
                 "seconds": round(seconds, 1) if seconds else "",
                 "sources_missing": len(pipeline.get("unavailable") or []),
                 "report_file": "report.md" if (run_dir / "report.md").exists() else ""})
         if "totals" in rows:
+            brief = _read(run_dir / "computed" / "brief.json") or {}
+            for week in brief.get("kpis") or []:  # the weekly brief: one row per Monday–Sunday week
+                rows["totals"].append({"date": run_date, "report": r["skill"], "period": "week",
+                                       "period_start": week.get("week", ""), "period_end": "",
+                                       "clicks": _number(week.get("clicks")),
+                                       "impressions": _number(week.get("impressions")),
+                                       "click_rate_percent": _number(week.get("ctr")),
+                                       "average_position": _number(week.get("position"))})
             for label, (block, start, end) in _period_rows(run_dir, window).items():
                 rows["totals"].append({"date": run_date, "report": r["skill"], "period": label,
                                        "period_start": start, "period_end": end,
@@ -316,9 +338,9 @@ def export(site: str, out_dir=None, tables=None, as_of: dt.date | None = None) -
                                        "click_rate_percent": _rate(block.get("ctr")),
                                        "average_position": _number(block.get("position"))})
         if "pages" in rows:
-            rows["pages"] += _key_rows(run_dir, ["page_cur", "page"], "page", run_date, window)
+            rows["pages"] += _call_rows(run_dir, "gsc.page", "page", run_date, r["skill"])
         if "queries" in rows:
-            rows["queries"] += _key_rows(run_dir, ["query_cur", "query"], "query", run_date, window)
+            rows["queries"] += _call_rows(run_dir, "gsc.query", "query", run_date, r["skill"])
         if "actions" in rows:
             for raw in findings.get("actions") or []:
                 a = raw if isinstance(raw, dict) else {"action": str(raw)}

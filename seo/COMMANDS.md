@@ -17,14 +17,15 @@ The routine commands, ready to copy. `pbservices.ge` is the only site configured
 | Run the monthly audit | `python3 seo/pipeline.py --skill seo-audit --site pbservices.ge` |
 | Run any other report | `python3 seo/pipeline.py --skill seo-technical --site pbservices.ge` |
 | See which data a report will request, without requesting it | `python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --dry-run` |
-| Fetch the data again from Search Console instead of today's saved copy | `python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --force` |
+| Fetch the data again from Search Console instead of today's saved copy | `python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --refresh` |
 | Rewrite the Excel / Google Sheets files | `python3 seo/runs.py export --site pbservices.ge` |
 | Delete saved runs and saved answers older than 180 days | `python3 seo/pipeline.py --prune` |
 
 Where things land: `~/Documents/seo-reports/pbservices.ge/` holds one folder per run (the report inside it is
 `report.md`) plus a `spreadsheets/` folder with the CSV copies — that is what the "spreadsheets" row rewrites.
-Turning the report into a PDF, emailing it and checking it before publishing are in §4; finding an older run is
-in §2.
+A second run on the same day needs `--tag` (keep both runs), `--force` (replace it, reusing today's answers) or
+`--refresh` (replace it, fetching again). Turning the report into a PDF, emailing it and checking it before
+publishing are in §4; finding an older run is in §2.
 
 Everything else — windows, tags, write approvals, evidence, cache, sites, by-hand analysis, troubleshooting —
 is in the sections below.
@@ -39,7 +40,8 @@ python3 seo/pipeline.py --skill seo-brief --site pbservices.ge --weeks 8  # Mond
 python3 seo/pipeline.py --skill seo-rank-tracking --mode weekly --site pbservices.ge --weeks 8
 python3 seo/pipeline.py --skill seo-content-brief --site pbservices.ge --input keyword="внж по ип в грузии"
 python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --dry-run  # show every call, make none
-python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --force    # fetch everything again
+python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --force    # rerun into the same folder
+python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --refresh  # fetch every call again
 python3 seo/pipeline.py --skill seo-audit --site pbservices.ge --tag rerun # second run the same day
 python3 seo/pipeline.py --skill seo-indexation --site pbservices.ge --allow-write  # only for confirmed submissions
 ```
@@ -50,8 +52,9 @@ python3 seo/pipeline.py --skill seo-indexation --site pbservices.ge --allow-writ
 | `--compare` / `--yoy` | compare with the previous period / the same period last year |
 | `--as-of YYYY-MM-DD` | anchor the window to a past date (reproduce an older report) |
 | `--dry-run` | print every call and its arguments, call nothing — the fastest way to see what a report does |
-| `--force` | fetch every call again (ignoring today's saved answers) and overwrite an already-seeded run folder |
-| `--tag NAME` | a second run of the same skill on the same day |
+| `--force` | overwrite an already-seeded run folder; the answers that already succeeded are reused (a cheap rerun after fixing a source) |
+| `--refresh` | fetch every call again instead of reusing the saved answers (also overwrites the run folder) |
+| `--tag NAME` | a second run of the same skill on the same day, keeping the first one |
 | `--allow-write` | permits a confirmed write step (`gsc.indexing`); never use it casually |
 
 **Exit codes:** `0` = done, `1` = a required source failed (read `{run_dir}/pipeline.json`).
